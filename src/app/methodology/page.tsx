@@ -4,7 +4,7 @@ import { DEVICE_CATALOG } from "@/lib/devices";
 import { DEFAULT_SETTINGS } from "@/lib/types";
 
 export const metadata: Metadata = {
-  title: "Methodology — Ghost Watt",
+  title: "Methodology - Ghost Watt",
   description:
     "Exactly how Ghost Watt turns a photo into a dollar and CO₂ figure: a local vision model for perception, a deterministic wattage table for the energy math.",
 };
@@ -23,7 +23,7 @@ export default function MethodologyPage() {
           Ghost Watt splits the problem cleanly: the model only does{" "}
           <span className="text-fog">perception</span>, and deterministic code does all the{" "}
           <span className="text-fog">energy reasoning</span>. That&apos;s what makes the output
-          defensible — the ranking never depends on the model being right about watts, only about
+          defensible - the ranking never depends on the model being right about watts, only about
           what&apos;s in the room.
         </p>
       </Reveal>
@@ -35,7 +35,7 @@ export default function MethodologyPage() {
             <div className="mono-label text-cyan">step 1 · perception (local model)</div>
             <p className="mt-3 text-sm leading-relaxed text-mist">
               A local vision model (via Ollama, default <span className="font-mono text-fog">moondream</span>)
-              looks at each photo and returns a list of devices with a count and a state — on,
+              looks at each photo and returns a list of devices with a count and a state - on,
               standby, or off. It is asked for nothing about energy. We parse its JSON; if it
               answers in prose, we still scan it clause-by-clause against the device lexicon.
             </p>
@@ -66,7 +66,7 @@ export default function MethodologyPage() {
           <p className="mt-4 text-sm leading-relaxed text-mist">
             Phantom load is only &quot;wasted&quot; during the hours the building is empty, so every
             number scales with one transparent assumption: <span className="text-fog">empty hours
-            per year</span>. You can change it — and the electricity rate and carbon intensity — live
+            per year</span>. You can change it - and the electricity rate and carbon intensity - live
             in the scanner.
           </p>
         </div>
@@ -81,7 +81,7 @@ export default function MethodologyPage() {
         </div>
         <p className="mt-3 font-mono text-[0.7rem] leading-relaxed text-dim">
           Defaults reflect US-average commercial electricity price, US grid carbon intensity, and a
-          building occupied ~1,900 h/yr (≈10 h × 190 school days) — leaving ~6,800 h dark.
+          building occupied ~1,900 h/yr (≈10 h × 190 school days) - leaving ~6,800 h dark.
         </p>
       </Reveal>
 
@@ -137,7 +137,7 @@ export default function MethodologyPage() {
             <div className="mono-label text-amber">estimated (fallback)</div>
             <p className="mt-2 text-sm leading-relaxed text-mist">
               If Ollama isn&apos;t running, no devices are recognised, or you skip the photo, Ghost
-              Watt falls back to a typical fixture set for the room type — so a demo never blanks.
+              Watt falls back to a typical fixture set for the room type - so a demo never blanks.
               These cards carry an <span className="text-amber">estimated</span> badge so the two are
               never confused.
             </p>
@@ -148,7 +148,7 @@ export default function MethodologyPage() {
       <Reveal delay={0.1}>
         <p className="mt-12 border-t border-line pt-6 text-sm leading-relaxed text-dim">
           Bottom line: treat the dollar figures as well-grounded estimates, not meter readings. The
-          deliverable is the prioritized list — the order in which facilities should fix things — and
+          deliverable is the prioritized list - the order in which facilities should fix things - and
           that order is robust.
         </p>
       </Reveal>

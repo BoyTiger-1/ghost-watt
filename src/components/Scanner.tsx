@@ -136,7 +136,7 @@ export function Scanner() {
         </h1>
         <p className="mt-3 max-w-2xl text-mist">
           Add photos of empty rooms at 4pm or after hours. A local vision model tags every device
-          left drawing power; the ranked list below is what facilities can act on Monday — costed,
+          left drawing power; the ranked list below is what facilities can act on Monday - costed,
           with a one-tap fix for each. New here?{" "}
           <Link href="/about" className="text-cyan underline-offset-4 hover:underline">
             See how it works
@@ -212,7 +212,7 @@ export function Scanner() {
               <span className="mono-label">assumptions</span>
               <span className="font-mono text-xs text-mist">
                 {settings.ratePerKwh.toFixed(2)} $/kWh · {settings.unoccupiedHoursPerYear} h
-                <span className="ml-2 text-cyan">{showSettings ? "–" : "+"}</span>
+                <span className="ml-2 text-cyan">{showSettings ? "-" : "+"}</span>
               </span>
             </button>
             <AnimatePresence initial={false}>
@@ -295,7 +295,7 @@ export function Scanner() {
                 co2={totals.co2KgPerYear}
                 kwh={totals.kwhPerYear}
                 recoverable={totals.recoverableCost}
-                topLabel={totals.topOffender?.label ?? "—"}
+                topLabel={totals.topOffender?.label ?? "-"}
                 liveCount={liveCount}
                 photoCount={photos.filter((p) => p.result).length}
               />

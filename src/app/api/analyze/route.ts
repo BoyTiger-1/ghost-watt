@@ -53,7 +53,7 @@ export async function POST(req: Request) {
   // Explicit fallback (no photo, or user asked for it).
   if (body.forceFallback || !body.image) {
     return NextResponse.json(
-      buildFallback("Estimated from a typical room profile — no live model reading."),
+      buildFallback("Estimated from a typical room profile - no live model reading."),
     );
   }
 

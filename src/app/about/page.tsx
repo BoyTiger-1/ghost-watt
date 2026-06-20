@@ -4,7 +4,7 @@ import { Hero } from "@/components/Hero";
 import { Reveal } from "@/components/Reveal";
 
 export const metadata: Metadata = {
-  title: "About — Ghost Watt",
+  title: "About - Ghost Watt",
   description:
     "Why Ghost Watt exists and how it works: the after-hours energy map nobody has, built so students can hand facilities a prioritized fix list they can act on Monday.",
 };
@@ -13,17 +13,17 @@ const STEPS = [
   {
     n: "01",
     title: "Photo-walk after hours",
-    body: "Students sweep the building at 4pm or after close and snap anything still drawing power — lit labs, idling projectors, the humming vending machine.",
+    body: "Students sweep the building at 4pm or after close and snap anything still drawing power - lit labs, idling projectors, the humming vending machine.",
   },
   {
     n: "02",
     title: "A local model sees the devices",
-    body: "An on-device vision model identifies each device and whether it's on or in standby. Nothing is uploaded — inference runs on your own machine.",
+    body: "An on-device vision model identifies each device and whether it's on or in standby. Nothing is uploaded - inference runs on your own machine.",
   },
   {
     n: "03",
     title: "Deterministic energy math ranks them",
-    body: "Known device wattages × realistic empty-hours give a defensible dollar and CO₂ figure per device — sorted worst-first, each with a costed fix.",
+    body: "Known device wattages × realistic empty-hours give a defensible dollar and CO₂ figure per device - sorted worst-first, each with a costed fix.",
   },
 ];
 
@@ -58,7 +58,7 @@ export default function AboutPage() {
             <span className="text-mist">Honest about precision:</span> wattage-from-a-photo is an
             estimate, so we don&apos;t oversell the absolute numbers. But the{" "}
             <span className="text-cyan">ranking</span> of worst offenders is robust even when the
-            watts are fuzzy — and the ranking is what drives action.
+            watts are fuzzy - and the ranking is what drives action.
           </p>
         </Reveal>
       </section>
@@ -72,7 +72,7 @@ export default function AboutPage() {
           </h2>
           <p className="mt-5 max-w-2xl text-lg leading-relaxed text-mist">
             Everyone measures a building&apos;s daytime footprint. Almost no one measures what a
-            school burns when it&apos;s empty — computer labs left on overnight, projectors in
+            school burns when it&apos;s empty - computer labs left on overnight, projectors in
             standby, hallway lights all weekend, the vending machine chilling soda at 2am. That
             phantom load is often the biggest easy win in a building, and most schools have no idea
             what their number is.
@@ -82,7 +82,7 @@ export default function AboutPage() {
         <div className="mt-12 space-y-px overflow-hidden border border-line bg-line">
           <Block
             k="The niche"
-            v="A tool where students crowdsource a photo-audit and a model turns it into a ranked map of what's bleeding money while the building sleeps. Not a generic carbon calculator you type guesses into — a concrete, room-by-room offender list."
+            v="A tool where students crowdsource a photo-audit and a model turns it into a ranked map of what's bleeding money while the building sleeps. Not a generic carbon calculator you type guesses into - a concrete, room-by-room offender list."
             delay={0}
           />
           <Block
@@ -92,12 +92,12 @@ export default function AboutPage() {
           />
           <Block
             k="The demo moment"
-            v="Point a phone at a lit, empty computer lab → “~$340/yr and 1.2 tons CO₂ wasted here. Fix: smart power strips, ~$60, pays back in 2 months.” That lands in a pitch — and it's an action, not a guilt trip."
+            v="Point a phone at a lit, empty computer lab → “~$340/yr and 1.2 tons CO₂ wasted here. Fix: smart power strips, ~$60, pays back in 2 months.” That lands in a pitch - and it's an action, not a guilt trip."
             delay={0.1}
           />
           <Block
             k="Real impact"
-            v="You hand facilities a prioritized action list they can act on Monday: timers, occupancy sensors, power strips, a shutdown policy. A tangible, defensible outcome — the kind judges and principals both like."
+            v="You hand facilities a prioritized action list they can act on Monday: timers, occupancy sensors, power strips, a shutdown policy. A tangible, defensible outcome - the kind judges and principals both like."
             delay={0.15}
           />
         </div>
@@ -107,7 +107,7 @@ export default function AboutPage() {
           <div className="mt-12 panel ticked p-6">
             <div className="mono-label text-cyan">runs entirely on your machine</div>
             <p className="mt-3 text-sm leading-relaxed text-mist">
-              Ghost Watt uses a <span className="text-fog">local</span> vision model through Ollama —
+              Ghost Watt uses a <span className="text-fog">local</span> vision model through Ollama -
               no external paid APIs, no accounts, no early-access list. Photos are downscaled in your
               browser and sent only to the model running on your own computer. If that model
               isn&apos;t available, the app falls back to a transparent room-profile estimate and{" "}
@@ -125,7 +125,7 @@ export default function AboutPage() {
             <h2 className="text-xl font-bold text-fog">Honest about the numbers</h2>
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-mist">
               Wattage-from-a-photo is an estimate, and we don&apos;t pretend otherwise. But the
-              ranking of worst offenders is robust even when the absolute watts are fuzzy — and the
+              ranking of worst offenders is robust even when the absolute watts are fuzzy - and the
               ranking is what drives action. Lean into that and the tool reads as rigorous, not
               hand-wavy. The{" "}
               <Link href="/methodology" className="text-cyan underline-offset-4 hover:underline">

@@ -1,4 +1,4 @@
-// Minimal local Ollama client. No SDK, no API key — just a fetch to the local
+// Minimal local Ollama client. No SDK, no API key - just a fetch to the local
 // daemon. Vision model does perception only; energy math lives in energy.ts.
 
 const OLLAMA_HOST = process.env.OLLAMA_HOST ?? "http://127.0.0.1:11434";
@@ -19,7 +19,7 @@ export interface OllamaVisionResult {
   error?: string;
 }
 
-/** Strip a data: URL prefix if present — Ollama wants bare base64. */
+/** Strip a data: URL prefix if present - Ollama wants bare base64. */
 function toBareBase64(image: string): string {
   const comma = image.indexOf(",");
   return image.startsWith("data:") && comma !== -1 ? image.slice(comma + 1) : image;

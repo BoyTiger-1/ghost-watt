@@ -13,7 +13,7 @@ export function ModeBadge({ mode, engine }: { mode: AnalysisMode; engine?: strin
       title={
         live
           ? `Identified by the local vision model${engine ? ` (${engine})` : ""}.`
-          : "Estimated from a typical room profile — the local model didn't read this one."
+          : "Estimated from a typical room profile - the local model didn't read this one."
       }
     >
       <span

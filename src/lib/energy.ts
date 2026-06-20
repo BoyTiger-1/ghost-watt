@@ -1,5 +1,5 @@
 // The energy math: turn device observations into ranked, costed offenders.
-// Deterministic and transparent — this is the part of Ghost Watt that does NOT
+// Deterministic and transparent - this is the part of Ghost Watt that does NOT
 // depend on the model being right about watts, only about *what's there*.
 
 import { CATALOG_BY_ID } from "./devices";

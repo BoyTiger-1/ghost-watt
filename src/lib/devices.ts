@@ -1,4 +1,4 @@
-// The wattage lookup table — the deterministic backbone of Ghost Watt.
+// The wattage lookup table - the deterministic backbone of Ghost Watt.
 //
 // The vision model only does perception ("what's here, is it on?"). All energy
 // reasoning happens here, against published-typical device power figures. Numbers
@@ -129,7 +129,7 @@ export const DEVICE_CATALOG: DeviceCategory[] = [
       type: "occupancy",
       cost: 50,
       savingsFraction: 0.9,
-      note: "Motion sensors switch banks off minutes after a room empties — the single highest-yield retrofit for hallways.",
+      note: "Motion sensors switch banks off minutes after a room empties - the single highest-yield retrofit for hallways.",
     },
   },
   {

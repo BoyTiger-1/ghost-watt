@@ -1,9 +1,9 @@
 // Turn model output (or a room preset) into categorized device observations.
 //
 // Two paths:
-//   1. parseModelOutput()  — the live path. Prefers JSON; falls back to a
+//   1. parseModelOutput()  - the live path. Prefers JSON; falls back to a
 //      clause-by-clause keyword scan of free text so even a chatty model is usable.
-//   2. fallbackObservations() — the offline path. Representative device fixtures
+//   2. fallbackObservations() - the offline path. Representative device fixtures
 //      per room type, used when Ollama is unreachable so a demo never blanks.
 
 import { DEVICE_CATALOG, NUMBER_WORDS } from "./devices";

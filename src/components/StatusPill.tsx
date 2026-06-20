@@ -52,7 +52,7 @@ export function StatusPill({ compact = false }: { compact?: boolean }) {
           ? `Local vision model ready at ${status?.host}`
           : status?.reachable
             ? `Ollama is running but ${status?.model} isn't pulled. Run: ollama pull ${status?.model}`
-            : "Ollama not reachable — audits use the room-profile estimator. Start Ollama to go live."
+            : "Ollama not reachable - audits use the room-profile estimator. Start Ollama to go live."
       }
     >
       <span

@@ -43,7 +43,7 @@ export function Hero() {
             Everyone measures the daytime footprint. Almost no one measures the labs left on
             overnight, the projectors in standby, the vending machine chilling soda at 2am.
             Ghost Watt turns a student photo-walk into a ranked map of what&apos;s bleeding money
-            in the dark — with a costed, one-tap fix for each.
+            in the dark - with a costed, one-tap fix for each.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">

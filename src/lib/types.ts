@@ -2,7 +2,7 @@
 
 export type DeviceState = "on" | "standby" | "off";
 
-/** A raw device observation — what the vision model (or fallback) reports. */
+/** A raw device observation - what the vision model (or fallback) reports. */
 export interface DeviceObservation {
   /** Free-text label as seen, e.g. "computer monitor". */
   device: string;
@@ -37,7 +37,7 @@ export interface RecommendedAction {
   type: "timer" | "occupancy" | "powerstrip" | "policy" | "thermostat" | "remove" | "consolidate";
   /** Representative room-level cost of the fix, USD. 0 = behaviour/policy change. */
   cost: number;
-  /** Fraction of this offender's annual waste the fix removes (0–1). */
+  /** Fraction of this offender's annual waste the fix removes (0-1). */
   savingsFraction: number;
   note: string;
 }

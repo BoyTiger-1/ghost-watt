@@ -9,8 +9,8 @@
   --color-line: #1c2230;
   --color-line2: #2a3346;
 
-  --color-fog: #eef2f8; /* primary text — high contrast */
-  --color-mist: #aab6c8; /* secondary text — readable on dark */
+  --color-fog: #eef2f8; /* primary text - high contrast */
+  --color-mist: #aab6c8; /* secondary text - readable on dark */
   --color-dim: #6c7689; /* tertiary / captions */
 
   --color-cyan: #2fe6cf;
