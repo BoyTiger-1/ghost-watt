@@ -79,6 +79,38 @@ estimate. Pick the room type per photo (or hit the "add a room-profile estimate"
 every card gets tagged `estimated`. Start Ollama and the exact same audit runs `live`. So the
 app never goes blank on you, and it's always upfront about where a number came from.
 
+## Running the live model
+
+Ghost Watt is local-first by design. The vision step runs on [Ollama](https://ollama.com), a
+small runtime that serves open models on your own machine. When you start an audit, the app's
+server route makes a request to Ollama at `OLLAMA_HOST` (by default `http://127.0.0.1:11434`),
+the model reads the photo and reports the devices it sees, and the rest of the work happens in
+plain TypeScript. Your images never leave your computer, and there are no API keys or usage
+costs involved.
+
+The practical consequence is worth stating plainly: **to use the live model, you run the app
+on the same machine that is running Ollama.** This is almost always your own computer.
+
+```powershell
+# 1. Install Ollama: https://ollama.com/download
+# 2. Download a vision model (moondream is small and CPU-friendly)
+ollama pull moondream
+# 3. Start the Ollama service (the desktop app does this, or run:)
+ollama serve
+# 4. In the project folder, in a separate terminal:
+npm install
+npm run dev
+```
+
+Open http://localhost:3000. The status indicator in the top-right confirms the model is live,
+and every result card it produces is tagged `live model`.
+
+A deployed copy on a hosting provider is a different situation. The server running your site
+cannot reach the Ollama instance on your laptop, because `localhost` on that server is the
+server itself, not your machine. A hosted deployment therefore runs in estimate mode unless
+you give it an Ollama endpoint it can actually reach (see [Hosting and deployment](#hosting-and-deployment)).
+For demonstrating the model end to end, running locally is the most reliable approach.
+
 ## Configuration
 
 See [`.env.example`](.env.example). The vars that matter:
@@ -168,19 +200,33 @@ src/
 
 ## Hosting and deployment
 
-It's a normal Next.js (App Router) app, so it'll deploy anywhere that runs Node.
+Ghost Watt is a standard Next.js (App Router) application and deploys to any platform that
+runs Node, such as Vercel, Render, or your own server. On Vercel, sign in with GitHub, import
+the repository, and deploy with the default settings. The interface and the estimate path
+work immediately.
 
-- **Vercel** is the easy path: sign in with GitHub, import the repo, deploy. The UI and the
-  estimate path work straight away.
-- **Local or self-hosted:** `npm run build && npm start`.
+The live vision path needs more thought, because it depends on Ollama. As described in
+[Running the live model](#running-the-live-model), the app reaches Ollama through `OLLAMA_HOST`,
+and a hosted server cannot see the Ollama process on your personal machine. You have three
+realistic options:
 
-One thing to know about the live vision path: it talks to an Ollama daemon over `OLLAMA_HOST`.
-A cloud server can't reach the Ollama on your laptop, so a hosted copy runs in estimate mode
-unless you point `OLLAMA_HOST` at an Ollama it can actually reach. To see the full live
-experience, run it locally next to Ollama (see Quick start).
+1. **Run locally (recommended for demos).** Run the app next to Ollama on the same machine, as
+   in [Quick start](#quick-start). This is the simplest way to show the model working on real
+   photos.
+2. **Deploy the site and tunnel to a local Ollama.** Expose your local Ollama with a tunnel
+   (for example `cloudflared tunnel --url http://localhost:11434`) and set `OLLAMA_HOST` on the
+   host to the resulting public URL. Your machine must stay online, and serverless function
+   time limits can cut off slower inference, so this is better for testing than production.
+3. **Host Ollama yourself.** Run Ollama on a cloud machine (ideally with a GPU) behind a
+   secured, authenticated endpoint, and point `OLLAMA_HOST` at it. This is the only setup where
+   the deployed site performs live inference without your own machine being involved.
 
-> Heads up: GitHub Pages only serves static files and can't run the API routes, so use
-> Vercel, Render, or any Node host for the full thing.
+A practical recommendation: deploy to Vercel for a shareable link that runs in the fully
+functional estimate mode, and run the app locally when you want to demonstrate the live model
+on real photos.
+
+> Note: GitHub Pages serves static files only and cannot run the API routes this app relies
+> on, so use Vercel, Render, or another Node host for the complete application.
 
 ## License
 
