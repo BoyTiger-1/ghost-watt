@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { StatusPill } from "./StatusPill";
 
 const TABS = [
-  { href: "/", label: "Scanner" },
+  { href: "/scan", label: "Scanner" },
   { href: "/methodology", label: "Methodology" },
   { href: "/about", label: "About" },
 ];

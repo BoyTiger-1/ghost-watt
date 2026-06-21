@@ -17,7 +17,7 @@ export function Footer() {
         <div>
           <div className="mono-label">Pages</div>
           <ul className="mt-3 space-y-2 text-sm text-mist">
-            <li><Link href="/" className="hover:text-cyan">Scanner</Link></li>
+            <li><Link href="/scan" className="hover:text-cyan">Scanner</Link></li>
             <li><Link href="/methodology" className="hover:text-cyan">Methodology</Link></li>
             <li><Link href="/about" className="hover:text-cyan">About</Link></li>
           </ul>

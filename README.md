@@ -228,6 +228,13 @@ on real photos.
 > Note: GitHub Pages serves static files only and cannot run the API routes this app relies
 > on, so use Vercel, Render, or another Node host for the complete application.
 
+## AI assistance
+
+The design, architecture, energy model, and the product itself were built by us. We used
+Claude Code along the way mainly as a debugging aid, for tracking down bugs and tidying up
+rough edges, rather than for designing or generating the project. The thinking and the
+decisions are ours.
+
 ## License
 
 MIT.

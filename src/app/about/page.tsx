@@ -139,7 +139,7 @@ export default function AboutPage() {
         <Reveal delay={0.1}>
           <div className="mt-12 flex flex-wrap items-center gap-3">
             <Link
-              href="/"
+              href="/scan"
               className="border border-cyan bg-cyan/10 px-6 py-3 font-mono text-sm font-bold tracking-[0.16em] uppercase text-cyan transition-colors hover:bg-cyan/20"
             >
               Run an audit →
