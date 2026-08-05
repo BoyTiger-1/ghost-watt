@@ -1,4 +1,4 @@
-# Ghost Watt
+# Ghost Watt 
 
 Walk an empty school with your phone, snap a photo of each room, and Ghost Watt tells you
 what's quietly burning power and money while nobody's there. It finds the phantom loads (the
