@@ -223,7 +223,10 @@ export function CompareBars({
   return (
     <ul className="space-y-2.5">
       {rows.map((r, i) => (
-        <li key={r.label} className="rise-in" style={{ "--i": i } as React.CSSProperties}>
+        // Labels are not identities: two buildings in a district can genuinely share
+        // a name, and React then drops one of the bars. Position is the only stable
+        // identity a derived, freshly-built list like this actually has.
+        <li key={`${i}-${r.label}`} className="rise-in" style={{ "--i": i } as React.CSSProperties}>
           <div className="flex items-baseline justify-between gap-3">
             <span className="truncate text-sm text-mist">{r.label}</span>
             <span className="shrink-0 font-mono text-xs font-semibold text-fog tabular-nums">

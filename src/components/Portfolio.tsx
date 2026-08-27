@@ -39,6 +39,7 @@ import { fmtMoney, fmtMoneyFull, fmtCo2, fmtPct } from "@/lib/energy";
 import { exportStore, importStore, downloadText } from "@/lib/export";
 import { BUILDING_TYPE_BY_ID } from "@/lib/benchmark";
 import { regionOrDefault } from "@/lib/grid";
+import { SampleData } from "./SampleData";
 
 const STATUS_TINT: Record<DeltaRow["status"], string> = {
   resolved: "var(--color-cyan)",
@@ -100,7 +101,10 @@ export function Portfolio() {
       </header>
 
       {store.buildings.length === 0 ? (
-        <EmptyPortfolio />
+        <div className="space-y-6">
+          <SampleData />
+          <EmptyPortfolio />
+        </div>
       ) : (
         <>
           <div className="mb-6 flex flex-wrap items-center gap-2">
@@ -126,6 +130,15 @@ export function Portfolio() {
             >
               + building
             </button>
+
+            {/* The full panel above only renders on an empty portfolio, so without
+                this the example becomes unremovable the moment it is loaded - the
+                one property that makes shipping demo data defensible at all. It
+                also lets someone who already has a real building pull the example
+                up alongside it. */}
+            <span className="ml-auto">
+              <SampleData compact />
+            </span>
           </div>
 
           {active && <BuildingDetail buildingId={active.id} />}
