@@ -18,16 +18,20 @@ export function Footer() {
           <div className="mono-label">Pages</div>
           <ul className="mt-3 space-y-2 text-sm text-mist">
             <li><Link href="/scan" className="hover:text-cyan">Scanner</Link></li>
+            <li><Link href="/portfolio" className="hover:text-cyan">Portfolio</Link></li>
+            <li><Link href="/class" className="hover:text-cyan">Class mode</Link></li>
             <li><Link href="/methodology" className="hover:text-cyan">Methodology</Link></li>
+            <li><Link href="/settings" className="hover:text-cyan">Settings</Link></li>
             <li><Link href="/about" className="hover:text-cyan">About</Link></li>
           </ul>
         </div>
 
         <div>
-          <div className="mono-label">Runs locally</div>
+          <div className="mono-label">Local first</div>
           <p className="mt-3 text-sm leading-relaxed text-mist">
-            Vision inference runs on your own machine via Ollama. No accounts, no cloud,
-            no photos leaving the building.
+            When Ollama is running, photos are read on your own machine and never leave the
+            building. Without it, a scan falls back to a hosted model, and the badge in the
+            header says which one read your photo before you upload it.
           </p>
         </div>
       </div>

@@ -4,17 +4,27 @@
 // reasoning happens here, against published-typical device power figures. Numbers
 // are intentionally representative, not precise: the ranking of worst offenders
 // is robust even when absolute watts are fuzzy, and the ranking is what drives action.
+//
+// Each entry now carries a low/high band as well as a headline figure, because a
+// single number implies a precision nobody has. The UI shows the band; the
+// ranking uses the headline value.
 
 import type { DeviceCategory } from "./types";
+import { EXTRA_DEVICES } from "./devices-extra";
 
-export const DEVICE_CATALOG: DeviceCategory[] = [
+/** The original classroom-and-office core. */
+export const CORE_DEVICES: DeviceCategory[] = [
   {
     id: "projector",
     label: "Projector",
     keywords: ["projector", "beamer", "data projector"],
     wattsOn: 250,
     wattsStandby: 5,
+    wattsLow: 150,
+    wattsHigh: 400,
     dutyCycle: 1,
+    group: "display",
+    source: "Classroom DLP/LCD projectors, lamp-based; laser models sit at the low end.",
     icon: "projector",
     action: {
       label: "Auto-off timer linked to occupancy",
@@ -30,7 +40,11 @@ export const DEVICE_CATALOG: DeviceCategory[] = [
     keywords: ["smartboard", "smart board", "interactive whiteboard", "interactive display", "promethean"],
     wattsOn: 150,
     wattsStandby: 8,
+    wattsLow: 90,
+    wattsHigh: 350,
     dutyCycle: 1,
+    group: "display",
+    source: "65-86 inch interactive flat panels at typical classroom brightness.",
     icon: "tv",
     action: {
       label: "Master power strip + overnight off policy",
@@ -46,7 +60,11 @@ export const DEVICE_CATALOG: DeviceCategory[] = [
     keywords: ["television", "tv", "flat screen", "flatscreen", "monitor wall", "display screen"],
     wattsOn: 100,
     wattsStandby: 4,
+    wattsLow: 50,
+    wattsHigh: 250,
     dutyCycle: 1,
+    group: "display",
+    source: "40-70 inch LED televisions in a normal picture mode.",
     icon: "tv",
     action: {
       label: "Smart power strip with schedule",
@@ -62,7 +80,11 @@ export const DEVICE_CATALOG: DeviceCategory[] = [
     keywords: ["monitor", "display", "screen"],
     wattsOn: 30,
     wattsStandby: 0.5,
+    wattsLow: 15,
+    wattsHigh: 60,
     dutyCycle: 1,
+    group: "display",
+    source: "22-27 inch LED desktop monitors.",
     icon: "monitor",
     action: {
       label: "Smart power strips + auto-sleep policy",
@@ -78,7 +100,11 @@ export const DEVICE_CATALOG: DeviceCategory[] = [
     keywords: ["desktop", "computer tower", "pc tower", "workstation", "tower", "desktop computer", "computer"],
     wattsOn: 80,
     wattsStandby: 3,
+    wattsLow: 40,
+    wattsHigh: 200,
     dutyCycle: 1,
+    group: "computing",
+    source: "Office-class desktops at idle-to-light load; workstations run far higher.",
     icon: "desktop",
     action: {
       label: "Enable sleep + scheduled overnight shutdown",
@@ -94,7 +120,11 @@ export const DEVICE_CATALOG: DeviceCategory[] = [
     keywords: ["laptop", "notebook", "chromebook", "macbook"],
     wattsOn: 30,
     wattsStandby: 2,
+    wattsLow: 15,
+    wattsHigh: 65,
     dutyCycle: 1,
+    group: "computing",
+    source: "Charger output plus conversion losses; Chromebooks sit at the low end.",
     icon: "laptop",
     action: {
       label: "Charging-cart timer",
@@ -122,7 +152,11 @@ export const DEVICE_CATALOG: DeviceCategory[] = [
     ],
     wattsOn: 120,
     wattsStandby: 0,
+    wattsLow: 40,
+    wattsHigh: 250,
     dutyCycle: 1,
+    group: "lighting",
+    source: "A bank of troffers or a high-bay fixture; LED retrofits sit near the low end.",
     icon: "light",
     action: {
       label: "Occupancy / motion sensors",
@@ -135,18 +169,22 @@ export const DEVICE_CATALOG: DeviceCategory[] = [
   {
     id: "vending_cold",
     label: "Refrigerated vending machine",
-    keywords: ["vending machine", "vending", "soda machine", "drink machine", "snack machine"],
+    keywords: ["vending machine", "vending", "soda machine", "drink machine"],
     wattsOn: 400,
     wattsStandby: 400,
+    wattsLow: 250,
+    wattsHigh: 700,
     dutyCycle: 0.55,
     thermostatic: true,
+    group: "refrigeration",
+    source: "Glass-front beverage machines including compressor, fans and display lighting.",
     icon: "vending",
     action: {
       label: "Occupancy-based vending controller",
       type: "occupancy",
       cost: 180,
       savingsFraction: 0.5,
-      note: "A vending occupancy sensor powers down lighting/cooling when nobody's around, cutting ~half the load.",
+      note: "A vending occupancy sensor powers down lighting/cooling when nobody is around, cutting ~half the load.",
     },
   },
   {
@@ -155,8 +193,12 @@ export const DEVICE_CATALOG: DeviceCategory[] = [
     keywords: ["refrigerator", "fridge", "mini fridge", "freezer", "cooler"],
     wattsOn: 100,
     wattsStandby: 100,
+    wattsLow: 50,
+    wattsHigh: 250,
     dutyCycle: 0.4,
     thermostatic: true,
+    group: "refrigeration",
+    source: "Compressor draw for dorm-size to full-height domestic units.",
     icon: "fridge",
     action: {
       label: "Consolidate & unplug surplus units",
@@ -172,8 +214,12 @@ export const DEVICE_CATALOG: DeviceCategory[] = [
     keywords: ["water cooler", "water dispenser", "hot and cold dispenser"],
     wattsOn: 90,
     wattsStandby: 90,
+    wattsLow: 40,
+    wattsHigh: 200,
     dutyCycle: 0.5,
     thermostatic: true,
+    group: "kitchen",
+    source: "Hot-and-cold dispensers; the hot tank dominates the load.",
     icon: "water",
     action: {
       label: "Timer switch on the hot tank",
@@ -189,7 +235,11 @@ export const DEVICE_CATALOG: DeviceCategory[] = [
     keywords: ["copier", "copy machine", "multifunction", "mfp", "photocopier"],
     wattsOn: 120,
     wattsStandby: 15,
+    wattsLow: 60,
+    wattsHigh: 400,
     dutyCycle: 1,
+    group: "office",
+    source: "Departmental multifunction devices in ready mode, not printing.",
     icon: "printer",
     action: {
       label: "Enable deep-sleep + overnight off",
@@ -205,7 +255,11 @@ export const DEVICE_CATALOG: DeviceCategory[] = [
     keywords: ["printer", "laser printer", "inkjet"],
     wattsOn: 40,
     wattsStandby: 5,
+    wattsLow: 10,
+    wattsHigh: 120,
     dutyCycle: 1,
+    group: "office",
+    source: "Desktop laser and inkjet printers in ready mode.",
     icon: "printer",
     action: {
       label: "Enable deep-sleep + overnight off",
@@ -221,8 +275,12 @@ export const DEVICE_CATALOG: DeviceCategory[] = [
     keywords: ["server", "network rack", "network closet", "switch", "rack"],
     wattsOn: 200,
     wattsStandby: 200,
+    wattsLow: 80,
+    wattsHigh: 800,
     dutyCycle: 1,
     thermostatic: true,
+    group: "network",
+    source: "A small school rack: a couple of 1U servers plus switching.",
     icon: "server",
     action: {
       label: "Right-size & virtualize (keep critical up)",
@@ -238,8 +296,12 @@ export const DEVICE_CATALOG: DeviceCategory[] = [
     keywords: ["air conditioner", "ac unit", "window unit", "window ac", "portable ac"],
     wattsOn: 900,
     wattsStandby: 900,
+    wattsLow: 500,
+    wattsHigh: 1800,
     dutyCycle: 0.5,
     thermostatic: true,
+    group: "hvac",
+    source: "5,000-12,000 BTU window and portable units at typical efficiency.",
     icon: "ac",
     action: {
       label: "Programmable thermostat with setback",
@@ -255,15 +317,19 @@ export const DEVICE_CATALOG: DeviceCategory[] = [
     keywords: ["space heater", "portable heater", "electric heater"],
     wattsOn: 1200,
     wattsStandby: 1200,
+    wattsLow: 750,
+    wattsHigh: 1500,
     dutyCycle: 0.5,
     thermostatic: true,
+    group: "hvac",
+    source: "Portable resistance heaters; nearly all sold are 1500 W at maximum.",
     icon: "heater",
     action: {
       label: "Remove / put on a smart plug",
       type: "remove",
       cost: 25,
       savingsFraction: 0.8,
-      note: "A single forgotten space heater can outweigh a whole lab. A smart plug guarantees it's off after hours.",
+      note: "A single forgotten space heater can outweigh a whole lab. A smart plug guarantees it is off after hours.",
     },
   },
   {
@@ -272,7 +338,11 @@ export const DEVICE_CATALOG: DeviceCategory[] = [
     keywords: ["coffee maker", "coffee machine", "kettle", "hot plate"],
     wattsOn: 100,
     wattsStandby: 2,
+    wattsLow: 50,
+    wattsHigh: 200,
     dutyCycle: 0.3,
+    group: "kitchen",
+    source: "Warming-plate draw, not the brew cycle, which is brief.",
     icon: "coffee",
     action: {
       label: "Auto-off or smart plug",
@@ -288,7 +358,11 @@ export const DEVICE_CATALOG: DeviceCategory[] = [
     keywords: ["microwave"],
     wattsOn: 3,
     wattsStandby: 3,
+    wattsLow: 1,
+    wattsHigh: 7,
     dutyCycle: 1,
+    group: "kitchen",
+    source: "Clock and keypad standby only; cooking draw is brief and intentional.",
     icon: "microwave",
     action: {
       label: "Unplug after hours",
@@ -299,6 +373,12 @@ export const DEVICE_CATALOG: DeviceCategory[] = [
     },
   },
 ];
+
+// Order matters. matchCategory() walks this list and takes the first keyword hit,
+// so the specific extras must be tested before the core entries, several of which
+// carry deliberately broad keywords ("light", "computer", "cooler") that would
+// otherwise swallow a walk-in freezer or a parking-lot floodlight.
+export const DEVICE_CATALOG: DeviceCategory[] = [...EXTRA_DEVICES, ...CORE_DEVICES];
 
 export const CATALOG_BY_ID = Object.fromEntries(DEVICE_CATALOG.map((c) => [c.id, c]));
 

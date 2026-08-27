@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { describeImage } from "@/lib/ollama";
+import { describeImageAny } from "@/lib/vision";
 import { fallbackObservations, parseModelOutput, ROOM_TYPE_BY_ID } from "@/lib/parse";
 import { rankObservations } from "@/lib/energy";
 import { DEFAULT_SETTINGS } from "@/lib/types";
@@ -57,12 +57,13 @@ export async function POST(req: Request) {
     );
   }
 
-  // Live path: local vision model does perception.
-  const vision = await describeImage(body.image);
+  // Live path: whichever vision engine is available does perception, and only
+  // perception. Every number below comes out of the deterministic pipeline.
+  const vision = await describeImageAny(body.image);
 
   if (!vision.ok) {
     return NextResponse.json(
-      buildFallback(`Local model unavailable (${vision.error}). Showing a room-profile estimate instead.`),
+      buildFallback(`No vision engine available (${vision.error}). Showing a room-profile estimate instead.`),
     );
   }
 
@@ -76,7 +77,7 @@ export async function POST(req: Request) {
 
   const result: AnalysisResult = {
     mode: "live",
-    engine: vision.model,
+    engine: `${vision.provider} · ${vision.model}`,
     source,
     offenders: rankObservations(observations, settings, source),
     raw: vision.text,
