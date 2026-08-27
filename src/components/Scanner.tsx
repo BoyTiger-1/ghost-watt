@@ -1,17 +1,41 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { OffenderCard } from "./OffenderCard";
 import { CountUp } from "./CountUp";
+import { BuildingBar } from "./BuildingBar";
+import { BudgetPlanner } from "./BudgetPlanner";
+import { GridPulse } from "./GridPulse";
+import { SolarOffset } from "./SolarOffset";
+import { BillCalibration } from "./BillCalibration";
+import { ContributeBar } from "./ContributeBar";
+import { WeatherContext } from "./WeatherContext";
+import { EquivalenceStrip } from "./EquivalenceStrip";
+import { BenchmarkPanel, ExportBar, LoadMixPanel } from "./AuditPanels";
 import { downscaleImage } from "@/lib/image";
 import { ROOM_TYPES } from "@/lib/parse";
-import { aggregate, fmtCo2, fmtKwh, fmtMoneyFull } from "@/lib/energy";
-import { DEFAULT_SETTINGS } from "@/lib/types";
+import { aggregate, fmtCo2, fmtKwh, fmtMoney, fmtMoneyFull } from "@/lib/energy";
+import { regionOrDefault } from "@/lib/grid";
+import { unoccupiedHours, SCHEDULE_PRESETS } from "@/lib/schedule";
+import { uid, type Building, type SavedAudit } from "@/lib/storage";
+import { addAudit, addBuilding, currentStore, newBuilding, useStore } from "@/lib/useStore";
 import type { AnalysisResult, AuditSettings, Offender } from "@/lib/types";
 
 type PhotoStatus = "idle" | "scanning" | "done" | "error";
+type ResultTab = "offenders" | "plan" | "grid" | "context";
+
+/** Shown for the single frame before the first building is written to storage. */
+const PLACEHOLDER_BUILDING: Building = {
+  id: "placeholder",
+  name: "My building",
+  typeId: "k12",
+  regionCode: "US",
+  floorAreaSqFt: 0,
+  schedule: SCHEDULE_PRESETS[0].schedule,
+  createdAt: new Date(0).toISOString(),
+};
 
 interface PhotoEntry {
   id: string;
@@ -28,11 +52,60 @@ const nextId = () => `p${Date.now()}-${counter++}`;
 
 export function Scanner() {
   const [photos, setPhotos] = useState<PhotoEntry[]>([]);
-  const [settings, setSettings] = useState<AuditSettings>(DEFAULT_SETTINGS);
   const [showSettings, setShowSettings] = useState(false);
   const [running, setRunning] = useState(false);
+  const [tab, setTab] = useState<ResultTab>("offenders");
+  const [savedAuditId, setSavedAuditId] = useState<string | null>(null);
+  const [liveRate, setLiveRate] = useState<{ ratePerKwh: number; source: string } | null>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
+
+  // Anything the user has typed over the top of the building-derived defaults.
+  const [override, setOverride] = useState<Partial<AuditSettings>>({});
+
+  const store = useStore();
+  const ready = store.buildings.length > 0;
+  const building =
+    store.buildings.find((b) => b.id === store.activeBuildingId) ??
+    store.buildings[0] ??
+    PLACEHOLDER_BUILDING;
+
+  // Give a first-time visitor a building to hang the numbers on. This asks the
+  // store directly rather than trusting the value from render: on the hydration
+  // pass useStore() is still reporting the empty server snapshot, and acting on
+  // that would create a second "My building" next to the one already saved.
+  useEffect(() => {
+    if (!currentStore().buildings.length) addBuilding(newBuilding("My building"));
+  }, [store.buildings.length]);
+
+  // The building is the source of truth for the assumptions; the override layer
+  // sits on top so a user can still say "no, our rate is actually this".
+  const region = regionOrDefault(building.regionCode);
+  const settings: AuditSettings = useMemo(
+    () => ({
+      ratePerKwh: override.ratePerKwh ?? liveRate?.ratePerKwh ?? region.ratePerKwh,
+      co2PerKwh: override.co2PerKwh ?? region.co2PerKwh,
+      unoccupiedHoursPerYear:
+        override.unoccupiedHoursPerYear ?? unoccupiedHours(building.schedule),
+      regionCode: building.regionCode,
+      buildingTypeId: building.typeId,
+      floorAreaSqFt: building.floorAreaSqFt,
+      demandChargePerKw: override.demandChargePerKw,
+    }),
+    [override, liveRate, region, building],
+  );
+
+  async function fetchLiveRate() {
+    try {
+      const res = await fetch(`/api/rates?state=${encodeURIComponent(building.regionCode)}`);
+      const json = (await res.json()) as { ratePerKwh: number; source: string };
+      if (typeof json.ratePerKwh === "number" && json.ratePerKwh > 0) {
+        setLiveRate({ ratePerKwh: json.ratePerKwh, source: json.source });
+      }
+    } catch {
+      // A failed lookup is not an error state - the static table already answered.
+    }
+  }
 
   const pendingCount = photos.filter((p) => p.status === "idle" || p.status === "error").length;
 
@@ -78,6 +151,7 @@ export function Scanner() {
     const queue = photos.filter((p) => p.status === "idle" || p.status === "error");
     if (!queue.length || running) return;
     setRunning(true);
+    setSavedAuditId(null); // results are about to change; this is a different audit
     for (const entry of queue) {
       patch(entry.id, { status: "scanning", error: undefined });
       try {
@@ -119,10 +193,40 @@ export function Scanner() {
     return flat;
   }, [photos]);
 
-  const totals = useMemo(() => aggregate(ranked.map((r) => r.offender)), [ranked]);
+  const offenders = useMemo(() => ranked.map((r) => r.offender), [ranked]);
+  const totals = useMemo(() => aggregate(offenders), [offenders]);
   const maxCost = ranked[0]?.offender.costPerYear ?? 0;
   const hasResults = ranked.length > 0;
   const liveCount = photos.filter((p) => p.result?.mode === "live").length;
+
+  /** live / fallback / mixed across every area scanned so far. */
+  const auditMode = useMemo<SavedAudit["mode"]>(() => {
+    const modes = new Set(photos.filter((p) => p.result).map((p) => p.result!.mode));
+    return modes.size > 1 ? "mixed" : modes.has("live") ? "live" : "fallback";
+  }, [photos]);
+
+  /**
+   * Write this audit into the building's history.
+   *
+   * Saving is what turns a one-shot estimate into an accountability record: the
+   * portfolio page can then say "this room cost $310 a year in September, you
+   * installed a timer in October, and the November re-scan says it is gone".
+   */
+  function saveAudit() {
+    if (!hasResults || !ready) return;
+    const audit: SavedAudit = {
+      id: uid("a"),
+      buildingId: building.id,
+      at: new Date().toISOString(),
+      areas: photos.filter((p) => p.result).map((p) => p.name),
+      offenders,
+      settings,
+      mode: auditMode,
+      engine: photos.find((p) => p.result)?.result?.engine ?? "unknown",
+    };
+    addAudit(audit);
+    setSavedAuditId(audit.id);
+  }
 
   return (
     <section id="scanner" className="relative z-10 mx-auto max-w-6xl scroll-mt-20 px-4 pb-16 pt-24 sm:px-6">
@@ -203,16 +307,26 @@ export function Scanner() {
             </button>
           </div>
 
+          {/* building context - drives every number below */}
+          {ready && (
+            <BuildingBar
+              building={building}
+              buildings={store.buildings}
+              liveRate={liveRate}
+              onFetchRate={fetchLiveRate}
+            />
+          )}
+
           {/* settings */}
           <div className="panel">
             <button
               onClick={() => setShowSettings((s) => !s)}
               className="flex w-full items-center justify-between px-4 py-3.5"
             >
-              <span className="mono-label">assumptions</span>
+              <span className="mono-label">override assumptions</span>
               <span className="font-mono text-xs text-mist">
-                {settings.ratePerKwh.toFixed(2)} $/kWh · {settings.unoccupiedHoursPerYear} h
-                <span className="ml-2 text-cyan">{showSettings ? "-" : "+"}</span>
+                {settings.ratePerKwh.toFixed(3)} $/kWh
+                <span className="ml-2 text-cyan">{showSettings ? "−" : "+"}</span>
               </span>
             </button>
             <AnimatePresence initial={false}>
@@ -224,29 +338,42 @@ export function Scanner() {
                   className="overflow-hidden"
                 >
                   <div className="space-y-4 border-t border-line px-4 py-4">
+                    <p className="text-[0.75rem] leading-relaxed text-dim">
+                      These are filled in from the building above. Change one only if you
+                      have a figure off an actual bill - that is always better than ours.
+                    </p>
                     <Field
                       label="electricity rate ($/kWh)"
                       value={settings.ratePerKwh}
                       step={0.01}
-                      onChange={(v) => setSettings((s) => ({ ...s, ratePerKwh: v }))}
+                      onChange={(v) => setOverride((s) => ({ ...s, ratePerKwh: v }))}
                     />
                     <Field
                       label="grid carbon (kg CO₂ / kWh)"
                       value={settings.co2PerKwh}
                       step={0.005}
-                      onChange={(v) => setSettings((s) => ({ ...s, co2PerKwh: v }))}
+                      onChange={(v) => setOverride((s) => ({ ...s, co2PerKwh: v }))}
                     />
                     <Field
                       label="empty hours / year"
                       value={settings.unoccupiedHoursPerYear}
                       step={100}
-                      onChange={(v) => setSettings((s) => ({ ...s, unoccupiedHoursPerYear: v }))}
+                      onChange={(v) => setOverride((s) => ({ ...s, unoccupiedHoursPerYear: v }))}
+                    />
+                    <Field
+                      label="demand charge ($/kW-month, optional)"
+                      value={settings.demandChargePerKw ?? 0}
+                      step={0.5}
+                      onChange={(v) => setOverride((s) => ({ ...s, demandChargePerKw: v }))}
                     />
                     <button
-                      onClick={() => setSettings(DEFAULT_SETTINGS)}
+                      onClick={() => {
+                        setOverride({});
+                        setLiveRate(null);
+                      }}
                       className="font-mono text-[0.7rem] tracking-wider text-dim hover:text-cyan"
                     >
-                      ↺ reset to US-average defaults
+                      ↺ back to the building&apos;s own figures
                     </button>
                   </div>
                 </motion.div>
@@ -292,6 +419,8 @@ export function Scanner() {
             <>
               <TotalsHeader
                 cost={totals.costPerYear}
+                costLow={totals.costLowPerYear}
+                costHigh={totals.costHighPerYear}
                 co2={totals.co2KgPerYear}
                 kwh={totals.kwhPerYear}
                 recoverable={totals.recoverableCost}
@@ -299,20 +428,85 @@ export function Scanner() {
                 liveCount={liveCount}
                 photoCount={photos.filter((p) => p.result).length}
               />
-              <div className="space-y-4">
-                <AnimatePresence>
-                  {ranked.map((r, i) => (
-                    <OffenderCard
-                      key={r.offender.id}
-                      offender={r.offender}
-                      rank={i + 1}
-                      maxCost={maxCost}
-                      mode={r.mode}
-                      engine={r.engine}
-                    />
-                  ))}
-                </AnimatePresence>
-              </div>
+
+              <ExportBar
+                offenders={offenders}
+                settings={settings}
+                buildingName={building.name}
+                onSave={ready ? saveAudit : undefined}
+                saved={savedAuditId !== null}
+              />
+
+              <ContributeBar
+                offenders={offenders}
+                mode={auditMode}
+                defaultArea={photos.find((p) => p.result)?.name ?? building.name}
+              />
+
+              <TabBar tab={tab} onChange={setTab} count={ranked.length} />
+
+              {tab === "offenders" && (
+                <div className="space-y-4">
+                  <AnimatePresence>
+                    {ranked.map((r, i) => (
+                      <OffenderCard
+                        key={r.offender.id}
+                        offender={r.offender}
+                        rank={i + 1}
+                        maxCost={maxCost}
+                        mode={r.mode}
+                        engine={r.engine}
+                      />
+                    ))}
+                  </AnimatePresence>
+                </div>
+              )}
+
+              {tab === "plan" && <BudgetPlanner offenders={offenders} />}
+
+              {tab === "grid" && (
+                <div className="space-y-5">
+                  <GridPulse
+                    regionCode={building.regionCode}
+                    annualKwhWasted={totals.kwhPerYear}
+                  />
+                  <WeatherContext
+                    lat={building.lat}
+                    lon={building.lon}
+                    offenders={offenders}
+                  />
+                  <SolarOffset
+                    lat={building.lat}
+                    lon={building.lon}
+                    regionCode={building.regionCode}
+                    annualKwhWasted={totals.kwhPerYear}
+                    ratePerKwh={settings.ratePerKwh}
+                    co2PerKwh={settings.co2PerKwh}
+                  />
+                </div>
+              )}
+
+              {tab === "context" && (
+                <div className="space-y-5">
+                  <LoadMixPanel offenders={offenders} />
+                  <EquivalenceStrip
+                    co2Kg={totals.co2KgPerYear}
+                    dollars={totals.costPerYear}
+                  />
+                  <BenchmarkPanel
+                    offenders={offenders}
+                    building={building}
+                    settings={settings}
+                  />
+                  <BillCalibration
+                    bill={building.bill}
+                    auditKwhPerYear={totals.kwhPerYear}
+                    assumedRate={settings.ratePerKwh}
+                    floorAreaSqFt={building.floorAreaSqFt}
+                    typeId={building.typeId}
+                  />
+                </div>
+              )}
             </>
           ) : (
             <EmptyState running={running} />
@@ -325,8 +519,49 @@ export function Scanner() {
 
 // ---- subcomponents -----------------------------------------------------
 
+function TabBar({
+  tab,
+  onChange,
+  count,
+}: {
+  tab: ResultTab;
+  onChange: (t: ResultTab) => void;
+  count: number;
+}) {
+  const tabs: { id: ResultTab; label: string; hint: string }[] = [
+    { id: "offenders", label: `offenders · ${count}`, hint: "What is running" },
+    { id: "plan", label: "plan", hint: "What to do with the money you have" },
+    { id: "grid", label: "grid", hint: "When to burn it, and what would cancel it" },
+    { id: "context", label: "context", hint: "What it means and how you compare" },
+  ];
+  return (
+    <div className="flex border border-line bg-surface2/40">
+      {tabs.map((t) => (
+        <button
+          key={t.id}
+          onClick={() => onChange(t.id)}
+          title={t.hint}
+          className={`relative flex-1 px-3 py-2.5 font-mono text-[0.7rem] tracking-[0.14em] uppercase transition-colors ${
+            tab === t.id ? "text-fog" : "text-dim hover:text-mist"
+          }`}
+        >
+          {t.label}
+          {tab === t.id && (
+            <motion.span
+              layoutId="tab-underline"
+              className="absolute inset-x-2 bottom-0 h-px bg-gradient-to-r from-cyan to-lime"
+            />
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function TotalsHeader({
   cost,
+  costLow,
+  costHigh,
   co2,
   kwh,
   recoverable,
@@ -335,6 +570,8 @@ function TotalsHeader({
   photoCount,
 }: {
   cost: number;
+  costLow: number;
+  costHigh: number;
   co2: number;
   kwh: number;
   recoverable: number;
@@ -365,9 +602,16 @@ function TotalsHeader({
         <BigStat label="recoverable / yr" value={<CountUp value={recoverable} format={fmtMoneyFull} />} />
       </div>
 
-      <div className="mt-5 border-t border-line pt-3">
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-line pt-3">
         <span className="font-mono text-[0.72rem] tracking-wider text-mist">
           biggest offender: <span className="text-lime">{topLabel}</span>
+        </span>
+        {/* The band is the honest version of the headline number. */}
+        <span
+          className="font-mono text-[0.72rem] tracking-wider text-dim"
+          title="Range across the published wattage spread for these device classes"
+        >
+          plausible range {fmtMoney(costLow)} – {fmtMoney(costHigh)} / yr
         </span>
       </div>
     </motion.div>

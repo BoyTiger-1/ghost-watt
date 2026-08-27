@@ -11,7 +11,12 @@
 
   --color-fog: #eef2f8; /* primary text - high contrast */
   --color-mist: #aab6c8; /* secondary text - readable on dark */
-  --color-dim: #6c7689; /* tertiary / captions */
+  /* Tertiary text. #6c7689 looked right and measured 4.4:1 against the ink
+     background, which fails WCAG AA - and this token carries the captions,
+     units and source notes, i.e. exactly the text a skeptical reader goes
+     looking for. Lightened until it clears 5:1 on both --color-ink and
+     --color-surface2. */
+  --color-dim: #7d8799;
 
   --color-cyan: #2fe6cf;
   --color-cyan-deep: #14b8a6;
@@ -29,6 +34,37 @@
 
 * {
   border-color: var(--color-line);
+}
+
+/* Keyboard focus.
+   The browser default is a thin ring that all but disappears against a dark
+   surface next to a 1px border, so it is replaced rather than removed. :focus-visible
+   means a mouse user never sees it and a keyboard user always does. */
+:focus-visible {
+  outline: 2px solid var(--color-cyan);
+  outline-offset: 2px;
+  border-radius: 1px;
+}
+
+/* Skip link: the nav is short, but the scanner page puts an upload control and a
+   settings panel between the top of the document and the results a returning
+   keyboard user actually wants. */
+.skip-link {
+  position: absolute;
+  left: 0.75rem;
+  top: -4rem;
+  z-index: 100;
+  padding: 0.6rem 1rem;
+  background: var(--color-surface2);
+  border: 1px solid var(--color-cyan);
+  color: var(--color-fog);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  transition: top 0.15s ease;
+}
+
+.skip-link:focus {
+  top: 0.75rem;
 }
 
 html {
@@ -191,7 +227,166 @@ body::after {
   animation: shimmer 1.4s ease-in-out infinite;
 }
 
+/* ---- motion ------------------------------------------------------------ */
+/* Everything here is decorative. It all switches off under prefers-reduced-motion
+   at the bottom of this file, and nothing below is load-bearing for legibility. */
+
+/* An electric meter disc, for the live-draw readout. */
+@keyframes spin-slow {
+  to { transform: rotate(360deg); }
+}
+.spin-slow { animation: spin-slow 6s linear infinite; }
+
+/* The ghost. A fluorescent tube deciding whether to stay lit. */
+@keyframes flicker {
+  0%, 42%, 46%, 62%, 100% { opacity: 1; }
+  44% { opacity: 0.32; }
+  48% { opacity: 0.75; }
+  58% { opacity: 0.28; }
+}
+.flicker { animation: flicker 5.5s ease-in-out infinite; }
+
+/* Energy travelling along a wire - used on divider rules and progress rails. */
+@keyframes current-flow {
+  0% { background-position: 0% 0; }
+  100% { background-position: 200% 0; }
+}
+.current-flow {
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--color-cyan) 18%,
+    var(--color-lime) 32%,
+    transparent 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: current-flow 3.4s linear infinite;
+}
+
+/* A highlight sweeping across a panel on hover. */
+@keyframes sweep {
+  0% { transform: translateX(-120%) skewX(-18deg); }
+  100% { transform: translateX(320%) skewX(-18deg); }
+}
+.sweep-host { position: relative; overflow: hidden; }
+.sweep-host::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 34%;
+  background: linear-gradient(90deg, transparent, rgba(47, 230, 207, 0.14), transparent);
+  transform: translateX(-120%) skewX(-18deg);
+  pointer-events: none;
+}
+.sweep-host:hover::after { animation: sweep 0.85s ease-out; }
+
+/* Drawing an SVG path on, for sparklines and the savings curve. */
+@keyframes draw-line {
+  to { stroke-dashoffset: 0; }
+}
+.draw-line {
+  stroke-dasharray: var(--len, 1200);
+  stroke-dashoffset: var(--len, 1200);
+  animation: draw-line 1.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Bars growing out of the axis, staggered by --i. */
+@keyframes grow-y {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+.grow-y {
+  transform-origin: bottom;
+  animation: grow-y 0.7s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(var(--i, 0) * 60ms);
+}
+
+/* Bars growing out of the left axis, staggered by --i. */
+@keyframes grow-x {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+.grow-x {
+  transform-origin: left;
+  animation: grow-x 0.7s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(var(--i, 0) * 55ms);
+}
+
+/* Rows arriving in sequence - the audit "printing out". */
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+.rise-in {
+  animation: rise-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+
+/* Slow drift on the ambient grid, so the page is never quite static. */
+@keyframes grid-drift {
+  from { background-position: 0 0, 0 0; }
+  to { background-position: 64px 64px, 64px 64px; }
+}
+body::before { animation: grid-drift 40s linear infinite; }
+
+/* A soft breathing glow behind hero numbers. */
+@keyframes breathe {
+  0%, 100% { opacity: 0.45; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.06); }
+}
+.breathe { animation: breathe 4.5s ease-in-out infinite; }
+
+/* Cursor-following lift on interactive cards. */
+.lift {
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.3s ease;
+  will-change: transform;
+}
+.lift:hover { transform: translateY(-3px); }
+
+/* Terminal caret, for the live-log panel. */
+@keyframes caret {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.caret { animation: caret 1s steps(1) infinite; }
+
+/* Animated gradient on headline text. */
+@keyframes hue-drift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+.grad-energy-live {
+  background: linear-gradient(100deg, var(--color-cyan), var(--color-lime), var(--color-cyan));
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: hue-drift 7s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .pulse-dot, .scan-line, .shimmer { animation: none; }
+  .pulse-dot,
+  .scan-line,
+  .shimmer,
+  .spin-slow,
+  .flicker,
+  .current-flow,
+  .draw-line,
+  .grow-y,
+  .grow-x,
+  .rise-in,
+  .breathe,
+  .caret,
+  .grad-energy-live,
+  body::before {
+    animation: none;
+  }
+  .sweep-host:hover::after { animation: none; }
+  .lift:hover { transform: none; }
+  .draw-line { stroke-dashoffset: 0; }
+  .grow-y, .grow-x { transform: none; }
+  .rise-in { opacity: 1; transform: none; }
 }

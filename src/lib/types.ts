@@ -13,6 +13,30 @@ export interface DeviceObservation {
 /** How a given offender was produced. Surfaced to the user as a badge. */
 export type AnalysisMode = "live" | "fallback";
 
+/** Coarse device grouping, used for filtering and the load-mix breakdown. */
+export type DeviceGroup =
+  | "display"
+  | "computing"
+  | "lighting"
+  | "refrigeration"
+  | "hvac"
+  | "kitchen"
+  | "office"
+  | "network"
+  | "specialty";
+
+export const GROUP_LABELS: Record<DeviceGroup, string> = {
+  display: "Displays",
+  computing: "Computing",
+  lighting: "Lighting",
+  refrigeration: "Refrigeration",
+  hvac: "Heating & cooling",
+  kitchen: "Kitchen",
+  office: "Office equipment",
+  network: "Network & servers",
+  specialty: "Specialty",
+};
+
 /** A category in the wattage lookup table. */
 export interface DeviceCategory {
   id: string;
@@ -23,6 +47,14 @@ export interface DeviceCategory {
   wattsOn: number;
   /** Draw (W) when plugged in but idle/standby. */
   wattsStandby: number;
+  /** Low end of the published range for this device class, W. Drives the uncertainty band. */
+  wattsLow?: number;
+  /** High end of the published range for this device class, W. */
+  wattsHigh?: number;
+  /** Where the wattage figures come from. Shown on the Methodology page. */
+  source?: string;
+  /** Coarse grouping for filtering and reporting. */
+  group?: DeviceGroup;
   /** Fraction of applicable hours actually drawing power (compressors/heaters cycle < 1). */
   dutyCycle: number;
   /** Thermostatic devices run 24/7 and cycle; "on/off" is not meaningful. */
@@ -50,6 +82,14 @@ export interface AuditSettings {
   co2PerKwh: number;
   /** Hours per year the building is empty (the only hours phantom load is "wasted"). */
   unoccupiedHoursPerYear: number;
+  /** Two-letter state code, when the user has told us where the building is. */
+  regionCode?: string;
+  /** Building type id, for benchmarking against comparable buildings. */
+  buildingTypeId?: string;
+  /** Conditioned floor area, sq ft. Enables EUI benchmarking. */
+  floorAreaSqFt?: number;
+  /** Utility demand charge, $/kW-month. Applies to loads that raise peak demand. */
+  demandChargePerKw?: number;
 }
 
 /** A single ranked offender after the energy math is applied. */
@@ -67,6 +107,12 @@ export interface Offender {
   kwhPerYear: number;
   costPerYear: number;
   co2KgPerYear: number;
+  /** Low end of the plausible annual cost, from the device's published wattage range. */
+  costLowPerYear: number;
+  /** High end of the plausible annual cost. */
+  costHighPerYear: number;
+  /** Coarse grouping, for the load-mix breakdown. */
+  group: DeviceGroup;
   action: RecommendedAction;
   fixCost: number;
   annualSavings: number;

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Hero } from "@/components/Hero";
 import { Reveal } from "@/components/Reveal";
+import { Capabilities } from "@/components/Capabilities";
 import { DeviceGlyph } from "@/components/DeviceGlyph";
 
 export default function Home() {
@@ -10,6 +11,7 @@ export default function Home() {
       <ProblemBand />
       <HowItWorks />
       <SampleAudit />
+      <Capabilities />
       <WhyDifferent />
       <ResponsibleAI />
       <FinalCta />
