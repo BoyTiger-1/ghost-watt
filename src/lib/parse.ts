@@ -11,15 +11,33 @@ import type { DeviceObservation, DeviceState } from "./types";
 
 export type CategorizedObservation = DeviceObservation & { categoryId: string };
 
-/** Map a free-text device label to exactly one catalog category (specific wins). */
+/**
+ * Map a free-text device label to exactly one catalog category.
+ *
+ * The longest matching keyword wins, which is what "specific beats general" has to
+ * mean once two categories legitimately share a word. Catalog order used to decide
+ * it, and that silently mispriced anything whose name contained a more general
+ * category's keyword: "water cooler" matched the fridge entry on "cooler" and was
+ * costed as a refrigerator, because fridge happens to be declared first. Length is
+ * the right tiebreak because a keyword that is a superstring of another is by
+ * definition the more specific description of the same object.
+ *
+ * Ties fall back to catalog order, which keeps the function deterministic.
+ */
 export function matchCategory(label: string): string | null {
   const text = label.toLowerCase();
+  let bestId: string | null = null;
+  let bestLen = 0;
+
   for (const cat of DEVICE_CATALOG) {
     for (const kw of cat.keywords) {
-      if (text.includes(kw)) return cat.id;
+      if (kw.length > bestLen && text.includes(kw)) {
+        bestId = cat.id;
+        bestLen = kw.length;
+      }
     }
   }
-  return null;
+  return bestId;
 }
 
 function normalizeState(raw: unknown): DeviceState {
