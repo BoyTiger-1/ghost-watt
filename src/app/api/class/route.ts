@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { makeCode, type ClassSession } from "@/lib/classroom";
 import { readSession, writeSession, isDurable, storeTier } from "@/lib/roomstore";
+import { RULES, checkLimits, clientIp, rateHeaders } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
 
@@ -24,6 +25,19 @@ export async function POST(req: Request) {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+  }
+
+  // Sessions are cheap but not free, and an unbounded creation loop would fill the
+  // store with abandoned codes. Twenty an hour is more than a teacher running back
+  // to back classes will ever need.
+  const verdict = await checkLimits([
+    { key: "class-create:" + clientIp(req), rule: RULES.classCreateIp, scope: "ip" },
+  ]);
+  if (!verdict.ok) {
+    return NextResponse.json(
+      { error: "Too many sessions opened from here. Try again in a few minutes." },
+      { status: 429, headers: rateHeaders(verdict, RULES.classCreateIp.limit) },
+    );
   }
 
   const buildingName = (body.buildingName ?? "").trim().slice(0, 60) || "Our building";
