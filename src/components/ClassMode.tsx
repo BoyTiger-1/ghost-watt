@@ -18,7 +18,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { CODE_LENGTH, isValidCode, normalizeCode, type MergedRow, type AreaSummary, type ClassTotals } from "@/lib/classroom";
-import { useStore, ensureBuilding } from "@/lib/useStore";
+import { useStore } from "@/lib/useStore";
+import { US_AVERAGE } from "@/lib/grid";
 import { DeviceGlyph } from "./DeviceGlyph";
 
 interface MapResponse {
@@ -38,7 +39,22 @@ const CODE_KEY = "ghostwatt.class.code";
 
 export function ClassMode() {
   const store = useStore();
-  const building = ensureBuilding(store);
+
+  // Read-only, deliberately.
+  //
+  // This used to call ensureBuilding(store), which writes to localStorage during
+  // render. On the first client pass useStore() necessarily returns EMPTY_STORE -
+  // the server had no localStorage to read - so it concluded there were no
+  // buildings and created one, on every single visit, twice per visit under React's
+  // double-invoked render. Worse, addBuilding() points activeBuildingId at whatever
+  // it just made, so arriving here silently switched the active building to a brand
+  // new empty one and a user's saved audits appeared to vanish from every other
+  // page. Class mode reads a name and a region; it has no business creating
+  // anything, and the session it opens is server-side regardless.
+  const building =
+    store.buildings.find((b) => b.id === store.activeBuildingId) ?? store.buildings[0] ?? null;
+  const buildingName = building?.name ?? "your building";
+  const regionCode = building?.regionCode ?? US_AVERAGE.code;
 
   const [code, setCode] = useState<string>("");
   const [entry, setEntry] = useState("");
@@ -116,8 +132,8 @@ export function ClassMode() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          buildingName: building.name,
-          regionCode: building.regionCode,
+          buildingName,
+          regionCode,
         }),
       });
       const json = (await res.json()) as { code?: string; error?: string };
@@ -146,7 +162,7 @@ export function ClassMode() {
   if (!code) {
     return (
       <StartScreen
-        buildingName={building.name}
+        buildingName={buildingName}
         entry={entry}
         setEntry={setEntry}
         onCreate={create}

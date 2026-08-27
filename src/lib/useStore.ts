@@ -9,7 +9,7 @@
 // is exactly the problem that hook exists to solve, including the server-render
 // case where there is no localStorage at all.
 
-import { useCallback, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import {
   EMPTY_STORE,
   loadStore,
@@ -22,7 +22,6 @@ import {
 } from "./storage";
 import { BUILDING_TYPES } from "./benchmark";
 import { SCHEDULE_BY_ID, SCHEDULE_PRESETS } from "./schedule";
-import { US_AVERAGE } from "./grid";
 
 let snapshot: Store | null = null;
 const listeners = new Set<() => void>();
@@ -151,15 +150,13 @@ export function replaceStore(store: Store) {
   mutate(() => store);
 }
 
-/** A first building, so a new user is never looking at an empty selector. */
-export function ensureBuilding(store: Store): Building {
-  const active = store.buildings.find((b) => b.id === store.activeBuildingId);
-  if (active) return active;
-  if (store.buildings[0]) {
-    setActiveBuilding(store.buildings[0].id);
-    return store.buildings[0];
-  }
-  const b = newBuilding("My building", "k12", US_AVERAGE.code);
-  addBuilding(b);
-  return b;
-}
+// There was an ensureBuilding(store) here that returned the active building and
+// created one if the store had none. It was removed rather than fixed, because its
+// signature invited the bug: it looks like a getter, so it got called during render,
+// where it wrote to localStorage on a store that is necessarily EMPTY_STORE on the
+// first client pass. That created a junk building on every visit and repointed
+// activeBuildingId at it, hiding the user's real audits everywhere else.
+//
+// Anything that needs to create a building on demand should do it in an effect or an
+// event handler and read currentStore() rather than a rendered snapshot - see the
+// call in Scanner.tsx, which is the shape that is actually safe.

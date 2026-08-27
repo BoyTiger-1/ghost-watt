@@ -7,6 +7,7 @@ import { StatusPill } from "./StatusPill";
 const TABS = [
   { href: "/scan", label: "Scanner" },
   { href: "/portfolio", label: "Portfolio" },
+  { href: "/report", label: "Brief" },
   { href: "/class", label: "Class" },
   { href: "/methodology", label: "Method" },
   { href: "/settings", label: "Settings" },
@@ -16,7 +17,7 @@ export function Nav() {
   const pathname = usePathname();
 
   return (
-    <header className="fixed inset-x-0 top-0 z-50 border-b border-line bg-ink/70 backdrop-blur-xl">
+    <header className="site-header fixed inset-x-0 top-0 z-50 border-b border-line bg-ink/70 backdrop-blur-xl">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
         <Link href="/" className="group flex items-center gap-2.5">
           <span className="relative grid h-7 w-7 place-items-center border border-line2 bg-surface">

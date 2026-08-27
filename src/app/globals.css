@@ -390,3 +390,96 @@ body::before { animation: grid-drift 40s linear infinite; }
   .grow-y, .grow-x { transform: none; }
   .rise-in { opacity: 1; transform: none; }
 }
+
+/* ---- print ------------------------------------------------------------
+ *
+ * The brief at /report exists to be handed to somebody, and a school runs on
+ * paper. Printing the app as it appears on screen would put a near-black page
+ * through a toner cartridge and come out unreadable, so print gets a genuine
+ * second theme rather than a filter: white ground, black text, hairline rules.
+ *
+ * Colour is kept only where it carries meaning that greyscale would destroy -
+ * the ember/lime split between "wasted" and "recoverable" is the one
+ * distinction a reader scans for, so it survives as dark red and dark green
+ * that still read correctly on a mono printer.
+ */
+@media print {
+  @page {
+    margin: 14mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  /* Chrome for the screen: navigation, controls, decoration. None of it means
+     anything on paper and all of it costs a reader attention. */
+  .no-print,
+  nav,
+  header.site-header,
+  footer.site-footer,
+  .skip-link {
+    display: none !important;
+  }
+
+  .print-sheet {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+
+  /* Flatten the dark palette. Tokens are overridden rather than each rule, so
+     anything built from the design system comes along automatically. */
+  :root {
+    --color-void: #ffffff;
+    --color-ink: #ffffff;
+    --color-surface: #ffffff;
+    --color-surface2: #f6f6f4;
+    --color-fog: #111111;
+    --color-mist: #333333;
+    --color-dim: #5a5a5a;
+    --color-line: #cccccc;
+    --color-line2: #999999;
+    --color-cyan: #10606d;
+    --color-lime: #1d6b2f;
+    --color-ember: #9b2c1f;
+    --color-amber: #8a5a10;
+  }
+
+  /* Keep a finding and its numbers on one page. A row split across a page
+     break is how a cost gets read against the wrong device. */
+  tr,
+  .avoid-break {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  table {
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: auto;
+  }
+
+  /* The last column is a number and must not be clipped by the page margin. */
+  th:last-child,
+  td:last-child {
+    padding-right: 0 !important;
+  }
+
+  .overflow-x-auto {
+    overflow: visible !important;
+  }
+
+  /* Signatures belong at the bottom of the page they conclude. */
+  .signature-block {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  a[href]::after {
+    content: "";
+  }
+}

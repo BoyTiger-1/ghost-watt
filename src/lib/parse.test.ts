@@ -20,6 +20,23 @@ describe("matchCategory", () => {
     expect(matchCategory("a potted plant")).toBeNull();
     expect(matchCategory("")).toBeNull();
   });
+
+  it("prefers the most specific keyword when two categories share a word", () => {
+    // Regression: the fridge entry lists "cooler" and is declared before
+    // water_cooler, so first-match-wins costed every water cooler as a
+    // refrigerator - a different wattage, and therefore a wrong dollar figure on
+    // a page someone is asked to act on.
+    expect(matchCategory("water cooler")).toBe("water_cooler");
+    expect(matchCategory("the water cooler by the office")).toBe("water_cooler");
+
+    // The general term still resolves to the general category.
+    expect(matchCategory("cooler")).toBe("fridge");
+    expect(matchCategory("mini fridge")).toBe("fridge");
+  });
+
+  it("is deterministic for a label that matches nothing longer", () => {
+    expect(matchCategory("refrigerator")).toBe(matchCategory("refrigerator"));
+  });
 });
 
 describe("parseModelOutput", () => {
