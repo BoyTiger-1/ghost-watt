@@ -9,6 +9,7 @@ import {
   sanitizeContribution,
 } from "@/lib/classroom";
 import { readSession, updateSession, isDurable } from "@/lib/roomstore";
+import { RULES, checkLimits, clientIp, rateHeaders } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
 
@@ -66,6 +67,18 @@ export async function POST(
   const code = normalizeCode(raw);
   if (!isValidCode(code)) {
     return NextResponse.json({ error: "That is not a valid code." }, { status: 400 });
+  }
+
+  // Sized for the real case rather than a hostile one: a class of thirty each
+  // submitting a couple of areas arrives from one school address inside one period.
+  const verdict = await checkLimits([
+    { key: "class-write:" + clientIp(req), rule: RULES.classWriteIp, scope: "ip" },
+  ]);
+  if (!verdict.ok) {
+    return NextResponse.json(
+      { error: "Too many submissions from this network. Try again shortly." },
+      { status: 429, headers: rateHeaders(verdict, RULES.classWriteIp.limit) },
+    );
   }
 
   let body: unknown;
