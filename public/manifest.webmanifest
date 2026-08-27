@@ -1,0 +1,32 @@
+{
+  "name": "Ghost Watt",
+  "short_name": "Ghost Watt",
+  "description": "Walk the building after hours. Photograph what is still running. Get a ranked, costed list of phantom-load offenders.",
+  "id": "/",
+  "start_url": "/scan",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#06080d",
+  "theme_color": "#06080d",
+  "categories": ["education", "utilities", "productivity"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    { "name": "New scan", "url": "/scan" },
+    { "name": "Class session", "url": "/class" },
+    { "name": "Portfolio", "url": "/portfolio" }
+  ]
+}

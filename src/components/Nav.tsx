@@ -6,8 +6,10 @@ import { StatusPill } from "./StatusPill";
 
 const TABS = [
   { href: "/scan", label: "Scanner" },
-  { href: "/methodology", label: "Methodology" },
-  { href: "/about", label: "About" },
+  { href: "/portfolio", label: "Portfolio" },
+  { href: "/class", label: "Class" },
+  { href: "/methodology", label: "Method" },
+  { href: "/settings", label: "Settings" },
 ];
 
 export function Nav() {
