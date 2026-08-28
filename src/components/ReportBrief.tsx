@@ -62,16 +62,21 @@ export function ReportBrief() {
   });
 
   return (
-    <div className="space-y-6">
+    /* On a wide screen the sheet is a document and must not grow with the
+       viewport - long measure is exactly what makes a brief unreadable. So the
+       spare width goes to the controls instead, which move into a sticky rail
+       beside it rather than leaving half the page empty. Below lg it collapses
+       back to the stacked order, and print flattens it (see .brief-layout). */
+    <div className="brief-layout space-y-6 lg:grid lg:grid-cols-[minmax(0,17rem)_minmax(0,1fr)] lg:items-start lg:gap-10 lg:space-y-0">
       {/* Controls. Dropped from print output entirely. */}
-      <div className="no-print flex flex-wrap items-center gap-3">
+      <div className="no-print flex flex-wrap items-center gap-3 lg:sticky lg:top-20 lg:col-start-1 lg:row-start-1 lg:flex-col lg:items-stretch lg:gap-4">
         {audits.length > 1 && (
-          <label className="flex items-center gap-2">
+          <label className="flex items-center gap-2 lg:flex-col lg:items-start lg:gap-1.5">
             <span className="mono-label">audit</span>
             <select
               value={audit.id}
               onChange={(e) => setAuditId(e.target.value)}
-              className="border border-line bg-surface2 px-3 py-2 text-sm text-fog outline-none focus:border-cyan"
+              className="w-full max-w-full border border-line bg-surface2 px-3 py-2 text-sm text-fog outline-none focus:border-cyan"
             >
               {audits.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -92,7 +97,10 @@ export function ReportBrief() {
         </span>
       </div>
 
-      <article className="print-sheet panel space-y-8 p-6 sm:p-10">
+      {/* Placed explicitly rather than by source order: the controls beside it are
+          display:none in print, and an auto-placed article would then slide into
+          the narrow first column instead of the wide one. */}
+      <article className="print-sheet panel space-y-8 p-6 lg:col-start-2 lg:row-start-1 sm:p-10">
         {/* Masthead */}
         <header className="space-y-3 border-b border-line pb-6">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
