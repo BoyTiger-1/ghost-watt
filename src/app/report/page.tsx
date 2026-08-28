@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function ReportPage() {
   return (
-    <section className="mx-auto w-full max-w-4xl px-4 py-10 sm:px-6 sm:py-14">
+    <section className="mx-auto w-full max-w-6xl px-4 pb-14 pt-24 sm:px-6 sm:pt-28">
       <div className="no-print mb-8 space-y-3">
         <span className="mono-label text-cyan">brief</span>
         <h1 className="text-3xl font-semibold tracking-tight text-fog sm:text-4xl">
