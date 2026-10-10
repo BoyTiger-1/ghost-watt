@@ -16,6 +16,33 @@ describe("matchCategory", () => {
     expect(matchCategory("MONITOR")).toBe("monitor");
   });
 
+  it("maps every name the vision prompt asks for to the device it means", () => {
+    // The prompt hands the model these exact names. "computer monitor" once lost
+    // to the desktop keyword "computer", which priced every monitor as a PC.
+    const expected: Record<string, string> = {
+      "computer monitor": "monitor",
+      "desktop computer": "desktop",
+      laptop: "laptop",
+      projector: "projector",
+      smartboard: "smartboard",
+      TV: "tv",
+      "overhead lights": "ceiling_light",
+      "vending machine": "vending_cold",
+      refrigerator: "fridge",
+      "water cooler": "water_cooler",
+      printer: "printer",
+      copier: "copier",
+      "server rack": "server",
+      "window AC unit": "ac_window",
+      "space heater": "space_heater",
+      "coffee maker": "coffee",
+      microwave: "microwave",
+    };
+    for (const [name, id] of Object.entries(expected)) {
+      expect(matchCategory(name), name).toBe(id);
+    }
+  });
+
   it("returns null rather than guessing at something unknown", () => {
     expect(matchCategory("a potted plant")).toBeNull();
     expect(matchCategory("")).toBeNull();

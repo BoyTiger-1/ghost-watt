@@ -2,12 +2,24 @@
 
 export type DeviceState = "on" | "standby" | "off";
 
+/**
+ * Where on the photo a device was seen: [x1, y1, x2, y2] as fractions (0-1) of the
+ * photo's width and height, top-left corner first. Fractions rather than pixels so
+ * the overlay is correct at whatever size the photo is drawn.
+ */
+export type Box = [number, number, number, number];
+
 /** A raw device observation - what the vision model (or fallback) reports. */
 export interface DeviceObservation {
   /** Free-text label as seen, e.g. "computer monitor". */
   device: string;
   count: number;
   state: DeviceState;
+  /**
+   * Located instances, when the engine reports positions. Usually fewer than
+   * count: a model can count a far row of monitors it cannot box one by one.
+   */
+  boxes?: Box[];
 }
 
 /** How a given offender was produced. Surfaced to the user as a badge. */
@@ -121,6 +133,8 @@ export interface Offender {
   confidence: "high" | "medium" | "low";
   /** Which room/photo this came from. */
   source: string;
+  /** Where on the source photo these units were seen. Absent for estimates. */
+  boxes?: Box[];
 }
 
 export interface AnalysisResult {
@@ -133,6 +147,20 @@ export interface AnalysisResult {
   raw?: string;
   /** Present when the live path failed and we fell back. */
   notice?: string;
+  /**
+   * Devices the model located but judged switched off. They cost nothing, so
+   * they are not offenders, but drawing them on the photo shows the scan looked
+   * at everything rather than missing them - and "all 28 monitors are off" is a
+   * result worth seeing.
+   */
+  sightings?: Sighting[];
+}
+
+export interface Sighting {
+  label: string;
+  count: number;
+  state: DeviceState;
+  boxes: Box[];
 }
 
 export const DEFAULT_SETTINGS: AuditSettings = {

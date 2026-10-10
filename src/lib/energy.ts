@@ -114,6 +114,7 @@ export function scoreObservation(
     paybackMonths,
     confidence: confidenceFor(obs.state, cat),
     source,
+    ...(obs.boxes?.length ? { boxes: obs.boxes } : {}),
   };
 }
 
@@ -140,12 +141,13 @@ export function rankObservations(
       existing.costLowPerYear += o.costLowPerYear;
       existing.costHighPerYear += o.costHighPerYear;
       existing.annualSavings += o.annualSavings;
+      if (o.boxes?.length) existing.boxes = [...(existing.boxes ?? []), ...o.boxes];
       existing.paybackMonths =
         existing.fixCost > 0 && existing.annualSavings > 0
           ? (existing.fixCost / existing.annualSavings) * 12
           : null;
     } else {
-      merged.set(o.categoryId, { ...o });
+      merged.set(o.categoryId, { ...o, ...(o.boxes ? { boxes: [...o.boxes] } : {}) });
     }
   }
 

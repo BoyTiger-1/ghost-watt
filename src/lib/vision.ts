@@ -21,7 +21,8 @@
 // Only ONE hosted key needs to be set. Whichever is present wins, in the order
 // listed in HOSTED below.
 
-import { describeImage as describeViaOllama, probeOllama, VISION_PROMPT, VISION_MODEL } from "./ollama";
+import { describeImage as describeViaOllama, probeOllama, buildVisionPrompt, VISION_MODEL } from "./ollama";
+import { FULL_FRAME, type Frame } from "./boxes";
 
 export type VisionKind = "local" | "hosted" | "none";
 
@@ -43,8 +44,19 @@ interface HostedProvider {
   model: string;
   signup: string;
   note: string;
-  call: (image: DecodedImage, key: string, model: string) => Promise<string>;
+  call: (image: DecodedImage, key: string, model: string, prompt: string) => Promise<string>;
+  /**
+   * Where to list this provider's models, for recovering when the default model
+   * is retired. Only set for providers whose model list says which models take
+   * images; guessing from names would pick a text-only model and fail anyway.
+   */
+  modelsUrl?: string;
 }
+
+// Box coordinates roughly triple the length of a reply: a full lab at 8 boxes a
+// type is 1000+ tokens. 700 used to cut the JSON off mid-array, and a truncated
+// array parses as nothing, so the whole scan fell through to the estimate.
+const MAX_TOKENS = 1500;
 
 const TIMEOUT_MS = Number(process.env.VISION_TIMEOUT_MS ?? 45000);
 
@@ -105,13 +117,18 @@ async function postJson(
  * Anthropic and the OpenAI-compatible crowd differ only in envelope shape, so
  * there are exactly two call shapes here and three providers share the second.
  */
-async function callAnthropic(img: DecodedImage, key: string, model: string): Promise<string> {
+async function callAnthropic(
+  img: DecodedImage,
+  key: string,
+  model: string,
+  prompt: string,
+): Promise<string> {
   const json = (await postJson(
     "https://api.anthropic.com/v1/messages",
     { "x-api-key": key, "anthropic-version": "2023-06-01" },
     {
       model,
-      max_tokens: 700,
+      max_tokens: MAX_TOKENS,
       temperature: 0,
       messages: [
         {
@@ -121,7 +138,7 @@ async function callAnthropic(img: DecodedImage, key: string, model: string): Pro
               type: "image",
               source: { type: "base64", media_type: img.mediaType, data: img.base64 },
             },
-            { type: "text", text: VISION_PROMPT },
+            { type: "text", text: prompt },
           ],
         },
       ],
@@ -136,19 +153,19 @@ async function callAnthropic(img: DecodedImage, key: string, model: string): Pro
 }
 
 function openAiCompatible(endpoint: string) {
-  return async (img: DecodedImage, key: string, model: string): Promise<string> => {
+  return async (img: DecodedImage, key: string, model: string, prompt: string): Promise<string> => {
     const json = (await postJson(
       endpoint,
       { Authorization: `Bearer ${key}` },
       {
         model,
-        max_tokens: 700,
+        max_tokens: MAX_TOKENS,
         temperature: 0,
         messages: [
           {
             role: "user",
             content: [
-              { type: "text", text: VISION_PROMPT },
+              { type: "text", text: prompt },
               { type: "image_url", image_url: { url: img.dataUrl } },
             ],
           },
@@ -174,14 +191,17 @@ const HOSTED: HostedProvider[] = [
     id: "groq",
     label: "Groq",
     env: "GROQ_API_KEY",
-    // Groq's vision line-up churns. Llama-4-Scout was retired; Qwen3.6 is the
-    // current image-capable model and Groq prices its image tokens at zero.
-    // If this 404s, GET /openai/v1/models and pick one whose input_modalities
-    // include "image", or set GROQ_API_KEY_MODEL to override without a deploy.
-    model: "qwen/qwen3.6-27b",
+    // Groq's vision line-up churns: Llama-4-Scout was retired, then Qwen3.6 -
+    // which this default pointed at, so live scans quietly fell back to the
+    // estimate until someone noticed. A retired default no longer breaks
+    // anything: on model_not_found the call asks Groq for a model whose
+    // input_modalities include "image" and retries with that (see
+    // discoverImageModel). GROQ_API_KEY_MODEL still overrides.
+    model: "qwen/qwen3.8-27b",
     signup: "https://console.groq.com/keys",
     note: "Free tier, and by far the fastest to answer. Images cost nothing.",
     call: openAiCompatible("https://api.groq.com/openai/v1/chat/completions"),
+    modelsUrl: "https://api.groq.com/openai/v1/models",
   },
   {
     id: "openai",
@@ -232,12 +252,16 @@ function activeHosted(): HostedProvider | null {
  * everyone else, not the preferred path - which is why a working local daemon is
  * never bypassed just because a key happens to be set.
  */
-export async function describeImageAny(image: string): Promise<VisionResult> {
+export async function describeImageAny(
+  image: string,
+  frame: Frame = FULL_FRAME,
+): Promise<VisionResult> {
   const forced = process.env.VISION_PROVIDER?.trim().toLowerCase();
   const errors: string[] = [];
+  const prompt = buildVisionPrompt(frame);
 
   if (forced !== "hosted" && !HOSTED.some((h) => h.id === forced)) {
-    const local = await describeViaOllama(image);
+    const local = await describeViaOllama(image, prompt);
     if (local.ok && local.text.trim()) {
       return { ...local, provider: "Ollama (local)", kind: "local" };
     }
@@ -247,9 +271,18 @@ export async function describeImageAny(image: string): Promise<VisionResult> {
   const hosted = activeHosted();
   if (hosted) {
     const key = keyFor(hosted)!;
-    const model = modelFor(hosted);
+    let model = effectiveModel(hosted);
     try {
-      const text = await callWithRetry(hosted, decodeImage(image), key, model);
+      const img = decodeImage(image);
+      let text: string;
+      try {
+        text = await callWithRetry(hosted, img, key, model, prompt);
+      } catch (err) {
+        const replacement = isRetiredModel(err) ? await discoverImageModel(hosted, key, model) : null;
+        if (!replacement) throw err;
+        model = replacement;
+        text = await callWithRetry(hosted, img, key, model, prompt);
+      }
       if (text) {
         return {
           ok: true,
@@ -278,26 +311,95 @@ export async function describeImageAny(image: string): Promise<VisionResult> {
 }
 
 /**
- * One retry on a hosted call.
+ * One retry on a hosted call, after however long the provider asked for.
  *
  * Vision endpoints rate-limit hard on free tiers, and a 429 on the single
  * request a judge makes during a demo would drop the whole thing to the fallback
- * estimate. One short backoff costs a second and removes most of that risk.
+ * estimate. A fixed 1.2s pause was not enough: Groq's free tier meters output
+ * tokens per minute and its 429 says how long to wait ("Please try again in
+ * 9.18s"), and retrying before then simply fails again. So the wait comes from
+ * the error when it says, capped so the request still finishes inside the
+ * function's time limit.
  */
 async function callWithRetry(
   p: HostedProvider,
   img: DecodedImage,
   key: string,
   model: string,
+  prompt: string,
 ): Promise<string> {
   try {
-    return await p.call(img, key, model);
+    return await p.call(img, key, model, prompt);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "";
     if (!/HTTP (429|5\d\d)/.test(msg)) throw err;
-    await new Promise((r) => setTimeout(r, 1200));
-    return await p.call(img, key, model);
+    await new Promise((r) => setTimeout(r, retryDelayMs(msg)));
+    return await p.call(img, key, model, prompt);
   }
+}
+
+const MAX_RETRY_WAIT_MS = 12000;
+
+/** How long a 429 body asked us to wait, or a short default. */
+export function retryDelayMs(message: string): number {
+  const m = /try again in (?:(\d+)m)?\s*([\d.]+)\s*(ms|s)\b/i.exec(message);
+  if (!m) return 1200;
+  const minutes = m[1] ? Number(m[1]) : 0;
+  const n = Number(m[2]);
+  const ms = (m[3].toLowerCase() === "ms" ? n : n * 1000) + minutes * 60000;
+  // A little past what was asked, so the window has really reset.
+  return Math.min(MAX_RETRY_WAIT_MS, Math.max(500, Math.ceil(ms) + 250));
+}
+
+/** The provider said the model does not exist, or no longer does. */
+function isRetiredModel(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : "";
+  return /HTTP (404|400)/.test(msg) && /model_not_found|decommissioned|does not exist/i.test(msg);
+}
+
+const discovered = new Map<string, string>();
+
+/**
+ * Find a model on this provider that accepts images, other than the one that
+ * just failed. Cached per provider for the life of the server process, so the
+ * lookup happens once after a retirement rather than on every scan.
+ */
+async function discoverImageModel(
+  p: HostedProvider,
+  key: string,
+  failed: string,
+): Promise<string | null> {
+  if (!p.modelsUrl) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(p.modelsUrl, {
+      headers: { Authorization: `Bearer ${key}` },
+      signal: controller.signal,
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as {
+      data?: { id?: string; active?: boolean; input_modalities?: string[] }[];
+    };
+    const pick =
+      (json.data ?? [])
+        .filter((m) => m.id && m.id !== failed && m.active !== false)
+        .filter((m) => (m.input_modalities ?? []).includes("image"))
+        .map((m) => m.id as string)
+        // Highest version number first, which is usually the newest model.
+        .sort((x, y) => y.localeCompare(x, undefined, { numeric: true }))[0] ?? null;
+    if (pick) discovered.set(p.id, pick);
+    return pick;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Model the provider will actually be called with, including any discovery. */
+function effectiveModel(p: HostedProvider): string {
+  return discovered.get(p.id) ?? modelFor(p);
 }
 
 // ---- status -------------------------------------------------------------
@@ -360,7 +462,7 @@ export async function probeVision(): Promise<VisionStatus> {
       ready: true,
       active: "hosted",
       activeLabel: `${active.label} (hosted)`,
-      activeModel: modelFor(active),
+      activeModel: effectiveModel(active),
       local,
       hosted,
     };

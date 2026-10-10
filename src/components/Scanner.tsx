@@ -14,7 +14,8 @@ import { ContributeBar } from "./ContributeBar";
 import { WeatherContext } from "./WeatherContext";
 import { EquivalenceStrip } from "./EquivalenceStrip";
 import { BenchmarkPanel, ExportBar, LoadMixPanel } from "./AuditPanels";
-import { downscaleImage } from "@/lib/image";
+import { DetectionView, type DetectionPhoto } from "./DetectionView";
+import { analysisSquare, downscaleImage } from "@/lib/image";
 import { ROOM_TYPES } from "@/lib/parse";
 import { aggregate, fmtCo2, fmtKwh, fmtMoney, fmtMoneyFull } from "@/lib/energy";
 import { regionOrDefault } from "@/lib/grid";
@@ -57,6 +58,8 @@ export function Scanner() {
   const [tab, setTab] = useState<ResultTab>("offenders");
   const [savedAuditId, setSavedAuditId] = useState<string | null>(null);
   const [liveRate, setLiveRate] = useState<{ ratePerKwh: number; source: string } | null>(null);
+  // Offender under the pointer, on either the photo or the list, so the two stay linked.
+  const [hovered, setHovered] = useState<string | null>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
 
@@ -155,11 +158,15 @@ export function Scanner() {
     for (const entry of queue) {
       patch(entry.id, { status: "scanning", error: undefined });
       try {
+        // The model sees a padded square so its boxes come back in one known
+        // space; the photo shown on screen stays the plain downscaled one.
+        const square = entry.dataUrl ? await analysisSquare(entry.dataUrl) : null;
         const res = await fetch("/api/analyze", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            image: entry.dataUrl ?? undefined,
+            image: square?.dataUrl,
+            frame: square?.frame,
             roomType: entry.roomType,
             source: entry.name,
             settings,
@@ -198,6 +205,22 @@ export function Scanner() {
   const maxCost = ranked[0]?.offender.costPerYear ?? 0;
   const hasResults = ranked.length > 0;
   const liveCount = photos.filter((p) => p.result?.mode === "live").length;
+
+  const detectionPhotos = useMemo<DetectionPhoto[]>(
+    () =>
+      photos
+        .filter((p) => p.dataUrl && p.result)
+        .map((p) => ({
+          id: p.id,
+          name: p.name,
+          dataUrl: p.dataUrl!,
+          mode: p.result!.mode,
+          engine: p.result!.engine,
+          offenders: p.result!.offenders,
+          sightings: p.result!.sightings,
+        })),
+    [photos],
+  );
 
   /** live / fallback / mixed across every area scanned so far. */
   const auditMode = useMemo<SavedAudit["mode"]>(() => {
@@ -447,6 +470,9 @@ export function Scanner() {
 
               {tab === "offenders" && (
                 <div className="space-y-4">
+                  {detectionPhotos.length > 0 && (
+                    <DetectionView photos={detectionPhotos} hovered={hovered} onHover={setHovered} />
+                  )}
                   <AnimatePresence>
                     {ranked.map((r, i) => (
                       <OffenderCard
@@ -456,6 +482,8 @@ export function Scanner() {
                         maxCost={maxCost}
                         mode={r.mode}
                         engine={r.engine}
+                        highlighted={hovered === r.offender.id}
+                        onHover={setHovered}
                       />
                     ))}
                   </AnimatePresence>
