@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { describeImageAny } from "@/lib/vision";
 import { fallbackObservations, parseModelOutput, ROOM_TYPE_BY_ID } from "@/lib/parse";
 import { rankObservations } from "@/lib/energy";
+import { CATALOG_BY_ID } from "@/lib/devices";
+import { sanitizeFrame } from "@/lib/boxes";
 import { DEFAULT_SETTINGS } from "@/lib/types";
 import type { AnalysisResult, AuditSettings } from "@/lib/types";
 import {
@@ -40,6 +42,8 @@ export async function POST(req: Request) {
     source?: string;
     settings?: unknown;
     forceFallback?: boolean;
+    /** How much of the 1000 x 1000 analysis square is photo. See lib/boxes.ts. */
+    frame?: unknown;
   };
   try {
     body = await req.json();
@@ -105,7 +109,8 @@ export async function POST(req: Request) {
 
   // Live path: whichever vision engine is available does perception, and only
   // perception. Every number below comes out of the deterministic pipeline.
-  const vision = await describeImageAny(body.image);
+  const frame = sanitizeFrame(body.frame);
+  const vision = await describeImageAny(body.image, frame);
 
   if (!vision.ok) {
     return NextResponse.json(
@@ -113,7 +118,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const observations = parseModelOutput(vision.text);
+  const observations = parseModelOutput(vision.text, frame);
 
   if (observations.length === 0) {
     return NextResponse.json(
@@ -128,5 +133,14 @@ export async function POST(req: Request) {
     offenders: rankObservations(observations, settings, source),
     raw: vision.text,
   };
+  const sightings = observations
+    .filter((o) => o.state === "off" && o.boxes?.length)
+    .map((o) => ({
+      label: CATALOG_BY_ID[o.categoryId]?.label ?? o.device,
+      count: o.count,
+      state: o.state,
+      boxes: o.boxes!,
+    }));
+  if (sightings.length) result.sightings = sightings;
   return NextResponse.json(result);
 }

@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { DeviceGlyph } from "./DeviceGlyph";
 import { ModeBadge } from "./ModeBadge";
+import { offenderAnchor } from "./DetectionView";
 import { fmtCo2, fmtKwh, fmtMoneyFull, fmtPayback } from "@/lib/energy";
 import type { AnalysisMode, Offender } from "@/lib/types";
 
@@ -28,12 +29,17 @@ export function OffenderCard({
   maxCost,
   mode,
   engine,
+  highlighted = false,
+  onHover,
 }: {
   offender: Offender;
   rank: number;
   maxCost: number;
   mode: AnalysisMode;
   engine?: string;
+  /** The same device is under the pointer on the detection photo. */
+  highlighted?: boolean;
+  onHover?: (id: string | null) => void;
 }) {
   const o = offender;
   const pct = maxCost > 0 ? Math.max(6, (o.costPerYear / maxCost) * 100) : 6;
@@ -45,7 +51,12 @@ export function OffenderCard({
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4 }}
-      className="panel panel-hover ticked relative overflow-hidden p-4 sm:p-5"
+      id={offenderAnchor(o.id)}
+      onMouseEnter={onHover && o.boxes?.length ? () => onHover(o.id) : undefined}
+      onMouseLeave={onHover && o.boxes?.length ? () => onHover(null) : undefined}
+      className={`panel panel-hover ticked relative scroll-mt-24 overflow-hidden p-4 transition-shadow sm:p-5 ${
+        highlighted ? "shadow-[inset_0_0_0_1px_var(--color-cyan)]" : ""
+      }`}
     >
       {/* rank watermark */}
       <span className="pointer-events-none absolute -right-2 -top-5 font-mono text-7xl font-bold text-line2/40 select-none">
@@ -66,6 +77,14 @@ export function OffenderCard({
             {o.count > 1 && (
               <span className="font-mono text-sm text-cyan">×{o.count}</span>
             )}
+            {o.boxes?.length ? (
+              <span
+                className="border border-line2 px-1.5 py-px font-mono text-[0.6rem] tracking-wider uppercase text-mist"
+                title="Marked on the detection photo above. Hover to highlight."
+              >
+                {o.boxes.length} on photo
+              </span>
+            ) : null}
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[0.68rem] tracking-wider text-dim">
             <span className="uppercase">{STATE_LABEL[o.state]}</span>

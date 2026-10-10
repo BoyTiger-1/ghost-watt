@@ -8,6 +8,7 @@
 
 import { DEVICE_CATALOG, NUMBER_WORDS } from "./devices";
 import type { DeviceObservation, DeviceState } from "./types";
+import { cleanBoxes, FULL_FRAME, type Frame } from "./boxes";
 
 export type CategorizedObservation = DeviceObservation & { categoryId: string };
 
@@ -78,7 +79,7 @@ function extractJsonArray(text: string): unknown[] | null {
   return null;
 }
 
-function fromJson(arr: unknown[]): CategorizedObservation[] {
+function fromJson(arr: unknown[], frame: Frame): CategorizedObservation[] {
   const out: CategorizedObservation[] = [];
   for (const item of arr) {
     if (!item || typeof item !== "object") continue;
@@ -91,7 +92,15 @@ function fromJson(arr: unknown[]): CategorizedObservation[] {
       typeof rec.count === "number"
         ? Math.max(1, Math.round(rec.count))
         : extractCount(String(rec.count ?? "1"));
-    out.push({ device: label, count, state: normalizeState(rec.state), categoryId });
+    const boxes = cleanBoxes(rec, frame);
+    out.push({
+      device: label,
+      // A model that boxed more units than it counted has told us its count was low.
+      count: Math.max(count, boxes.length),
+      state: normalizeState(rec.state),
+      categoryId,
+      ...(boxes.length ? { boxes } : {}),
+    });
   }
   return out;
 }
@@ -118,10 +127,13 @@ function fromFreeText(text: string): CategorizedObservation[] {
   return out;
 }
 
-export function parseModelOutput(text: string): CategorizedObservation[] {
+export function parseModelOutput(
+  text: string,
+  frame: Frame = FULL_FRAME,
+): CategorizedObservation[] {
   const arr = extractJsonArray(text);
   if (arr) {
-    const fromArr = fromJson(arr);
+    const fromArr = fromJson(arr, frame);
     if (fromArr.length) return fromArr;
   }
   return fromFreeText(text);

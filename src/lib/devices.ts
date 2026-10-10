@@ -77,7 +77,9 @@ export const CORE_DEVICES: DeviceCategory[] = [
   {
     id: "monitor",
     label: "Computer monitor",
-    keywords: ["monitor", "display", "screen"],
+    // "computer monitor" is the exact name the vision prompt asks for, and without
+    // it the longer keyword "computer" won and every monitor was costed as a PC.
+    keywords: ["monitor", "display", "screen", "computer monitor", "computer screen", "computer display"],
     wattsOn: 30,
     wattsStandby: 0.5,
     wattsLow: 15,
