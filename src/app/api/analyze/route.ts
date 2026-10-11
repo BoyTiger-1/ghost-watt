@@ -55,7 +55,7 @@ export async function POST(req: Request) {
   const roomType = body.roomType && ROOM_TYPE_BY_ID[body.roomType] ? body.roomType : "unknown";
   const source = body.source?.trim() || ROOM_TYPE_BY_ID[roomType].label;
 
-  const buildFallback = (notice: string): AnalysisResult => {
+  const buildFallback = (notice: string, fallbackReason: NonNullable<AnalysisResult["fallbackReason"]>): AnalysisResult => {
     const obs = fallbackObservations(roomType);
     return {
       mode: "fallback",
@@ -63,13 +63,14 @@ export async function POST(req: Request) {
       source,
       offenders: rankObservations(obs, settings, source),
       notice,
+      fallbackReason,
     };
   };
 
   // Explicit fallback (no photo, or user asked for it).
   if (body.forceFallback || !body.image) {
     return NextResponse.json(
-      buildFallback("Estimated from a typical room profile - no live model reading."),
+      buildFallback("Estimated from a typical room profile - no live model reading.", "requested"),
     );
   }
 
@@ -102,6 +103,7 @@ export async function POST(req: Request) {
           " Showing a room-profile estimate instead - live readings resume in about " +
           Math.ceil(verdict.resetSeconds / 60) +
           " min.",
+        "limited",
       ),
       { headers: rateHeaders(verdict, RULES.analyzeIp.limit) },
     );
@@ -114,7 +116,7 @@ export async function POST(req: Request) {
 
   if (!vision.ok) {
     return NextResponse.json(
-      buildFallback(`No vision engine available (${vision.error}). Showing a room-profile estimate instead.`),
+      buildFallback(`No vision engine available (${vision.error}). Showing a room-profile estimate instead.`, "unavailable"),
     );
   }
 
@@ -122,7 +124,7 @@ export async function POST(req: Request) {
 
   if (observations.length === 0) {
     return NextResponse.json(
-      buildFallback("The model didn't recognise any catalogued devices in this photo. Showing a room-profile estimate."),
+      buildFallback("The model didn't recognise any catalogued devices in this photo. Showing a room-profile estimate.", "nothing-found"),
     );
   }
 
