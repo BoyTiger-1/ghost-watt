@@ -15,6 +15,7 @@ import { WeatherContext } from "./WeatherContext";
 import { EquivalenceStrip } from "./EquivalenceStrip";
 import { BenchmarkPanel, ExportBar, LoadMixPanel } from "./AuditPanels";
 import { DetectionView, type DetectionPhoto } from "./DetectionView";
+import { LiveScanner } from "./LiveScanner";
 import { analysisSquare, downscaleImage } from "@/lib/image";
 import { ROOM_TYPES } from "@/lib/parse";
 import { aggregate, fmtCo2, fmtKwh, fmtMoney, fmtMoneyFull } from "@/lib/energy";
@@ -62,6 +63,7 @@ export function Scanner() {
   const [hovered, setHovered] = useState<string | null>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
+  const [liveOpen, setLiveOpen] = useState(false);
 
   // Anything the user has typed over the top of the building-derived defaults.
   const [override, setOverride] = useState<Partial<AuditSettings>>({});
@@ -127,6 +129,20 @@ export function Scanner() {
       });
     }
     if (entries.length) setPhotos((prev) => [...prev, ...entries]);
+  }
+
+  /** A frame captured in the live view joins the queue like any uploaded photo. */
+  function addCapture(dataUrl: string) {
+    setPhotos((prev) => [
+      ...prev,
+      {
+        id: nextId(),
+        dataUrl,
+        roomType: "unknown",
+        name: `Live ${String(prev.length + 1).padStart(2, "0")}`,
+        status: "idle",
+      },
+    ]);
   }
 
   function addEstimate() {
@@ -278,7 +294,7 @@ export function Scanner() {
           <div className="panel p-4 sm:p-5">
             <div className="mono-label">intake</div>
 
-            <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="mt-3 grid grid-cols-3 gap-3">
               <button
                 onClick={() => uploadRef.current?.click()}
                 className="group flex flex-col items-center gap-2 border border-line bg-surface2/60 px-3 py-5 transition-colors hover:border-cyan"
@@ -297,7 +313,18 @@ export function Scanner() {
                   Camera
                 </span>
               </button>
+              <button
+                onClick={() => setLiveOpen(true)}
+                className="group relative flex flex-col items-center gap-2 border border-cyan/60 bg-cyan/5 px-3 py-5 transition-colors hover:border-cyan"
+              >
+                <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-ember pulse-dot" />
+                <LiveIcon className="h-6 w-6 text-cyan" />
+                <span className="font-mono text-[0.7rem] tracking-wider uppercase text-cyan">Live</span>
+              </button>
             </div>
+            {liveOpen && (
+              <LiveScanner settings={settings} onCapture={addCapture} onClose={() => setLiveOpen(false)} />
+            )}
 
             <input
               ref={uploadRef}
@@ -777,6 +804,15 @@ function UploadIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="M12 16V4M8 8l4-4 4 4M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
+    </svg>
+  );
+}
+
+function LiveIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4" />
+      <rect x="8" y="9" width="8" height="6" />
     </svg>
   );
 }
