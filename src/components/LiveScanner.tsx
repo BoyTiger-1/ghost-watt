@@ -2,11 +2,28 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "framer-motion";
 import type { ObjectDetector } from "@mediapipe/tasks-vision";
-import { COCO_MAP, Tracker, containRect, tallyView, type LiveTally, type Track } from "@/lib/live";
+import {
+  COCO_MAP,
+  COOLDOWN_MIN_MS,
+  SIG_H,
+  SIG_W,
+  STEADY_MS,
+  STILL_DIFF,
+  Tracker,
+  containRect,
+  frameSignature,
+  nearestView,
+  nextCooldown,
+  shouldAutoAudit,
+  sigDiff,
+  tallyView,
+  type LiveTally,
+  type Track,
+} from "@/lib/live";
+import { analysisSquare } from "@/lib/image";
 import { fmtMoney } from "@/lib/energy";
-import type { AuditSettings } from "@/lib/types";
+import type { AnalysisResult, AuditSettings, Box, DeviceState } from "@/lib/types";
 
 // Pinned to the installed package version: the WASM runtime and the JS that
 // drives it must match exactly, or the detector fails to start with an opaque
@@ -55,6 +72,11 @@ const LIVE_LABEL: Record<string, string> = Object.fromEntries(
     .map((c) => [c.categoryId!, c.label]),
 );
 
+/** "Laptop / Chromebook (charging)" is right for a report and too long for a box. */
+function shortLabel(label: string): string {
+  return label.split(/\s[/(]/)[0].toLowerCase();
+}
+
 const COLOR = {
   costed: "#ff6a5c",
   device: "#ffb24d",
@@ -62,15 +84,66 @@ const COLOR = {
   other: "#7d8799",
 };
 
+const STATE_COLOR: Record<DeviceState, string> = { on: "#ff6a5c", standby: "#ffb24d", off: "#7d8799" };
+
 type Source = "camera" | "file";
+
+/** A view the full audit has answered for, keyed by what it looked like. */
+interface AuditedView {
+  id: number;
+  sig: Float32Array;
+  /** Null when the audit found nothing: kept so the same empty view is not re-sent. */
+  result: AnalysisResult | null;
+}
+
+/** What one box on screen says, flattened from offenders and sightings. */
+interface AiMark {
+  box: Box;
+  /** Only the first unit of each device type is labelled: forty chips bury the picture. */
+  text: string | null;
+  color: string;
+  quiet?: boolean;
+}
+
+function marksFor(result: AnalysisResult): AiMark[] {
+  const marks: AiMark[] = [];
+  for (const o of result.offenders) {
+    o.boxes?.forEach((box, i) =>
+      marks.push({
+        box,
+        text: i === 0 ? `${o.count} ${shortLabel(o.label)} · ${o.state} · ${fmtMoney(o.costPerYear)}/yr` : null,
+        color: STATE_COLOR[o.state],
+      }),
+    );
+  }
+  for (const s of result.sightings ?? []) {
+    s.boxes.forEach((box, i) =>
+      marks.push({ box, text: i === 0 ? `${s.count} ${shortLabel(s.label)} · off` : null, color: STATE_COLOR.off, quiet: true }),
+    );
+  }
+  return marks;
+}
+
+type AiStatus =
+  | { kind: "off" }
+  | { kind: "moving" }
+  | { kind: "auditing" }
+  | { kind: "showing"; view: number }
+  | { kind: "empty"; view: number }
+  | { kind: "busy"; seconds: number }
+  | { kind: "waiting"; seconds: number };
 
 export function LiveScanner({
   settings,
-  onCapture,
+  nextName,
+  onAudit,
   onClose,
 }: {
   settings: AuditSettings;
-  onCapture: (dataUrl: string) => void;
+  /** The area name for the next audited view, e.g. "Live 03". */
+  nextName: () => string;
+  /** An audited view, already analysed, for the results list. */
+  onAudit: (name: string, dataUrl: string, result: AnalysisResult) => void;
   onClose: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -83,6 +156,16 @@ export function LiveScanner({
   const tracksRef = useRef<Track[]>([]);
   const settingsRef = useRef(settings);
   const showAllRef = useRef(false);
+  const autoRef = useRef(true);
+  const forceRef = useRef(false);
+
+  // Auto-audit state. All of it is read by the frame loop, so it lives in refs.
+  const viewsRef = useRef<AuditedView[]>([]);
+  const inFlightRef = useRef(false);
+  const lastDoneRef = useRef(0);
+  const cooldownRef = useRef(COOLDOWN_MIN_MS);
+  const busyRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   const [phase, setPhase] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
@@ -94,14 +177,17 @@ export function LiveScanner({
   const [fps, setFps] = useState(0);
   const [tally, setTally] = useState<LiveTally>({ byCategory: {}, devices: 0, people: 0, costPerYear: 0 });
   const [showAll, setShowAll] = useState(false);
-  const [captures, setCaptures] = useState(0);
-  const [flash, setFlash] = useState(0);
+  const [auto, setAuto] = useState(true);
+  const [status, setStatus] = useState<AiStatus>({ kind: "moving" });
+  const [active, setActive] = useState<AuditedView | null>(null);
+  const [session, setSession] = useState({ views: 0, cost: 0 });
 
   // The frame loop reads these through refs so it never restarts on a re-render.
   useEffect(() => {
     settingsRef.current = settings;
     showAllRef.current = showAll;
-  }, [settings, showAll]);
+    autoRef.current = auto;
+  }, [settings, showAll, auto]);
 
   /** Bumped on every source change, so a slow camera start cannot override a file picked meanwhile. */
   const genRef = useRef(0);
@@ -200,6 +286,7 @@ export function LiveScanner({
     return () => {
       cancelled = true;
       stopMedia();
+      abortRef.current?.abort();
     };
   }, [startCamera, stopMedia]);
 
@@ -215,6 +302,72 @@ export function LiveScanner({
     };
   }, [onClose]);
 
+  /** The current frame as an upload-sized JPEG, the same as a photo would be. */
+  const grabFrame = useCallback((): string | null => {
+    const el = mediaKind === "video" ? videoRef.current : imgRef.current;
+    if (!el) return null;
+    const sw = el instanceof HTMLVideoElement ? el.videoWidth : el.naturalWidth;
+    const sh = el instanceof HTMLVideoElement ? el.videoHeight : el.naturalHeight;
+    if (!sw || !sh) return null;
+    const scale = Math.min(1, 768 / Math.max(sw, sh));
+    const c = document.createElement("canvas");
+    c.width = Math.round(sw * scale);
+    c.height = Math.round(sh * scale);
+    c.getContext("2d")?.drawImage(el, 0, 0, c.width, c.height);
+    return c.toDataURL("image/jpeg", 0.72);
+  }, [mediaKind]);
+
+  /** Send the current view through the full audit. */
+  const runAudit = useCallback(
+    async (sig: Float32Array) => {
+      const dataUrl = grabFrame();
+      if (!dataUrl) return;
+      inFlightRef.current = true;
+      const controller = new AbortController();
+      abortRef.current = controller;
+      const name = nextName();
+      let ok = false;
+      try {
+        const square = await analysisSquare(dataUrl);
+        const res = await fetch("/api/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            image: square.dataUrl,
+            frame: square.frame,
+            roomType: "unknown",
+            source: name,
+            settings: settingsRef.current,
+          }),
+          signal: controller.signal,
+        });
+        if (res.ok) {
+          const result = (await res.json()) as AnalysisResult;
+          if (result.mode === "live" || result.fallbackReason === "nothing-found") {
+            ok = true;
+            const found = result.mode === "live" ? result : null;
+            viewsRef.current = [...viewsRef.current, { id: viewsRef.current.length + 1, sig, result: found }];
+            if (found) {
+              onAudit(name, dataUrl, found);
+              const cost = found.offenders.reduce((s, o) => s + o.costPerYear, 0);
+              setSession((p) => ({ views: p.views + 1, cost: p.cost + cost }));
+            }
+          }
+          // Any other fallback is a room-profile guess, not this view: never shown
+          // over the camera as if it were a reading. Back off and try again.
+        }
+      } catch {
+        if (controller.signal.aborted) return;
+      } finally {
+        inFlightRef.current = false;
+        lastDoneRef.current = performance.now();
+        cooldownRef.current = nextCooldown(cooldownRef.current, ok);
+        busyRef.current = !ok;
+      }
+    },
+    [grabFrame, nextName, onAudit],
+  );
+
   // The frame loop. Detection and drawing run outside React; only the HUD
   // numbers go through state, a few times a second.
   useEffect(() => {
@@ -222,10 +375,19 @@ export function LiveScanner({
     let raf = 0;
     let lastTs = 0;
     let lastHud = 0;
+    let lastSample = 0;
     let fpsEma = 0;
     let lastFrame = performance.now();
+    let prevSig: Float32Array | null = null;
+    let steadySince = 0;
+    let match: AuditedView | null = null;
     let detector: ObjectDetector | null = null;
     getDetector().then((d) => (detector = d.detector));
+
+    const sigCanvas = document.createElement("canvas");
+    sigCanvas.width = SIG_W;
+    sigCanvas.height = SIG_H;
+    const sigCtx = sigCanvas.getContext("2d", { willReadFrequently: true });
 
     const frame = () => {
       raf = requestAnimationFrame(frame);
@@ -259,7 +421,41 @@ export function LiveScanner({
         return;
       }
 
-      draw(canvas, sw, sh, tracksRef.current, now, showAllRef.current);
+      // Ten times a second: is the camera still, which audited view is this,
+      // and is it time to audit a new one?
+      if (sigCtx && now - lastSample > 100) {
+        lastSample = now;
+        sigCtx.drawImage(el, 0, 0, SIG_W, SIG_H);
+        const sig = frameSignature(sigCtx.getImageData(0, 0, SIG_W, SIG_H).data);
+        const still = prevSig ? sigDiff(prevSig, sig) < STILL_DIFF : false;
+        prevSig = sig;
+        steadySince = still ? steadySince || now : 0;
+        match = nearestView(sig, viewsRef.current)?.view ?? null;
+        const steadyMs = steadySince ? now - steadySince : 0;
+        const force = forceRef.current && !inFlightRef.current;
+        if (
+          force ||
+          shouldAutoAudit({
+            enabled: autoRef.current,
+            inFlight: inFlightRef.current,
+            steadyMs,
+            alreadyAudited: !!match,
+            sinceLastMs: now - lastDoneRef.current,
+            cooldownMs: cooldownRef.current,
+          })
+        ) {
+          forceRef.current = false;
+          runAudit(sig);
+        }
+      }
+
+      draw(canvas, sw, sh, {
+        tracks: tracksRef.current,
+        marks: match?.result ? marksFor(match.result) : null,
+        auditing: inFlightRef.current,
+        now,
+        showAll: showAllRef.current,
+      });
 
       const dt = now - lastFrame;
       lastFrame = now;
@@ -268,33 +464,47 @@ export function LiveScanner({
         lastHud = now;
         setFps(Math.round(fpsEma));
         setTally(tallyView(tracksRef.current, settingsRef.current));
+        setActive(match);
+        const wait = Math.max(0, cooldownRef.current - (now - lastDoneRef.current));
+        setStatus(
+          inFlightRef.current
+            ? { kind: "auditing" }
+            : match
+              ? match.result
+                ? { kind: "showing", view: match.id }
+                : { kind: "empty", view: match.id }
+              : !autoRef.current
+                ? { kind: "off" }
+                : busyRef.current && wait > 0
+                  ? { kind: "busy", seconds: Math.ceil(wait / 1000) }
+                  : wait > 0 && steadySince && now - steadySince >= STEADY_MS
+                    ? { kind: "waiting", seconds: Math.ceil(wait / 1000) }
+                    : { kind: "moving" },
+        );
       }
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [phase, source, mediaKind]);
+  }, [phase, source, mediaKind, runAudit]);
 
-  function capture() {
-    const el = mediaKind === "video" ? videoRef.current : imgRef.current;
-    if (!el) return;
-    const sw = el instanceof HTMLVideoElement ? el.videoWidth : el.naturalWidth;
-    const sh = el instanceof HTMLVideoElement ? el.videoHeight : el.naturalHeight;
-    if (!sw || !sh) return;
-    // Same size and quality as an uploaded photo, so a capture is audited
-    // exactly like one.
-    const scale = Math.min(1, 768 / Math.max(sw, sh));
-    const c = document.createElement("canvas");
-    c.width = Math.round(sw * scale);
-    c.height = Math.round(sh * scale);
-    c.getContext("2d")?.drawImage(el, 0, 0, c.width, c.height);
-    onCapture(c.toDataURL("image/jpeg", 0.72));
-    setCaptures((n) => n + 1);
-    setFlash((n) => n + 1);
-  }
+  const activeResult = active?.result ?? null;
+  const viewCost = activeResult ? activeResult.offenders.reduce((s, o) => s + o.costPerYear, 0) : 0;
+  const inView = activeResult
+    ? activeResult.offenders.map((o) => `${o.count} ${shortLabel(o.label)} ${o.state}`).join(" · ") ||
+      "everything here is switched off"
+    : Object.entries(tally.byCategory)
+        .map(([id, n]) => `${n} ${LIVE_LABEL[id] ?? id}${n > 1 ? "s" : ""}`)
+        .join(" · ");
 
-  const inView = Object.entries(tally.byCategory)
-    .map(([id, n]) => `${n} ${LIVE_LABEL[id] ?? id}${n > 1 ? "s" : ""}`)
-    .join(" · ");
+  const statusText: Record<AiStatus["kind"], string> = {
+    off: "auto-audit off · tap the shutter to audit this view",
+    moving: "hold the camera still on a view to audit it",
+    auditing: "AI auditing this view…",
+    showing: `AI audit · view ${status.kind === "showing" ? status.view : ""} · move on to the next view`,
+    empty: `view ${status.kind === "empty" ? status.view : ""} audited · no powered devices found`,
+    busy: `AI busy · trying again in ${status.kind === "busy" ? status.seconds : 0}s`,
+    waiting: `next audit in ${status.kind === "waiting" ? status.seconds : 0}s`,
+  };
 
   // Portalled to <body>: the scanner section is its own stacking context, so
   // from inside it no z-index can rise above the fixed site header.
@@ -324,19 +534,19 @@ export function LiveScanner({
 
         {/* top HUD */}
         <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-3 bg-gradient-to-b from-black/80 to-transparent px-4 pb-8 pt-4">
-          <div className="font-mono text-[0.68rem] leading-relaxed tracking-wider">
+          <div className="bg-black/60 px-2 py-1 font-mono text-[0.68rem] leading-relaxed tracking-wider">
             <div className="flex items-center gap-2">
               <span className={`h-2 w-2 rounded-full ${source && phase === "ready" ? "bg-ember pulse-dot" : "bg-dim"}`} />
-              <span className="font-bold uppercase text-fog">live</span>
-              <span className="text-dim">·</span>
-              <span className="text-cyan">on-device</span>
+              <span className="font-bold uppercase text-fog">live audit</span>
             </div>
             <div className="text-dim">
-              {modelName || "loading model"}
+              <span className="text-cyan">tracking</span> {modelName || "loading model"}
               {delegate && ` · ${delegate}`}
-              {phase === "ready" && source && ` · ${fps} fps`}
+              {phase === "ready" && source && ` · ${fps} fps`} · on-device
             </div>
-            <div className="text-dim">frames never leave this device</div>
+            <div className="text-dim">
+              <span className="text-cyan">auditing</span> one still frame per view, sent to the AI
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -374,26 +584,32 @@ export function LiveScanner({
           </div>
         )}
 
-        <AnimatePresence>
-          {flash > 0 && (
-            <motion.div
-              key={flash}
-              initial={{ opacity: 0.85 }}
-              animate={{ opacity: 0 }}
-              transition={{ duration: 0.45 }}
-              className="pointer-events-none absolute inset-0 bg-white"
-            />
-          )}
-        </AnimatePresence>
+        {source && !error && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center px-4">
+            <div
+              role="status"
+              className={`border bg-black/75 px-3 py-1.5 font-mono text-[0.68rem] tracking-wider ${
+                status.kind === "auditing"
+                  ? "border-cyan text-cyan"
+                  : status.kind === "busy"
+                    ? "border-amber/60 text-amber"
+                    : "border-line2 text-mist"
+              }`}
+            >
+              {statusText[status.kind]}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* bottom panel */}
       <div className="border-t border-line bg-surface/95 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
         <div className="mx-auto flex max-w-3xl flex-wrap items-end justify-between gap-x-6 gap-y-2">
-          <div className="min-w-0">
-            <div className="mono-label">in view</div>
+          <div className="min-w-0 flex-1">
+            <div className="mono-label">{activeResult ? `view ${active!.id} · AI audit` : "in view · on-device"}</div>
             <div className="truncate font-mono text-sm text-fog">
-              {inView || (tally.devices ? `${tally.devices} powered item${tally.devices > 1 ? "s" : ""}` : "point at screens, laptops, fridges…")}
+              {inView ||
+                (tally.devices ? `${tally.devices} powered item${tally.devices > 1 ? "s" : ""}` : "point at screens, lights, laptops…")}
             </div>
             {tally.people > 0 && (
               <div className="font-mono text-[0.66rem] tracking-wider text-cyan">
@@ -403,17 +619,27 @@ export function LiveScanner({
           </div>
           <div className="text-right">
             <div className="font-mono text-2xl font-bold text-ember">
-              {fmtMoney(tally.costPerYear)}
+              {fmtMoney(activeResult ? viewCost : tally.costPerYear)}
               <span className="text-sm text-dim">/yr</span>
             </div>
-            <div className="mono-label" title="The live detector cannot see standby lights, so it prices everything in view as on. Capture for the full audit.">
-              if left on every empty hour
+            <div
+              className="mono-label"
+              title={
+                activeResult
+                  ? "From the full audit of this view: judged on or standby, costed for every empty hour."
+                  : "A rough figure from the on-device tracker, which cannot see standby lights and prices everything in view as on."
+              }
+            >
+              {activeResult ? "this view" : "rough · before the audit"}
             </div>
           </div>
         </div>
 
         <div className="mx-auto mt-3 flex max-w-3xl items-center justify-between gap-3">
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <SmallButton onClick={() => setAuto((v) => !v)} active={auto}>
+              auto
+            </SmallButton>
             <SmallButton onClick={() => fileRef.current?.click()}>file</SmallButton>
             <SmallButton
               onClick={() => {
@@ -425,30 +651,36 @@ export function LiveScanner({
               flip
             </SmallButton>
             <SmallButton onClick={() => setShowAll((v) => !v)} active={showAll}>
-              all objects
+              all
             </SmallButton>
           </div>
 
           <button
-            onClick={capture}
-            disabled={!source}
-            aria-label="Capture this view for the full audit"
-            className="grid h-16 w-16 shrink-0 place-items-center rounded-full border-2 border-fog transition-transform active:scale-90 disabled:opacity-40"
+            onClick={() => (forceRef.current = true)}
+            disabled={!source || status.kind === "auditing"}
+            aria-label="Audit this view now"
+            title="Audit this view now"
+            className="grid h-14 w-14 shrink-0 place-items-center rounded-full border-2 border-fog transition-transform active:scale-90 disabled:opacity-40"
           >
-            <span className="h-12 w-12 rounded-full bg-fog" />
+            <span className={`h-10 w-10 rounded-full ${status.kind === "auditing" ? "bg-cyan pulse-dot" : "bg-fog"}`} />
           </button>
 
           <button
             onClick={onClose}
-            className="min-w-[7.5rem] border border-cyan bg-cyan/10 px-3 py-2 font-mono text-[0.7rem] font-bold uppercase tracking-wider text-cyan"
+            className="min-w-[7.5rem] border border-cyan bg-cyan/10 px-3 py-2 text-right font-mono text-[0.7rem] font-bold uppercase tracking-wider text-cyan"
           >
-            {captures ? `done · ${captures}` : "done"}
+            {session.views ? (
+              <>
+                done · {session.views} view{session.views > 1 ? "s" : ""}
+                <span className="block text-[0.62rem] font-normal normal-case text-mist">
+                  {fmtMoney(session.cost)}/yr found
+                </span>
+              </>
+            ) : (
+              "done"
+            )}
           </button>
         </div>
-        <p className="mx-auto mt-2 max-w-3xl font-mono text-[0.62rem] leading-relaxed tracking-wide text-dim">
-          The live view knows screens, laptops, fridges and microwaves. Capture a view to run the full AI audit,
-          which also finds lights, projectors and copiers and judges what is on or in standby.
-        </p>
       </div>
 
       <input
@@ -488,14 +720,47 @@ function SmallButton({
   );
 }
 
-/** Draw tracked boxes, CV-HUD style, onto the overlay canvas. */
+function bracket(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, L: number) {
+  ctx.beginPath();
+  ctx.moveTo(x, y + L); ctx.lineTo(x, y); ctx.lineTo(x + L, y);
+  ctx.moveTo(x + w - L, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + L);
+  ctx.moveTo(x + w, y + h - L); ctx.lineTo(x + w, y + h); ctx.lineTo(x + w - L, y + h);
+  ctx.moveTo(x + L, y + h); ctx.lineTo(x, y + h); ctx.lineTo(x, y + h - L);
+  ctx.stroke();
+}
+
+function chip(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  bounds: { x: number; y: number; w: number },
+  color: string,
+) {
+  const tw = ctx.measureText(text).width + 10;
+  const th = 17;
+  const ty = y - th - 2 < bounds.y ? y + 2 : y - th - 2;
+  // Keep the chip on the picture: a box at the right edge would push it off.
+  x = Math.max(bounds.x, Math.min(x, bounds.x + bounds.w - tw));
+  ctx.fillStyle = color;
+  ctx.fillRect(x, ty, tw, th);
+  ctx.fillStyle = "#05070a";
+  ctx.fillText(text, x + 5, ty + th / 2 + 0.5);
+}
+
+/**
+ * Draw one overlay frame.
+ *
+ * Once a view has an audit, its boxes replace the tracker's device boxes: the
+ * audit has judged on and standby and seen lights the tracker cannot, so showing
+ * both would put two answers on one screen. People stay, since they are why a
+ * room might not count.
+ */
 function draw(
   canvas: HTMLCanvasElement,
   sw: number,
   sh: number,
-  tracks: Track[],
-  now: number,
-  showAll: boolean,
+  o: { tracks: Track[]; marks: AiMark[] | null; auditing: boolean; now: number; showAll: boolean },
 ) {
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   const cw = canvas.clientWidth;
@@ -511,23 +776,32 @@ function draw(
 
   const r = containRect(sw, sh, cw, ch);
 
-  // Sweep line across the picture: the "it is looking" cue.
-  const sweepY = r.y + ((now / 2200) % 1) * r.h;
-  const g = ctx.createLinearGradient(0, sweepY - 40, 0, sweepY);
+  // Sweep line: faster and brighter while the AI is looking at this view.
+  const period = o.auditing ? 900 : 2200;
+  const alpha = o.auditing ? 0.32 : 0.16;
+  const sweepY = r.y + ((o.now / period) % 1) * r.h;
+  const g = ctx.createLinearGradient(0, sweepY - 48, 0, sweepY);
   g.addColorStop(0, "rgba(47,230,207,0)");
-  g.addColorStop(1, "rgba(47,230,207,0.18)");
+  g.addColorStop(1, `rgba(47,230,207,${alpha})`);
   ctx.fillStyle = g;
-  ctx.fillRect(r.x, sweepY - 40, r.w, 40);
-  ctx.fillStyle = "rgba(47,230,207,0.55)";
+  ctx.fillRect(r.x, sweepY - 48, r.w, 48);
+  ctx.fillStyle = "rgba(47,230,207,0.6)";
   ctx.fillRect(r.x, sweepY, r.w, 1);
+
+  if (o.auditing) {
+    ctx.strokeStyle = "#2fe6cf";
+    ctx.lineWidth = 3;
+    bracket(ctx, r.x + 12, r.y + 12, r.w - 24, r.h - 24, 28);
+  }
 
   ctx.font = "bold 11px ui-monospace, SFMono-Regular, Menlo, monospace";
   ctx.textBaseline = "middle";
 
-  for (const t of tracks) {
+  for (const t of o.tracks) {
     const c = COCO_MAP[t.cls];
     if (!c) continue;
-    if (c.kind === "other" && !showAll) continue;
+    if (c.kind === "other" && !o.showAll) continue;
+    if (o.marks && c.kind !== "person") continue;
     const color =
       c.kind === "person" ? COLOR.person : c.kind === "other" ? COLOR.other : c.categoryId ? COLOR.costed : COLOR.device;
 
@@ -537,31 +811,33 @@ function draw(
     const h = t.box.h * r.scale;
     // Fade a track out while it is being held after losing its detection.
     ctx.globalAlpha = t.missed ? Math.max(0.25, 1 - t.missed / 8) : 1;
-
-    ctx.fillStyle = color + "1a";
+    ctx.fillStyle = color + "14";
     ctx.fillRect(x, y, w, h);
-    ctx.strokeStyle = color + "66";
+    ctx.strokeStyle = color + "55";
     ctx.lineWidth = 1;
     ctx.strokeRect(x + 0.5, y + 0.5, w, h);
-
-    const L = Math.min(16, w * 0.3, h * 0.3);
     ctx.strokeStyle = color;
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.moveTo(x, y + L); ctx.lineTo(x, y); ctx.lineTo(x + L, y);
-    ctx.moveTo(x + w - L, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + L);
-    ctx.moveTo(x + w, y + h - L); ctx.lineTo(x + w, y + h); ctx.lineTo(x + w - L, y + h);
-    ctx.moveTo(x + L, y + h); ctx.lineTo(x, y + h); ctx.lineTo(x, y + h - L);
-    ctx.stroke();
-
-    const text = `${c.label} ${Math.round(t.score * 100)}%  #${t.id}`;
-    const tw = ctx.measureText(text).width + 10;
-    const th = 17;
-    const ty = y - th - 2 < r.y ? y + 2 : y - th - 2;
-    ctx.fillStyle = color;
-    ctx.fillRect(x, ty, tw, th);
-    ctx.fillStyle = "#05070a";
-    ctx.fillText(text, x + 5, ty + th / 2 + 0.5);
+    ctx.lineWidth = 2;
+    bracket(ctx, x, y, w, h, Math.min(14, w * 0.3, h * 0.3));
+    chip(ctx, `${c.label} ${Math.round(t.score * 100)}%`, x, y, r, color);
   }
   ctx.globalAlpha = 1;
+
+  // Boxes first, then every label on top, so no box line crosses a label.
+  const marks = (o.marks ?? []).map((m) => {
+    const [x1, y1, x2, y2] = m.box;
+    return { m, x: r.x + x1 * r.w, y: r.y + y1 * r.h, w: (x2 - x1) * r.w, h: (y2 - y1) * r.h };
+  });
+  for (const { m, x, y, w, h } of marks) {
+    ctx.globalAlpha = m.quiet ? 0.6 : 1;
+    ctx.fillStyle = m.color + (m.quiet ? "10" : "22");
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = m.color;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, w, h);
+    ctx.lineWidth = m.quiet ? 1.5 : 3;
+    bracket(ctx, x, y, w, h, Math.min(16, w * 0.3, h * 0.3));
+  }
+  ctx.globalAlpha = 1;
+  for (const { m, x, y } of marks) if (m.text) chip(ctx, m.text, x, y, r, m.color);
 }

@@ -187,3 +187,96 @@ export function containRect(sw: number, sh: number, cw: number, ch: number) {
   const h = sh * s;
   return { x: (cw - w) / 2, y: (ch - h) / 2, w, h, scale: s };
 }
+
+// ---------------------------------------------------------------------------
+// Auto-audit: deciding when to send the camera view to the full AI audit.
+//
+// The full audit is a hosted vision model and a free tier allows a few calls a
+// minute, not thirty a second. So the live view audits a view once, when the
+// camera has settled on it, and keeps showing that answer for as long as the
+// camera stays there. Both questions - "is the camera still?" and "have we
+// audited this view already?" - are answered with a tiny greyscale thumbnail
+// of each frame.
+
+export const SIG_W = 32;
+export const SIG_H = 24;
+
+/** Mean frame-to-frame change below which the camera counts as held still. */
+export const STILL_DIFF = 7;
+/** Below this, two thumbnails show the same view: reuse that view's audit. */
+export const SAME_VIEW_DIFF = 16;
+/** How long the camera must be still before a view is worth auditing. */
+export const STEADY_MS = 700;
+
+/**
+ * A SIG_W x SIG_H greyscale thumbnail from RGBA pixels, with the mean removed.
+ *
+ * Removing the mean means a phone's auto-exposure brightening the whole frame
+ * does not read as "the camera moved to a new view".
+ */
+export function frameSignature(rgba: ArrayLike<number>): Float32Array {
+  const n = SIG_W * SIG_H;
+  const sig = new Float32Array(n);
+  let sum = 0;
+  for (let i = 0; i < n; i++) {
+    const g = 0.299 * rgba[i * 4] + 0.587 * rgba[i * 4 + 1] + 0.114 * rgba[i * 4 + 2];
+    sig[i] = g;
+    sum += g;
+  }
+  const mean = sum / n;
+  for (let i = 0; i < n; i++) sig[i] -= mean;
+  return sig;
+}
+
+/** Mean absolute difference between two signatures, 0..255. */
+export function sigDiff(a: Float32Array, b: Float32Array): number {
+  let d = 0;
+  for (let i = 0; i < a.length; i++) d += Math.abs(a[i] - b[i]);
+  return d / a.length;
+}
+
+/** The audited view closest to this signature, if it is close enough to be the same view. */
+export function nearestView<T extends { sig: Float32Array }>(
+  sig: Float32Array,
+  views: readonly T[],
+): { view: T; diff: number } | null {
+  let best: { view: T; diff: number } | null = null;
+  for (const view of views) {
+    const diff = sigDiff(sig, view.sig);
+    if (!best || diff < best.diff) best = { view, diff };
+  }
+  return best && best.diff < SAME_VIEW_DIFF ? best : null;
+}
+
+export interface AuditGate {
+  /** The auto-audit switch. */
+  enabled: boolean;
+  /** A request is already out. */
+  inFlight: boolean;
+  /** How long the camera has been still, ms. */
+  steadyMs: number;
+  /** This view already has an audit. */
+  alreadyAudited: boolean;
+  /** Time since the last request finished, ms. */
+  sinceLastMs: number;
+  /** Current back-off, ms. Grows when the AI is busy, resets when it answers. */
+  cooldownMs: number;
+}
+
+export function shouldAutoAudit(g: AuditGate): boolean {
+  return (
+    g.enabled &&
+    !g.inFlight &&
+    !g.alreadyAudited &&
+    g.steadyMs >= STEADY_MS &&
+    g.sinceLastMs >= g.cooldownMs
+  );
+}
+
+export const COOLDOWN_MIN_MS = 2500;
+export const COOLDOWN_MAX_MS = 30000;
+
+/** Back off on a busy or failed answer; return to the floor on a good one. */
+export function nextCooldown(current: number, ok: boolean): number {
+  return ok ? COOLDOWN_MIN_MS : Math.min(COOLDOWN_MAX_MS, Math.max(COOLDOWN_MIN_MS, current) * 2);
+}

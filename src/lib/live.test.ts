@@ -1,5 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { COCO_MAP, Tracker, containRect, tallyView, type Detection } from "./live";
+import {
+  COCO_MAP,
+  COOLDOWN_MAX_MS,
+  COOLDOWN_MIN_MS,
+  SAME_VIEW_DIFF,
+  SIG_H,
+  SIG_W,
+  STEADY_MS,
+  STILL_DIFF,
+  Tracker,
+  containRect,
+  frameSignature,
+  nearestView,
+  nextCooldown,
+  shouldAutoAudit,
+  sigDiff,
+  tallyView,
+  type Detection,
+} from "./live";
 import type { AuditSettings } from "./types";
 
 const settings: AuditSettings = {
@@ -105,5 +123,72 @@ describe("containRect", () => {
   it("pillarboxes a tall source in a wide box", () => {
     const r = containRect(500, 1000, 1000, 500);
     expect(r).toMatchObject({ x: 375, y: 0, w: 250, h: 500, scale: 0.5 });
+  });
+});
+
+describe("auto-audit signatures", () => {
+  const solid = (g: number, noise = 0) => {
+    const px = new Uint8ClampedArray(SIG_W * SIG_H * 4);
+    for (let i = 0; i < SIG_W * SIG_H; i++) {
+      const v = g + (noise ? ((i * 7919) % (noise * 2 + 1)) - noise : 0);
+      px.set([v, v, v, 255], i * 4);
+    }
+    return px;
+  };
+  const split = (leftDark: boolean) => {
+    const px = new Uint8ClampedArray(SIG_W * SIG_H * 4);
+    for (let i = 0; i < SIG_W * SIG_H; i++) {
+      const left = i % SIG_W < SIG_W / 2;
+      const v = left === leftDark ? 30 : 220;
+      px.set([v, v, v, 255], i * 4);
+    }
+    return px;
+  };
+
+  it("ignores a uniform exposure change", () => {
+    const a = frameSignature(split(true));
+    const brighter = split(true).map((v, i) => (i % 4 === 3 ? v : Math.min(255, v + 20)));
+    expect(sigDiff(a, frameSignature(brighter))).toBeLessThan(STILL_DIFF);
+  });
+
+  it("treats sensor noise as still, and a new view as different", () => {
+    expect(sigDiff(frameSignature(solid(120)), frameSignature(solid(120, 3)))).toBeLessThan(STILL_DIFF);
+    expect(sigDiff(frameSignature(split(true)), frameSignature(split(false)))).toBeGreaterThan(SAME_VIEW_DIFF);
+  });
+
+  it("finds a previously audited view and rejects an unseen one", () => {
+    const views = [{ sig: frameSignature(split(true)), id: "a" }];
+    expect(nearestView(frameSignature(split(true)), views)?.view.id).toBe("a");
+    expect(nearestView(frameSignature(split(false)), views)).toBeNull();
+    expect(nearestView(frameSignature(split(true)), [])).toBeNull();
+  });
+});
+
+describe("shouldAutoAudit", () => {
+  const ready = {
+    enabled: true,
+    inFlight: false,
+    steadyMs: STEADY_MS,
+    alreadyAudited: false,
+    sinceLastMs: 10_000,
+    cooldownMs: COOLDOWN_MIN_MS,
+  };
+
+  it("audits a new, steady view once the cooldown has passed", () => {
+    expect(shouldAutoAudit(ready)).toBe(true);
+  });
+
+  it("holds off while moving, busy, cooling down, switched off or already audited", () => {
+    expect(shouldAutoAudit({ ...ready, steadyMs: 100 })).toBe(false);
+    expect(shouldAutoAudit({ ...ready, inFlight: true })).toBe(false);
+    expect(shouldAutoAudit({ ...ready, sinceLastMs: 1000 })).toBe(false);
+    expect(shouldAutoAudit({ ...ready, enabled: false })).toBe(false);
+    expect(shouldAutoAudit({ ...ready, alreadyAudited: true })).toBe(false);
+  });
+
+  it("backs off exponentially when busy and resets on success", () => {
+    expect(nextCooldown(COOLDOWN_MIN_MS, false)).toBe(COOLDOWN_MIN_MS * 2);
+    expect(nextCooldown(COOLDOWN_MAX_MS, false)).toBe(COOLDOWN_MAX_MS);
+    expect(nextCooldown(20_000, true)).toBe(COOLDOWN_MIN_MS);
   });
 });

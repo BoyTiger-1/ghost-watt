@@ -148,6 +148,12 @@ export interface AnalysisResult {
   /** Present when the live path failed and we fell back. */
   notice?: string;
   /**
+   * Why this is a fallback, for code that has to react rather than read:
+   * the live camera re-tries "limited" and "unavailable" later, but must not
+   * re-audit a view that came back "nothing-found".
+   */
+  fallbackReason?: "requested" | "limited" | "unavailable" | "nothing-found";
+  /**
    * Devices the model located but judged switched off. They cost nothing, so
    * they are not offenders, but drawing them on the photo shows the scan looked
    * at everything rather than missing them - and "all 28 monitors are off" is a

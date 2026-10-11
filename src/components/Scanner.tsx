@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { OffenderCard } from "./OffenderCard";
@@ -131,19 +131,20 @@ export function Scanner() {
     if (entries.length) setPhotos((prev) => [...prev, ...entries]);
   }
 
-  /** A frame captured in the live view joins the queue like any uploaded photo. */
-  function addCapture(dataUrl: string) {
-    setPhotos((prev) => [
-      ...prev,
-      {
-        id: nextId(),
-        dataUrl,
-        roomType: "unknown",
-        name: `Live ${String(prev.length + 1).padStart(2, "0")}`,
-        status: "idle",
-      },
-    ]);
-  }
+  // Live views are numbered on their own, and across camera sessions, so a
+  // second walk does not produce a second "Live 01".
+  const liveCountRef = useRef(0);
+  const nextLiveName = useCallback(
+    () => `Live ${String(++liveCountRef.current).padStart(2, "0")}`,
+    [],
+  );
+
+  /** A view the live camera has already audited joins the results as it is. */
+  const addAudited = useCallback((name: string, dataUrl: string, result: AnalysisResult) => {
+    setSavedAuditId(null);
+    setPhotos((prev) => [...prev, { id: nextId(), dataUrl, roomType: "unknown", name, status: "done", result }]);
+  }, []);
+  const closeLive = useCallback(() => setLiveOpen(false), []);
 
   function addEstimate() {
     setPhotos((prev) => [
@@ -323,7 +324,7 @@ export function Scanner() {
               </button>
             </div>
             {liveOpen && (
-              <LiveScanner settings={settings} onCapture={addCapture} onClose={() => setLiveOpen(false)} />
+              <LiveScanner settings={settings} nextName={nextLiveName} onAudit={addAudited} onClose={closeLive} />
             )}
 
             <input
