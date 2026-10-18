@@ -1,10 +1,12 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { DeviceGlyph } from "./DeviceGlyph";
 import { ModeBadge } from "./ModeBadge";
 import { offenderAnchor } from "./DetectionView";
-import { fmtCo2, fmtKwh, fmtMoneyFull, fmtPayback } from "@/lib/energy";
+import { fmtCo2, fmtKwh, fmtMoney, fmtMoneyFull, fmtPayback, fmtWatts } from "@/lib/energy";
+import type { DeviceAdjust } from "@/lib/capture";
 import type { AnalysisMode, Offender } from "@/lib/types";
 
 const STATE_LABEL: Record<Offender["state"], string> = {
@@ -31,6 +33,8 @@ export function OffenderCard({
   engine,
   highlighted = false,
   onHover,
+  adjust,
+  onAdjust,
 }: {
   offender: Offender;
   rank: number;
@@ -40,8 +44,19 @@ export function OffenderCard({
   /** The same device is under the pointer on the detection photo. */
   highlighted?: boolean;
   onHover?: (id: string | null) => void;
+  /** The user's corrections to this line, and how to change them. Omit to hide the editor. */
+  adjust?: DeviceAdjust;
+  onAdjust?: (a: DeviceAdjust) => void;
 }) {
   const o = offender;
+  const [editing, setEditing] = useState(false);
+  const perUnit = o.count > 0 ? o.totalWatts / o.count : o.perUnitWatts;
+  const basis =
+    o.basis === "measured"
+      ? { text: `measured ${fmtWatts(perUnit)} each`, cls: "bg-lime/10 text-lime" }
+      : o.basis === "ai"
+        ? { text: `AI read ${fmtWatts(perUnit)} each`, cls: "bg-cyan/10 text-cyan" }
+        : { text: `typical ${fmtWatts(perUnit)} each`, cls: "bg-surface2 text-mist" };
   const pct = maxCost > 0 ? Math.max(6, (o.costPerYear / maxCost) * 100) : 6;
   const tint = FIX_TINT[o.action.type] ?? "var(--color-cyan)";
 
@@ -93,6 +108,18 @@ export function OffenderCard({
             <span className="hidden text-line2 sm:inline">/</span>
             <span className="hidden sm:inline">{o.source}</span>
           </div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[0.72rem]">
+            <span className={`rounded-full px-2 py-px font-medium ${basis.cls}`}>{basis.text}</span>
+            {o.hoursPerYear !== undefined && (
+              <span className={`rounded-full px-2 py-px font-medium ${o.hoursKnown ? "bg-lime/10 text-lime" : "bg-surface2 text-mist"}`}>
+                {o.hoursKnown ? `${Math.round(o.hoursPerYear / 365)} h/day, yours` : `${Math.round(o.hoursPerYear).toLocaleString()} empty h/yr`}
+              </span>
+            )}
+            <span className="text-dim">
+              {fmtMoney(o.costLowPerYear)}–{fmtMoney(o.costHighPerYear)}
+            </span>
+          </div>
+          {o.evidence && <p className="mt-1.5 text-[0.78rem] italic leading-snug text-mist">&ldquo;{o.evidence}&rdquo;</p>}
         </div>
 
         <div className="shrink-0 text-right">
@@ -140,7 +167,49 @@ export function OffenderCard({
         </p>
       </div>
 
-      <div className="mt-3 flex justify-end">
+      <AnimatePresence initial={false}>
+        {editing && onAdjust && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              <AdjustField label="Count" value={adjust?.count} placeholder={String(o.count)} onChange={(v) => onAdjust({ ...adjust, count: v })} step={1} />
+              <AdjustField
+                label="Watts each"
+                value={adjust?.watts}
+                placeholder={String(Math.round(perUnit))}
+                onChange={(v) => onAdjust({ ...adjust, watts: v })}
+              />
+              <AdjustField
+                label="Hours / day"
+                value={adjust?.hoursPerDay}
+                placeholder={o.hoursPerYear ? (o.hoursPerYear / 365).toFixed(1) : "-"}
+                max={24}
+                onChange={(v) => onAdjust({ ...adjust, hoursPerDay: v })}
+              />
+            </div>
+            <p className="mt-1.5 text-[0.72rem] text-dim">
+              Off a nameplate or a plug-in meter beats any estimate. Clear a field to go back to ours.
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="mt-3 flex items-center justify-between gap-2">
+        {onAdjust ? (
+          <button
+            onClick={() => setEditing((e) => !e)}
+            aria-expanded={editing}
+            className="rounded-full border border-line px-3 py-1.5 text-[0.76rem] text-mist transition-colors hover:border-cyan hover:text-cyan"
+          >
+            {editing ? "Done" : adjust && Object.values(adjust).some((v) => v !== undefined) ? "Adjusted · edit" : "Adjust"}
+          </button>
+        ) : (
+          <span />
+        )}
         <ModeBadge mode={mode} engine={engine} />
       </div>
     </motion.article>
@@ -153,5 +222,41 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="mono-label">{label}</div>
       <div className="mt-0.5 font-mono text-sm font-semibold text-fog sm:text-base">{value}</div>
     </div>
+  );
+}
+
+function AdjustField({
+  label,
+  value,
+  placeholder,
+  max,
+  step,
+  onChange,
+}: {
+  label: string;
+  value: number | undefined;
+  placeholder: string;
+  max?: number;
+  step?: number;
+  onChange: (v: number | undefined) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="text-[0.7rem] text-dim">{label}</span>
+      <input
+        type="number"
+        inputMode="decimal"
+        min={0}
+        max={max}
+        step={step ?? "any"}
+        value={value ?? ""}
+        placeholder={placeholder}
+        onChange={(e) => {
+          const v = parseFloat(e.target.value);
+          onChange(Number.isFinite(v) && v >= 0 ? (max ? Math.min(max, v) : v) : undefined);
+        }}
+        className="mt-1 w-full rounded-xl border border-line bg-surface px-2.5 py-2 font-mono text-base text-fog outline-none placeholder:text-dim/60 focus:border-cyan sm:text-sm"
+      />
+    </label>
   );
 }

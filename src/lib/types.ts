@@ -20,6 +20,14 @@ export interface DeviceObservation {
    * count: a model can count a far row of monitors it cannot box one by one.
    */
   boxes?: Box[];
+  /** The vision model's read of one unit's draw while running, W. Blended with the catalog band. */
+  wattsHint?: number;
+  /** A figure the user supplied (nameplate, plug-in meter), W per unit in the observed state. */
+  userWatts?: number;
+  /** Hours a year this device is costed for, when the user said how long it runs. */
+  hoursPerYear?: number;
+  /** One short phrase on why the engine judged it this way, e.g. "screen lit, login page". */
+  evidence?: string;
 }
 
 /** How a given offender was produced. Surfaced to the user as a badge. */
@@ -135,6 +143,13 @@ export interface Offender {
   source: string;
   /** Where on the source photo these units were seen. Absent for estimates. */
   boxes?: Box[];
+  /** Where the per-unit wattage came from: a measurement, the AI's read blended with the catalog, or the catalog. */
+  basis?: "measured" | "ai" | "catalog";
+  /** Hours a year this line is costed for. */
+  hoursPerYear?: number;
+  /** True when the hours came from the user rather than the building schedule. */
+  hoursKnown?: boolean;
+  evidence?: string;
 }
 
 export interface AnalysisResult {
@@ -145,12 +160,18 @@ export interface AnalysisResult {
   offenders: Offender[];
   /** Raw model text, for transparency / debugging. */
   raw?: string;
+  /**
+   * The perception behind the offenders, before any costing. The client keeps
+   * these so a wattage or hours the user types in re-costs the scan locally,
+   * without asking the model again.
+   */
+  observations?: (DeviceObservation & { categoryId: string })[];
   /** Present when the live path failed and we fell back. */
   notice?: string;
   /**
-   * Why this is a fallback, for code that has to react rather than read:
-   * the live camera re-tries "limited" and "unavailable" later, but must not
-   * re-audit a view that came back "nothing-found".
+   * Why this is a fallback, for code that has to react rather than read: the
+   * scanner shows "nothing-found" as an empty reading rather than a guess, and
+   * swaps "limited" and "unavailable" for the on-device reading when it has one.
    */
   fallbackReason?: "requested" | "limited" | "unavailable" | "nothing-found";
   /**

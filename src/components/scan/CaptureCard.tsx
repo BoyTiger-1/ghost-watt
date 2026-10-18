@@ -1,0 +1,301 @@
+"use client";
+
+import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { readTime, type Capture, type CaptureDetails } from "@/lib/capture";
+import { ROOM_TYPES } from "@/lib/parse";
+import { fmtMoney } from "@/lib/energy";
+import type { WeeklySchedule } from "@/lib/schedule";
+import { Icon } from "./icons";
+
+export function CaptureCard({
+  capture: c,
+  cost,
+  devices,
+  schedule,
+  defaultOpen,
+  onDetails,
+  onPatch,
+  onReanalyze,
+  onRemove,
+}: {
+  capture: Capture;
+  cost: number;
+  devices: number;
+  schedule?: WeeklySchedule;
+  defaultOpen?: boolean;
+  onDetails: (d: Partial<CaptureDetails>) => void;
+  onPatch: (p: Partial<Capture>) => void;
+  onReanalyze: () => void;
+  onRemove: () => void;
+}) {
+  const [open, setOpen] = useState(!!defaultOpen);
+  const [sentNote, setSentNote] = useState(c.details.note ?? "");
+  const time = readTime(c.meta.takenAt, schedule);
+  const working = c.status === "working" || c.status === "pending";
+  const thumb = c.keyframes?.[0]?.annotated ?? c.dataUrl;
+  const noteChanged = (c.details.note ?? "") !== sentNote && c.status === "done";
+
+  return (
+    <motion.article layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="panel overflow-hidden">
+      <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center gap-3 p-2.5 text-left">
+        <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-surface2">
+          {thumb ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={thumb} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <div className="grid h-full w-full place-items-center text-dim">
+              <Icon name={c.kind === "video" ? "video" : "camera"} />
+            </div>
+          )}
+          {c.kind === "video" && (
+            <span className="absolute bottom-1 left-1 rounded bg-black/65 px-1 font-mono text-[0.6rem] text-white">
+              {c.duration ? `${Math.round(c.duration)}s` : "video"}
+            </span>
+          )}
+          {working && <span className="absolute inset-x-0 top-0 h-px bg-sodium scan-line" />}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="truncate text-[0.92rem] font-medium text-fog">{c.name}</span>
+            {c.status === "done" && c.result?.mode === "fallback" && (
+              <span className="shrink-0 rounded-full bg-amber/10 px-1.5 py-px text-[0.64rem] font-medium text-amber">estimate</span>
+            )}
+          </div>
+          <div className="mt-0.5 truncate text-[0.78rem] text-mist">
+            {c.status === "error" ? (
+              <span className="text-ember">{c.error}</span>
+            ) : working ? (
+              <span>{c.stage ?? "Queued"}…</span>
+            ) : (
+              <>
+                <span className="font-mono font-semibold text-fog">{fmtMoney(cost)}/yr</span>
+                <span className="text-dim"> · {devices ? `${devices} device${devices > 1 ? "s" : ""}` : "nothing powered"}</span>
+              </>
+            )}
+          </div>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {time && (
+              <Tag tone={time.afterHours === false ? "amber" : time.afterHours ? "lime" : undefined}>
+                {time.afterHours === null ? time.label.split(",")[0] : time.afterHours ? "after hours" : "open hours"}
+              </Tag>
+            )}
+            {c.geo?.place && <Tag>{c.geo.place}</Tag>}
+            {c.meta.lighting === "on" && <Tag>lights on</Tag>}
+            {(c.details.watts || c.details.hoursPerDay) && <Tag tone="cyan">your figures</Tag>}
+          </div>
+        </div>
+        <Icon name="chevron" className={`h-4 w-4 shrink-0 text-dim transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {working && c.progress !== undefined && (
+        <div className="mx-2.5 mb-2.5 h-1 overflow-hidden rounded-full bg-surface2">
+          <motion.div className="h-full bg-sodium" animate={{ width: `${Math.round(c.progress * 100)}%` }} />
+        </div>
+      )}
+
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+            <div className="space-y-4 border-t border-line px-3 pb-3 pt-3">
+              {c.kind === "video" && c.keyframes?.length ? (
+                <div>
+                  <div className="mono-label">keyframes the AI read</div>
+                  <div className="no-scrollbar mt-2 flex gap-2 overflow-x-auto">
+                    {c.keyframes.map((k) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img key={k.t} src={k.annotated ?? k.dataUrl} alt={`Frame at ${k.t.toFixed(1)}s`} className="h-20 w-auto shrink-0 rounded-lg" />
+                    ))}
+                  </div>
+                  {c.videoUrl && (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-[0.78rem] text-cyan">Play clip</summary>
+                      <video src={c.videoUrl} controls playsInline className="mt-2 w-full rounded-xl bg-black" />
+                    </details>
+                  )}
+                </div>
+              ) : null}
+
+              <div>
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="mono-label">what you know · optional</span>
+                  <span className="text-[0.68rem] text-dim">re-prices instantly</span>
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <NumberField
+                    label="Watts, main device"
+                    suffix="W"
+                    placeholder="AI estimates"
+                    value={c.details.watts}
+                    onChange={(v) => onDetails({ watts: v })}
+                  />
+                  <NumberField
+                    label="Hours on / day"
+                    suffix="h"
+                    placeholder="from schedule"
+                    max={24}
+                    value={c.details.hoursPerDay}
+                    onChange={(v) => onDetails({ hoursPerDay: v })}
+                  />
+                </div>
+                <label className="mt-2 block">
+                  <span className="text-[0.72rem] text-dim">Note for the AI</span>
+                  <input
+                    value={c.details.note ?? ""}
+                    onChange={(e) => onDetails({ note: e.target.value || undefined })}
+                    placeholder="e.g. Dell 24-inch monitors, lab closed weekends"
+                    maxLength={200}
+                    className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-base text-fog outline-none sm:text-[0.9rem] placeholder:text-dim/70 focus:border-cyan"
+                  />
+                </label>
+                <p className="mt-1.5 text-[0.72rem] leading-relaxed text-dim">
+                  Leave these blank and the AI reads each device&apos;s wattage from what it can see, blended with published ranges, the
+                  time it was taken and where.
+                </p>
+              </div>
+
+              <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-[0.78rem]">
+                <Meta label="Taken">
+                  {time ? (
+                    <>
+                      {time.label}
+                      {c.meta.takenAt && c.origin === "upload" ? <span className="text-dim"> · from photo</span> : null}
+                    </>
+                  ) : (
+                    "unknown"
+                  )}
+                </Meta>
+                <Meta label="Location">
+                  {c.geo ? (
+                    <>
+                      {c.geo.place ?? "found"}
+                      <span className="block text-dim">
+                        ${c.geo.ratePerKwh.toFixed(3)}/kWh · {c.geo.utilityName ?? c.geo.rateSource}
+                      </span>
+                    </>
+                  ) : c.meta.lat !== undefined ? (
+                    "looking up…"
+                  ) : (
+                    "not in file"
+                  )}
+                </Meta>
+                {(c.meta.make || c.meta.model) && <Meta label="Camera">{[c.meta.make, c.meta.model].filter(Boolean).join(" ")}</Meta>}
+                {c.meta.brightness !== undefined && (
+                  <Meta label="Lighting">
+                    {c.meta.lighting === "on" ? "fixtures lit" : c.meta.lighting === "off" ? "dark" : "unclear"}
+                    <span className="text-dim"> · {Math.round((c.meta.brightness / 255) * 100)}% bright</span>
+                  </Meta>
+                )}
+                {c.meta.width ? (
+                  <Meta label="Size">
+                    {c.meta.width}×{c.meta.height}
+                    {c.meta.bytes ? <span className="text-dim"> · {(c.meta.bytes / 1e6).toFixed(1)} MB</span> : null}
+                  </Meta>
+                ) : null}
+                {c.result && <Meta label="Engine">{c.result.engine}</Meta>}
+              </dl>
+
+              {c.result?.notice && <p className="rounded-xl bg-amber/[0.08] px-3 py-2 text-[0.76rem] leading-relaxed text-amber">{c.result.notice}</p>}
+
+              {c.result?.mode === "fallback" && (
+                <label className="block">
+                  <span className="text-[0.72rem] text-dim">No reading of this capture. Estimate it as:</span>
+                  <select
+                    value={c.roomType}
+                    onChange={(e) => onPatch({ roomType: e.target.value })}
+                    className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-base text-fog outline-none sm:text-[0.88rem]"
+                  >
+                    {ROOM_TYPES.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  value={c.name}
+                  onChange={(e) => onPatch({ name: e.target.value })}
+                  aria-label="Name"
+                  className="min-w-0 flex-1 rounded-xl border border-line bg-surface px-3 py-2 text-base text-fog outline-none focus:border-cyan sm:text-[0.85rem]"
+                />
+                {(c.status === "error" || noteChanged || c.result?.mode === "fallback") && (
+                  <button
+                    onClick={() => {
+                      setSentNote(c.details.note ?? "");
+                      onReanalyze();
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-fog px-3.5 py-2 text-[0.8rem] font-medium text-ink"
+                  >
+                    <Icon name="refresh" className="h-4 w-4" />
+                    Re-analyse
+                  </button>
+                )}
+                <button onClick={onRemove} className="rounded-full px-3 py-2 text-[0.8rem] text-dim hover:text-ember">
+                  Remove
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.article>
+  );
+}
+
+function Tag({ tone, children }: { tone?: "lime" | "amber" | "cyan"; children: React.ReactNode }) {
+  const cls =
+    tone === "lime" ? "bg-lime/10 text-lime" : tone === "amber" ? "bg-amber/10 text-amber" : tone === "cyan" ? "bg-cyan/10 text-cyan" : "bg-surface2 text-mist";
+  return <span className={`rounded-full px-2 py-px text-[0.66rem] font-medium ${cls}`}>{children}</span>;
+}
+
+function Meta({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[0.68rem] text-dim">{label}</dt>
+      <dd className="truncate text-fog">{children}</dd>
+    </div>
+  );
+}
+
+function NumberField({
+  label,
+  suffix,
+  placeholder,
+  value,
+  max,
+  onChange,
+}: {
+  label: string;
+  suffix: string;
+  placeholder: string;
+  value: number | undefined;
+  max?: number;
+  onChange: (v: number | undefined) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="text-[0.72rem] text-dim">{label}</span>
+      <span className="mt-1 flex items-center rounded-xl border border-line bg-surface focus-within:border-cyan">
+        <input
+          type="number"
+          inputMode="decimal"
+          min={0}
+          max={max}
+          step="any"
+          value={value ?? ""}
+          placeholder={placeholder}
+          onChange={(e) => {
+            const v = parseFloat(e.target.value);
+            onChange(Number.isFinite(v) && v > 0 ? (max ? Math.min(max, v) : v) : undefined);
+          }}
+          className="w-full min-w-0 bg-transparent px-3 py-2.5 font-mono text-base text-fog outline-none sm:text-[0.9rem] placeholder:font-sans placeholder:text-[0.8rem] placeholder:text-dim/70"
+        />
+        <span className="pr-3 font-mono text-[0.8rem] text-dim">{suffix}</span>
+      </span>
+    </label>
+  );
+}

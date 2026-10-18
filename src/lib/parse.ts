@@ -93,6 +93,8 @@ function fromJson(arr: unknown[], frame: Frame): CategorizedObservation[] {
         ? Math.max(1, Math.round(rec.count))
         : extractCount(String(rec.count ?? "1"));
     const boxes = cleanBoxes(rec, frame);
+    const watts = Number(rec.watts ?? rec.wattage ?? rec.power_w ?? rec.power);
+    const evidence = typeof rec.evidence === "string" ? rec.evidence.trim().slice(0, 120) : "";
     out.push({
       device: label,
       // A model that boxed more units than it counted has told us its count was low.
@@ -100,6 +102,8 @@ function fromJson(arr: unknown[], frame: Frame): CategorizedObservation[] {
       state: normalizeState(rec.state),
       categoryId,
       ...(boxes.length ? { boxes } : {}),
+      ...(Number.isFinite(watts) && watts > 0 ? { wattsHint: watts } : {}),
+      ...(evidence ? { evidence } : {}),
     });
   }
   return out;
