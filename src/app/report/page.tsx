@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ReportBrief } from "@/components/ReportBrief";
+import { PageHeader } from "@/components/PageHeader";
 
 export const metadata: Metadata = {
   title: "Brief - Ghost Watt",
@@ -9,18 +10,14 @@ export const metadata: Metadata = {
 
 export default function ReportPage() {
   return (
-    <section className="mx-auto w-full max-w-6xl px-4 pb-14 pt-24 sm:px-6 sm:pt-28">
-      <div className="no-print mb-8 space-y-3">
-        <span className="mono-label text-cyan">brief</span>
-        <h1 className="text-3xl font-semibold tracking-tight text-fog sm:text-4xl">
-          Something to hand to someone
-        </h1>
-        <p className="max-w-[62ch] leading-relaxed text-mist">
-          An audit that stays in a browser tab changes nothing. This turns a saved
-          audit into one page for the person who can actually authorise the fix:
-          what can be done for free this week, what needs equipment, and what the
-          number is not.
-        </p>
+    <section className="mx-auto w-full max-w-6xl px-5 pb-14 pt-24 sm:px-6 sm:pt-32">
+      <div className="no-print mb-10">
+        <PageHeader eyebrow="Brief" title="Something to hand" accent="to someone.">
+          One page for the person who can authorise the fix.{" "}
+          <span className="hidden sm:inline">
+            What can be done for free this week, what needs equipment, and what the number is not.
+          </span>
+        </PageHeader>
       </div>
       <ReportBrief />
     </section>

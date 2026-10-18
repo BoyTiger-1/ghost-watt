@@ -534,7 +534,7 @@ export function LiveScanner({
 
         {/* top HUD */}
         <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-3 bg-gradient-to-b from-black/80 to-transparent px-4 pb-8 pt-4">
-          <div className="bg-black/60 px-2 py-1 font-mono text-[0.68rem] leading-relaxed tracking-wider">
+          <div className="bg-black/60 px-2 py-1 font-mono text-[0.68rem] leading-relaxed">
             <div className="flex items-center gap-2">
               <span className={`h-2 w-2 rounded-full ${source && phase === "ready" ? "bg-ember pulse-dot" : "bg-dim"}`} />
               <span className="font-bold uppercase text-fog">live audit</span>
@@ -550,9 +550,9 @@ export function LiveScanner({
           </div>
           <button
             onClick={onClose}
-            className="border border-line2 bg-black/50 px-3 py-1.5 font-mono text-[0.7rem] tracking-wider uppercase text-mist hover:border-cyan hover:text-cyan"
+            className="border border-line2 bg-black/50 px-3 py-1.5 text-[0.78rem] text-mist hover:border-fog/40 hover:text-fog rounded-full"
           >
-            close
+            Close
           </button>
         </div>
 
@@ -565,20 +565,20 @@ export function LiveScanner({
                   <div className="mt-4 flex justify-center gap-2">
                     <button
                       onClick={() => startCamera(facing)}
-                      className="border border-line2 px-3 py-1.5 font-mono text-[0.7rem] uppercase tracking-wider hover:border-cyan hover:text-cyan"
+                      className="border border-line2 px-3 py-1.5 text-[0.78rem] hover:border-fog/40 hover:text-fog rounded-full"
                     >
                       try camera
                     </button>
                     <button
                       onClick={() => fileRef.current?.click()}
-                      className="border border-cyan px-3 py-1.5 font-mono text-[0.7rem] uppercase tracking-wider text-cyan"
+                      className="border border-cyan px-3 py-1.5 text-[0.78rem] text-cyan"
                     >
                       use a file
                     </button>
                   </div>
                 </>
               ) : (
-                <p className="font-mono text-[0.72rem] tracking-wider text-mist">loading the on-device model…</p>
+                <p className="font-mono text-[0.72rem] text-mist">loading the on-device model…</p>
               )}
             </div>
           </div>
@@ -588,7 +588,7 @@ export function LiveScanner({
           <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center px-4">
             <div
               role="status"
-              className={`border bg-black/75 px-3 py-1.5 font-mono text-[0.68rem] tracking-wider ${
+              className={`border bg-black/75 px-3 py-1.5 font-mono text-[0.68rem] ${
                 status.kind === "auditing"
                   ? "border-cyan text-cyan"
                   : status.kind === "busy"
@@ -612,7 +612,7 @@ export function LiveScanner({
                 (tally.devices ? `${tally.devices} powered item${tally.devices > 1 ? "s" : ""}` : "point at screens, lights, laptops…")}
             </div>
             {tally.people > 0 && (
-              <div className="font-mono text-[0.66rem] tracking-wider text-cyan">
+              <div className="font-mono text-[0.66rem] text-cyan">
                 person in frame - this room is in use, so its load is not phantom yet
               </div>
             )}
@@ -667,7 +667,7 @@ export function LiveScanner({
 
           <button
             onClick={onClose}
-            className="min-w-[7.5rem] border border-cyan bg-cyan/10 px-3 py-2 text-right font-mono text-[0.7rem] font-bold uppercase tracking-wider text-cyan"
+            className="min-w-[7.5rem] px-3 py-2 text-right text-[0.7rem] rounded-full bg-fog text-ink font-medium hover:bg-fog/85"
           >
             {session.views ? (
               <>
@@ -711,7 +711,7 @@ function SmallButton({
     <button
       onClick={onClick}
       aria-pressed={active}
-      className={`border px-2.5 py-1.5 font-mono text-[0.66rem] uppercase tracking-wider transition-colors ${
+      className={`border px-2.5 py-1.5 text-[0.75rem] transition-colors ${
         active ? "border-cyan text-cyan" : "border-line2 text-mist hover:text-fog"
       }`}
     >

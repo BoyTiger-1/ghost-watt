@@ -9,6 +9,7 @@
 // Nothing here ever displays a key value; the server only reports booleans.
 
 import { useEffect, useState } from "react";
+import { PageHeader } from "./PageHeader";
 import { motion } from "framer-motion";
 import { ScheduleEditor } from "./BuildingBar";
 import { REGIONS } from "@/lib/grid";
@@ -74,21 +75,14 @@ export function SettingsPanel() {
   const hostedActive = engine?.hosted.find((h) => h.configured) ?? null;
 
   return (
-    <section className="relative z-10 mx-auto max-w-4xl px-4 pb-20 pt-24 sm:px-6">
-      <header className="mb-8">
-        <div className="flex items-center gap-2">
-          <span className="h-1.5 w-1.5 grad-energy-bg" />
-          <span className="mono-label text-cyan">configuration</span>
-        </div>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-fog sm:text-4xl">
-          What is switched on
-        </h1>
-        <p className="mt-3 max-w-2xl text-mist">
-          Ghost Watt runs with no API keys at all. Every provider below is an upgrade from a
-          stored government table to a live figure - none of them is required, and none of them
-          changes whether the app works.
-        </p>
-      </header>
+    <section className="relative z-10 mx-auto max-w-4xl px-5 pb-20 pt-24 sm:px-6 sm:pt-32">
+      <PageHeader eyebrow="Settings" title="What is" accent="switched on." className="mb-10">
+        Ghost Watt runs with no API keys at all.{" "}
+        <span className="hidden sm:inline">
+          Every provider below upgrades a stored government table to a live figure. None is
+          required, and none changes whether the app works.
+        </span>
+      </PageHeader>
 
       {/* ---- the vision engine ---- */}
       <div className="panel ticked p-5 sm:p-6">
@@ -161,7 +155,7 @@ export function SettingsPanel() {
         <div className="mt-5 border-t border-line pt-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <span className="mono-label">hosted options - set any one</span>
-            <span className="font-mono text-[0.62rem] uppercase tracking-wider text-dim">
+            <span className="text-[0.72rem] text-dim">
               {engine
                 ? `${engine.hosted.filter((h) => h.configured).length} of ${engine.hosted.length} set`
                 : "checking…"}
@@ -186,13 +180,13 @@ export function SettingsPanel() {
                     href={h.signup}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-mono text-[0.66rem] text-cyan underline-offset-4 hover:underline"
+                    className="text-[0.66rem] text-cyan underline-offset-4 hover:underline"
                   >
                     get a key &rarr;
                   </a>
                 )}
                 <span
-                  className={`ml-auto font-mono text-[0.6rem] uppercase tracking-wider ${
+                  className={`ml-auto text-[0.72rem] ${
                     h.configured ? "text-lime" : "text-dim"
                   }`}
                 >
@@ -240,7 +234,7 @@ export function SettingsPanel() {
                 <span className="font-semibold text-fog">{k.label}</span>
                 <code className="font-mono text-[0.68rem] text-dim">{k.env}</code>
                 <span
-                  className={`ml-auto font-mono text-[0.62rem] uppercase tracking-wider ${
+                  className={`ml-auto text-[0.72rem] ${
                     k.configured ? "text-cyan" : "text-dim"
                   }`}
                 >
@@ -258,9 +252,9 @@ export function SettingsPanel() {
                   href={k.signup}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-2 inline-block font-mono text-[0.7rem] text-cyan underline-offset-4 hover:underline"
+                  className="mt-2 inline-block text-[0.7rem] text-cyan underline-offset-4 hover:underline"
                 >
-                  free key →
+                  Free key →
                 </a>
               )}
             </motion.li>
@@ -293,7 +287,7 @@ export function SettingsPanel() {
             <select
               value={building.id}
               onChange={(e) => setActiveBuilding(e.target.value)}
-              className="mt-4 w-full border border-line bg-surface2 px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan"
+              className="mt-4 w-full border border-line bg-surface px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan rounded-xl"
             >
               {store.buildings.map((b) => (
                 <option key={b.id} value={b.id} className="bg-surface">
@@ -305,15 +299,15 @@ export function SettingsPanel() {
 
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <label className="block">
-              <span className="mono-label">name</span>
+              <span className="mono-label">Name</span>
               <input
                 value={building.name}
                 onChange={(e) => updateBuilding(building.id, { name: e.target.value })}
-                className="mt-1.5 w-full border border-line bg-surface2 px-3 py-2 text-sm text-fog outline-none focus:border-cyan"
+                className="mt-1.5 w-full border border-line bg-surface px-3 py-2 text-sm text-fog outline-none focus:border-cyan rounded-xl"
               />
             </label>
             <label className="block">
-              <span className="mono-label">floor area (sq ft)</span>
+              <span className="mono-label">Floor area (sq ft)</span>
               <input
                 type="number"
                 min={0}
@@ -322,15 +316,15 @@ export function SettingsPanel() {
                 onChange={(e) =>
                   updateBuilding(building.id, { floorAreaSqFt: parseFloat(e.target.value) || 0 })
                 }
-                className="mt-1.5 w-full border border-line bg-surface2 px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan"
+                className="mt-1.5 w-full border border-line bg-surface px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan rounded-xl"
               />
             </label>
             <label className="block">
-              <span className="mono-label">state / region</span>
+              <span className="mono-label">State / region</span>
               <select
                 value={building.regionCode}
                 onChange={(e) => updateBuilding(building.id, { regionCode: e.target.value })}
-                className="mt-1.5 w-full border border-line bg-surface2 px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan"
+                className="mt-1.5 w-full border border-line bg-surface px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan rounded-xl"
               >
                 <option value="US" className="bg-surface">
                   United States (average)
@@ -343,11 +337,11 @@ export function SettingsPanel() {
               </select>
             </label>
             <label className="block">
-              <span className="mono-label">building type</span>
+              <span className="mono-label">Building type</span>
               <select
                 value={building.typeId}
                 onChange={(e) => updateBuilding(building.id, { typeId: e.target.value })}
-                className="mt-1.5 w-full border border-line bg-surface2 px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan"
+                className="mt-1.5 w-full border border-line bg-surface px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan rounded-xl"
               >
                 {BUILDING_TYPES.map((t) => (
                   <option key={t.id} value={t.id} className="bg-surface">
@@ -395,12 +389,12 @@ export function SettingsPanel() {
                 "application/json",
               )
             }
-            className="border border-line px-3 py-1.5 font-mono text-[0.72rem] tracking-wider text-mist transition-colors hover:border-cyan hover:text-cyan"
+            className="border border-line px-3 py-1.5 text-[0.8rem] text-mist transition-colors hover:border-fog/40 hover:text-fog rounded-full"
           >
-            export backup
+            Export backup
           </button>
-          <label className="cursor-pointer border border-line px-3 py-1.5 font-mono text-[0.72rem] tracking-wider text-mist transition-colors hover:border-cyan hover:text-cyan">
-            import backup
+          <label className="cursor-pointer border border-line px-3 py-1.5 text-[0.8rem] text-mist transition-colors hover:border-fog/40 hover:text-fog rounded-full">
+            Import backup
             <input
               type="file"
               accept="application/json"
@@ -426,9 +420,9 @@ export function SettingsPanel() {
                 setImportMsg("Cleared.");
               }
             }}
-            className="border border-line px-3 py-1.5 font-mono text-[0.72rem] tracking-wider text-dim transition-colors hover:border-ember hover:text-ember"
+            className="border border-line px-3 py-1.5 text-[0.72rem] text-dim transition-colors hover:border-ember hover:text-ember"
           >
-            erase everything
+            Erase everything
           </button>
         </div>
         {importMsg && <p className="mt-2 font-mono text-xs text-cyan">{importMsg}</p>}
@@ -491,7 +485,7 @@ function ChainStep({
             {title}
           </span>
           {state === "active" && (
-            <span className="font-mono text-[0.6rem] uppercase tracking-wider text-cyan">
+            <span className="text-[0.72rem] text-cyan">
               in use
             </span>
           )}
@@ -548,7 +542,7 @@ function LocationField({ building }: { building: Building }) {
     <div>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <span className="mono-label">location (optional)</span>
-        <span className="font-mono text-[0.62rem] uppercase tracking-wider text-dim">
+        <span className="text-[0.72rem] text-dim">
           weather + utility rate
         </span>
       </div>
@@ -557,9 +551,9 @@ function LocationField({ building }: { building: Building }) {
         <button
           onClick={locate}
           disabled={busy}
-          className="border border-line px-3 py-1.5 font-mono text-[0.72rem] tracking-wider text-mist transition-colors hover:border-cyan hover:text-cyan disabled:opacity-50"
+          className="border border-line px-3 py-1.5 text-[0.8rem] text-mist transition-colors hover:border-fog/40 hover:text-fog disabled:opacity-50 rounded-full"
         >
-          {busy ? "locating…" : has ? "update from this device" : "use this device’s location"}
+          {busy ? "Locating…" : has ? "Update from this device" : "Use this device’s location"}
         </button>
         {has && (
           <>
@@ -568,9 +562,9 @@ function LocationField({ building }: { building: Building }) {
             </code>
             <button
               onClick={() => updateBuilding(building.id, { lat: undefined, lon: undefined })}
-              className="font-mono text-[0.7rem] text-dim underline-offset-4 hover:text-ember hover:underline"
+              className="text-[0.7rem] text-dim underline-offset-4 hover:text-ember hover:underline"
             >
-              clear
+              Clear
             </button>
           </>
         )}
@@ -578,7 +572,7 @@ function LocationField({ building }: { building: Building }) {
 
       <div className="mt-2.5 grid gap-3 sm:grid-cols-2">
         <label className="block">
-          <span className="mono-label">latitude</span>
+          <span className="mono-label">Latitude</span>
           <input
             type="number"
             step="0.0001"
@@ -589,11 +583,11 @@ function LocationField({ building }: { building: Building }) {
                 lat: e.target.value === "" ? undefined : Number(e.target.value),
               })
             }
-            className="mt-1.5 w-full border border-line bg-surface2 px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan"
+            className="mt-1.5 w-full border border-line bg-surface px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan rounded-xl"
           />
         </label>
         <label className="block">
-          <span className="mono-label">longitude</span>
+          <span className="mono-label">Longitude</span>
           <input
             type="number"
             step="0.0001"
@@ -604,7 +598,7 @@ function LocationField({ building }: { building: Building }) {
                 lon: e.target.value === "" ? undefined : Number(e.target.value),
               })
             }
-            className="mt-1.5 w-full border border-line bg-surface2 px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan"
+            className="mt-1.5 w-full border border-line bg-surface px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan rounded-xl"
           />
         </label>
       </div>
@@ -640,7 +634,7 @@ function BillField({ building }: { building: Building }) {
     <div>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <span className="mono-label">utility bill (optional)</span>
-        <span className="font-mono text-[0.62rem] uppercase tracking-wider text-dim">
+        <span className="text-[0.72rem] text-dim">
           calibrates every dollar figure
         </span>
       </div>
@@ -654,11 +648,11 @@ function BillField({ building }: { building: Building }) {
             value={bill?.kwh ?? ""}
             placeholder="41200"
             onChange={(e) => set({ kwh: Number(e.target.value) })}
-            className="mt-1.5 w-full border border-line bg-surface2 px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan"
+            className="mt-1.5 w-full border border-line bg-surface px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan rounded-xl"
           />
         </label>
         <label className="block">
-          <span className="mono-label">total charged ($)</span>
+          <span className="mono-label">Total charged ($)</span>
           <input
             type="number"
             min="0"
@@ -666,11 +660,11 @@ function BillField({ building }: { building: Building }) {
             value={bill?.dollars ?? ""}
             placeholder="9880"
             onChange={(e) => set({ dollars: Number(e.target.value) })}
-            className="mt-1.5 w-full border border-line bg-surface2 px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan"
+            className="mt-1.5 w-full border border-line bg-surface px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan rounded-xl"
           />
         </label>
         <label className="block">
-          <span className="mono-label">days in period</span>
+          <span className="mono-label">Days in period</span>
           <input
             type="number"
             min="1"
@@ -678,16 +672,16 @@ function BillField({ building }: { building: Building }) {
             value={bill?.days ?? ""}
             placeholder="30"
             onChange={(e) => set({ days: Number(e.target.value) })}
-            className="mt-1.5 w-full border border-line bg-surface2 px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan"
+            className="mt-1.5 w-full border border-line bg-surface px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan rounded-xl"
           />
         </label>
         <label className="block">
-          <span className="mono-label">period ended</span>
+          <span className="mono-label">Period ended</span>
           <input
             type="date"
             value={bill?.periodEnd ?? ""}
             onChange={(e) => set({ periodEnd: e.target.value })}
-            className="mt-1.5 w-full border border-line bg-surface2 px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan"
+            className="mt-1.5 w-full border border-line bg-surface px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan rounded-xl"
           />
         </label>
       </div>
@@ -701,7 +695,7 @@ function BillField({ building }: { building: Building }) {
         {bill && (
           <button
             onClick={() => updateBuilding(building.id, { bill: undefined })}
-            className="font-mono text-[0.7rem] text-dim underline-offset-4 hover:text-ember hover:underline"
+            className="text-[0.7rem] text-dim underline-offset-4 hover:text-ember hover:underline"
           >
             clear bill
           </button>

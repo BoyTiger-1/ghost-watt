@@ -129,7 +129,7 @@ export function BenchmarkPanel({
               value={auditedSqFt || ""}
               placeholder="e.g. 3000"
               onChange={(e) => setAuditedSqFt(parseFloat(e.target.value) || 0)}
-              className="mt-1.5 w-full border border-line bg-surface2 px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan"
+              className="mt-1.5 w-full border border-line bg-surface px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan rounded-xl"
             />
           </label>
           {projection && projection.factor > 1 && (
@@ -241,28 +241,28 @@ export function ExportBar({
         <button
           onClick={onSave}
           disabled={saved}
-          className="border border-cyan/50 bg-cyan/10 px-3 py-1.5 font-mono text-[0.72rem] tracking-wider text-cyan transition-colors enabled:hover:bg-cyan/20 disabled:border-line disabled:bg-transparent disabled:text-dim"
+          className="rounded-full bg-fog px-3.5 py-1.5 text-[0.82rem] font-medium text-ink transition-colors enabled:hover:bg-fog/85 disabled:bg-transparent disabled:text-dim disabled:ring-1 disabled:ring-line"
         >
-          {saved ? "✓ saved to this building" : "save audit"}
+          {saved ? "✓ Saved to this building" : "Save audit"}
         </button>
       )}
       <button
         onClick={exportCsv}
-        className="border border-line px-3 py-1.5 font-mono text-[0.72rem] tracking-wider text-mist transition-colors hover:border-cyan hover:text-cyan"
+        className="border border-line px-3 py-1.5 text-[0.8rem] text-mist transition-colors hover:border-fog/40 hover:text-fog rounded-full"
       >
         CSV for facilities
       </button>
       <button
         onClick={() => window.print()}
-        className="border border-line px-3 py-1.5 font-mono text-[0.72rem] tracking-wider text-mist transition-colors hover:border-cyan hover:text-cyan"
+        className="border border-line px-3 py-1.5 text-[0.8rem] text-mist transition-colors hover:border-fog/40 hover:text-fog rounded-full"
       >
-        print / PDF
+        Print / PDF
       </button>
       <button
         onClick={copySummary}
-        className="border border-line px-3 py-1.5 font-mono text-[0.72rem] tracking-wider text-mist transition-colors hover:border-cyan hover:text-cyan"
+        className="border border-line px-3 py-1.5 text-[0.8rem] text-mist transition-colors hover:border-fog/40 hover:text-fog rounded-full"
       >
-        {copied ? "✓ copied" : "copy summary"}
+        {copied ? "✓ Copied" : "Copy summary"}
       </button>
     </div>
   );

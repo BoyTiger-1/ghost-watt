@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { PageHeader } from "./PageHeader";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { OffenderCard } from "./OffenderCard";
@@ -269,31 +270,24 @@ export function Scanner() {
   }
 
   return (
-    <section id="scanner" className="relative z-10 mx-auto max-w-6xl scroll-mt-20 px-4 pb-16 pt-24 sm:px-6">
-      <div className="mb-8">
-        <div className="flex items-center gap-2">
-          <span className="h-1.5 w-1.5 grad-energy-bg" />
-          <span className="mono-label text-cyan">phantom-load audit</span>
-        </div>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-fog sm:text-4xl">
-          Walk the building. Snap what&apos;s still running.
-        </h1>
-        <p className="mt-3 max-w-2xl text-mist">
-          Add photos of empty rooms at 4pm or after hours. A local vision model tags every device
-          left drawing power; the ranked list below is what facilities can act on Monday - costed,
-          with a one-tap fix for each. New here?{" "}
-          <Link href="/about" className="text-cyan underline-offset-4 hover:underline">
+    <section id="scanner" className="relative z-10 mx-auto max-w-6xl scroll-mt-20 px-5 pb-16 pt-24 sm:px-6 sm:pt-32">
+      <PageHeader eyebrow="Scanner" title="Walk the building." accent="Snap what's still running." className="mb-10">
+        Add photos of empty rooms after hours, or open the live camera.{" "}
+        <span className="hidden sm:inline">
+          Every device left drawing power is tagged, costed and ranked, with a fix for each.
+          New here?{" "}
+          <Link href="/about" className="text-cyan underline decoration-cyan/30 underline-offset-4 hover:decoration-cyan">
             See how it works
           </Link>
           .
-        </p>
-      </div>
+        </span>
+      </PageHeader>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
         {/* ---- intake column ---- */}
         <div className="space-y-4">
           <div className="panel p-4 sm:p-5">
-            <div className="mono-label">intake</div>
+            <div className="mono-label">Intake</div>
 
             <div className="mt-3 grid grid-cols-3 gap-3">
               <button
@@ -301,7 +295,7 @@ export function Scanner() {
                 className="group flex flex-col items-center gap-2 border border-line bg-surface2/60 px-3 py-5 transition-colors hover:border-cyan"
               >
                 <UploadIcon className="h-6 w-6 text-cyan" />
-                <span className="font-mono text-[0.7rem] tracking-wider uppercase text-mist group-hover:text-fog">
+                <span className="text-[0.78rem] text-mist group-hover:text-fog">
                   Upload
                 </span>
               </button>
@@ -310,7 +304,7 @@ export function Scanner() {
                 className="group flex flex-col items-center gap-2 border border-line bg-surface2/60 px-3 py-5 transition-colors hover:border-cyan"
               >
                 <CameraIcon className="h-6 w-6 text-cyan" />
-                <span className="font-mono text-[0.7rem] tracking-wider uppercase text-mist group-hover:text-fog">
+                <span className="text-[0.78rem] text-mist group-hover:text-fog">
                   Camera
                 </span>
               </button>
@@ -320,7 +314,7 @@ export function Scanner() {
               >
                 <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-ember pulse-dot" />
                 <LiveIcon className="h-6 w-6 text-cyan" />
-                <span className="font-mono text-[0.7rem] tracking-wider uppercase text-cyan">Live</span>
+                <span className="text-[0.78rem] text-cyan">Live</span>
               </button>
             </div>
             {liveOpen && (
@@ -352,7 +346,7 @@ export function Scanner() {
 
             <button
               onClick={addEstimate}
-              className="mt-3 w-full border border-dashed border-line2 px-3 py-2.5 text-left font-mono text-[0.72rem] tracking-wider text-dim transition-colors hover:border-amber hover:text-amber"
+              className="mt-3 w-full border border-dashed border-line2 px-3 py-2.5 text-left text-[0.72rem] text-dim transition-colors hover:border-amber hover:text-amber"
             >
               + no photo? add a room-profile estimate
             </button>
@@ -374,7 +368,7 @@ export function Scanner() {
               onClick={() => setShowSettings((s) => !s)}
               className="flex w-full items-center justify-between px-4 py-3.5"
             >
-              <span className="mono-label">override assumptions</span>
+              <span className="mono-label">Override assumptions</span>
               <span className="font-mono text-xs text-mist">
                 {settings.ratePerKwh.toFixed(3)} $/kWh
                 <span className="ml-2 text-cyan">{showSettings ? "−" : "+"}</span>
@@ -422,7 +416,7 @@ export function Scanner() {
                         setOverride({});
                         setLiveRate(null);
                       }}
-                      className="font-mono text-[0.7rem] tracking-wider text-dim hover:text-cyan"
+                      className="text-[0.7rem] text-dim hover:text-cyan"
                     >
                       ↺ back to the building&apos;s own figures
                     </button>
@@ -439,9 +433,9 @@ export function Scanner() {
                 <span className="mono-label">queue · {photos.length}</span>
                 <button
                   onClick={() => setPhotos([])}
-                  className="font-mono text-[0.68rem] tracking-wider text-dim hover:text-ember"
+                  className="text-[0.68rem] text-dim hover:text-ember"
                 >
-                  clear all
+                  Clear all
                 </button>
               </div>
               <div className="mt-3 space-y-2.5">
@@ -455,9 +449,15 @@ export function Scanner() {
           <button
             onClick={runAll}
             disabled={pendingCount === 0 || running}
-            className="relative w-full overflow-hidden border border-cyan bg-cyan/10 px-4 py-3.5 font-mono text-sm font-bold tracking-[0.16em] uppercase text-cyan transition-colors enabled:hover:bg-cyan/20 disabled:cursor-not-allowed disabled:border-line disabled:text-dim"
+            className="relative w-full overflow-hidden px-4 py-3.5 text-sm transition-colors disabled:cursor-not-allowed disabled:text-dim rounded-full bg-fog text-ink font-medium hover:bg-fog/85 disabled:bg-line"
           >
-            {running ? "scanning…" : pendingCount > 0 ? `run audit · ${pendingCount}` : "audit complete"}
+            {running
+              ? "Scanning…"
+              : pendingCount > 0
+                ? `Run audit · ${pendingCount} ${pendingCount === 1 ? "photo" : "photos"}`
+                : photos.length > 0
+                  ? "Audit complete"
+                  : "Add a photo to begin"}
             {running && (
               <span className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan to-transparent scan-line" />
             )}
@@ -585,29 +585,35 @@ function TabBar({
   count: number;
 }) {
   const tabs: { id: ResultTab; label: string; hint: string }[] = [
-    { id: "offenders", label: `offenders · ${count}`, hint: "What is running" },
-    { id: "plan", label: "plan", hint: "What to do with the money you have" },
-    { id: "grid", label: "grid", hint: "When to burn it, and what would cancel it" },
-    { id: "context", label: "context", hint: "What it means and how you compare" },
+    { id: "offenders", label: "Offenders", hint: "What is running" },
+    { id: "plan", label: "Plan", hint: "What to do with the money you have" },
+    { id: "grid", label: "Grid", hint: "When to burn it, and what would cancel it" },
+    { id: "context", label: "Context", hint: "What it means and how you compare" },
   ];
   return (
-    <div className="flex border border-line bg-surface2/40">
+    <div className="flex rounded-full bg-fog/[0.05] p-1" role="tablist">
       {tabs.map((t) => (
         <button
           key={t.id}
+          role="tab"
+          aria-selected={tab === t.id}
           onClick={() => onChange(t.id)}
           title={t.hint}
-          className={`relative flex-1 px-3 py-2.5 font-mono text-[0.7rem] tracking-[0.14em] uppercase transition-colors ${
+          className={`relative flex-1 whitespace-nowrap rounded-full px-2 py-2 text-[0.85rem] transition-colors ${
             tab === t.id ? "text-fog" : "text-dim hover:text-mist"
           }`}
         >
-          {t.label}
           {tab === t.id && (
             <motion.span
-              layoutId="tab-underline"
-              className="absolute inset-x-2 bottom-0 h-px bg-gradient-to-r from-cyan to-lime"
+              layoutId="tab-pill"
+              className="absolute inset-0 rounded-full bg-surface shadow-[0_1px_2px_rgba(28,27,24,0.08),0_4px_12px_-6px_rgba(28,27,24,0.2)]"
+              transition={{ type: "spring", stiffness: 420, damping: 34 }}
             />
           )}
+          <span className="relative">
+            {t.label}
+            {t.id === "offenders" && <span className="ml-1 tabular-nums text-dim">{count}</span>}
+          </span>
         </button>
       ))}
     </div>
@@ -642,11 +648,11 @@ function TotalsHeader({
       className="panel ticked relative overflow-hidden p-5 sm:p-6"
     >
       <div className="absolute inset-0 -z-10 opacity-60"
-        style={{ background: "radial-gradient(60% 120% at 100% 0%, rgba(47,230,207,0.12), transparent 60%)" }}
+        style={{ background: "radial-gradient(60% 120% at 100% 0%, rgba(239,157,46,0.1), transparent 60%)" }}
       />
       <div className="flex items-center justify-between">
         <span className="mono-label text-cyan">bleeding while you sleep</span>
-        <span className="font-mono text-[0.68rem] tracking-wider text-dim">
+        <span className="font-mono text-[0.68rem] text-dim">
           {photoCount} area{photoCount === 1 ? "" : "s"} · {liveCount} live
         </span>
       </div>
@@ -659,12 +665,12 @@ function TotalsHeader({
       </div>
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-line pt-3">
-        <span className="font-mono text-[0.72rem] tracking-wider text-mist">
+        <span className="font-mono text-[0.72rem] text-mist">
           biggest offender: <span className="text-lime">{topLabel}</span>
         </span>
         {/* The band is the honest version of the headline number. */}
         <span
-          className="font-mono text-[0.72rem] tracking-wider text-dim"
+          className="font-mono text-[0.72rem] text-dim"
           title="Range across the published wattage spread for these device classes"
         >
           plausible range {fmtMoney(costLow)} – {fmtMoney(costHigh)} / yr
@@ -795,7 +801,7 @@ function Field({
         step={step}
         min={0}
         onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-        className="mt-1.5 w-full border border-line bg-surface2 px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan"
+        className="mt-1.5 w-full border border-line bg-surface px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan rounded-xl"
       />
     </label>
   );

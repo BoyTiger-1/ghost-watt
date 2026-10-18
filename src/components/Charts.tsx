@@ -14,15 +14,15 @@ import { GROUP_LABELS, type DeviceGroup } from "@/lib/types";
 import type { GroupSlice } from "@/lib/energy";
 
 const GROUP_COLOR: Record<DeviceGroup, string> = {
-  display: "#2fe6cf",
-  computing: "#5ac8fa",
-  lighting: "#c8ff4d",
-  refrigeration: "#7ee0b8",
-  hvac: "#ffb24d",
-  kitchen: "#ff8f6b",
-  office: "#9d8cff",
-  network: "#4dd6ff",
-  specialty: "#6c7689",
+  display: "#3a4566",
+  computing: "#6a86c4",
+  lighting: "#e0a03a",
+  refrigeration: "#5f9e86",
+  hvac: "#c4461f",
+  kitchen: "#d9785a",
+  office: "#8b78c9",
+  network: "#4f95b8",
+  specialty: "#a39d92",
 };
 
 export function groupColor(g: DeviceGroup): string {

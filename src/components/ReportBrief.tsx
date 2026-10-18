@@ -46,7 +46,7 @@ export function ReportBrief() {
         </p>
         <Link
           href="/scan"
-          className="mt-4 inline-block border border-cyan bg-cyan/10 px-4 py-2 font-mono text-[0.75rem] tracking-wider text-cyan transition-colors hover:bg-cyan/20"
+          className="mt-4 inline-block px-4 py-2 text-[0.75rem] transition-colors rounded-full bg-fog text-ink font-medium hover:bg-fog/85"
         >
           go to the scanner →
         </Link>
@@ -72,11 +72,11 @@ export function ReportBrief() {
       <div className="no-print flex flex-wrap items-center gap-3 lg:sticky lg:top-20 lg:col-start-1 lg:row-start-1 lg:flex-col lg:items-stretch lg:gap-4">
         {audits.length > 1 && (
           <label className="flex items-center gap-2 lg:flex-col lg:items-start lg:gap-1.5">
-            <span className="mono-label">audit</span>
+            <span className="mono-label">Audit</span>
             <select
               value={audit.id}
               onChange={(e) => setAuditId(e.target.value)}
-              className="w-full max-w-full border border-line bg-surface2 px-3 py-2 text-sm text-fog outline-none focus:border-cyan"
+              className="w-full max-w-full border border-line bg-surface px-3 py-2 text-sm text-fog outline-none focus:border-cyan rounded-xl"
             >
               {audits.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -88,9 +88,9 @@ export function ReportBrief() {
         )}
         <button
           onClick={() => window.print()}
-          className="border border-cyan bg-cyan/10 px-4 py-2 font-mono text-[0.75rem] tracking-wider text-cyan transition-colors hover:bg-cyan/20"
+          className="px-4 py-2 text-[0.75rem] transition-colors rounded-full bg-fog text-ink font-medium hover:bg-fog/85"
         >
-          print / save as PDF
+          Print / save as PDF
         </button>
         <span className="font-mono text-[0.72rem] text-dim">
           Prints as black on white, one page where it fits.
@@ -107,7 +107,7 @@ export function ReportBrief() {
             <span className="mono-label text-cyan">energy waste brief</span>
             <span className="font-mono text-[0.72rem] text-dim">{dated}</span>
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight text-fog sm:text-3xl">
+          <h1 className="font-editorial text-[2.2rem] leading-[1.05] text-fog sm:text-[2.8rem]">
             {brief.buildingName}
           </h1>
           <p className="max-w-[60ch] text-base leading-relaxed text-mist">{headline(brief)}</p>
@@ -321,7 +321,7 @@ function Group({
 function Th({ children, align }: { children: React.ReactNode; align?: "right" }) {
   return (
     <th
-      className={`pb-2 font-mono text-[0.68rem] font-normal tracking-wider text-dim uppercase ${
+      className={`pb-2 text-[0.76rem] font-normal text-dim ${
         align === "right" ? "text-right" : ""
       }`}
     >

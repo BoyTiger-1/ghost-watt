@@ -166,7 +166,7 @@ export function SolarOffset({
             aria-label="Share of the audited waste to offset with solar"
             className="mt-2.5 w-full accent-lime"
           />
-          <div className="mt-1 flex justify-between font-mono text-[0.62rem] uppercase tracking-wider text-dim">
+          <div className="mt-1 flex justify-between text-[0.72rem] text-dim">
             <span>quarter of it</span>
             <span>all of it</span>
             <span>half again</span>

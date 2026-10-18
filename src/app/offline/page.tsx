@@ -1,44 +1,40 @@
+import { PageHeader } from "@/components/PageHeader";
+
 export const metadata = {
   title: "Offline - Ghost Watt",
 };
 
+const STILL_WORKS = [
+  ["Saved audits and buildings still open.", "They live in this browser, not on a server."],
+  ["Room-profile estimates still work.", "The wattage table and room presets ship with the app."],
+  ["Photos are safe.", "Take them now; a scan that needs a hosted model will say so, and you can run it back in range."],
+];
+
 export default function OfflinePage() {
   return (
-    <section className="relative z-10 mx-auto max-w-2xl px-4 pb-16 pt-32 sm:px-6">
-      <div className="flex items-center gap-2">
-        <span className="h-1.5 w-1.5 bg-amber" />
-        <span className="mono-label text-amber">no connection</span>
-      </div>
-      <h1 className="mt-2 text-3xl font-bold tracking-tight text-fog">
-        You are in the part of the building with no bars.
-      </h1>
-      <p className="mt-4 leading-relaxed text-mist">
-        Which is usually the part worth auditing. This page is here because Ghost Watt could not
-        reach the network, but most of the app does not need it:
-      </p>
-      <ul className="mt-4 space-y-2 text-sm leading-relaxed text-mist">
-        <li className="border-l-2 border-line pl-3">
-          <span className="text-fog">Saved audits and buildings still open.</span> They live in this
-          browser, not on a server.
-        </li>
-        <li className="border-l-2 border-line pl-3">
-          <span className="text-fog">Room-profile estimates still work.</span> The wattage table and
-          the room presets ship with the app.
-        </li>
-        <li className="border-l-2 border-line pl-3">
-          <span className="text-fog">Photos are safe.</span> Take them now; a scan that needs a
-          hosted model will simply say so, and you can run it when you are back in range.
-        </li>
+    <section className="relative z-10 mx-auto max-w-2xl px-5 pb-16 pt-28 sm:px-6 sm:pt-36">
+      <PageHeader eyebrow="No connection" title="No bars here." accent="Usually the part worth auditing.">
+        Ghost Watt couldn&apos;t reach the network, but most of it doesn&apos;t need to.
+      </PageHeader>
+      <ul className="mt-10 space-y-5">
+        {STILL_WORKS.map(([lead, rest]) => (
+          <li key={lead} className="flex gap-3 text-[1rem] leading-relaxed text-mist">
+            <span className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-lime" />
+            <span>
+              <span className="text-fog">{lead}</span> {rest}
+            </span>
+          </li>
+        ))}
       </ul>
-      <p className="mt-6 text-sm leading-relaxed text-dim">
-        Live prices, hourly grid carbon and class sessions all need a connection, and Ghost Watt
-        would rather tell you that than serve you a stale number that looks current.
+      <p className="mt-8 text-[0.92rem] leading-relaxed text-dim">
+        Live prices, hourly grid carbon and class sessions need a connection, and Ghost Watt would
+        rather say so than show a stale number that looks current.
       </p>
       <a
         href="/scan"
-        className="mt-6 inline-block border border-cyan bg-cyan/10 px-4 py-2 font-mono text-sm tracking-wider text-cyan transition-colors hover:bg-cyan/20"
+        className="mt-8 inline-flex rounded-full bg-fog px-6 py-3 text-[0.95rem] font-medium text-ink"
       >
-        back to the scanner
+        Back to the scanner
       </a>
     </section>
   );

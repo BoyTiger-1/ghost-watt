@@ -108,7 +108,7 @@ export function Capabilities() {
                 <span className="mono-label" style={{ color: p.tint }}>
                   {p.stage}
                 </span>
-                <span className="font-mono text-[0.62rem] uppercase tracking-wider text-dim">
+                <span className="text-[0.72rem] text-dim">
                   {p.weight}
                 </span>
               </div>
@@ -158,7 +158,7 @@ export function Capabilities() {
                 </span>
               </div>
               <p className="mt-3 text-sm leading-relaxed text-mist">{c.body}</p>
-              <p className="mt-4 font-mono text-[0.66rem] uppercase tracking-wider text-cyan">
+              <p className="mt-4 text-[0.75rem] text-cyan">
                 {c.stat}
               </p>
             </Link>

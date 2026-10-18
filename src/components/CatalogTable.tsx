@@ -68,14 +68,14 @@ export function CatalogTable() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="search device or fix…"
-          className="ml-auto min-w-[12rem] flex-1 border border-line bg-surface2 px-3 py-1.5 font-mono text-xs text-fog outline-none placeholder:text-dim focus:border-cyan sm:flex-none"
+          className="ml-auto min-w-[12rem] flex-1 border border-line bg-surface px-3 py-1.5 font-mono text-xs text-fog outline-none placeholder:text-dim focus:border-cyan sm:flex-none rounded-xl"
         />
       </div>
 
       <div className="mt-4 overflow-x-auto border border-line">
         <table className="w-full min-w-[46rem] border-collapse text-left">
           <thead>
-            <tr className="bg-surface2 font-mono text-[0.66rem] uppercase tracking-wider text-dim">
+            <tr className="bg-surface2 text-[0.75rem] text-dim">
               <th className="px-3 py-2.5 font-medium">Device</th>
               <th className="px-3 py-2.5 text-right font-medium">On (W)</th>
               <th className="px-3 py-2.5 text-right font-medium">Range</th>
@@ -166,10 +166,10 @@ function FilterChip({
   return (
     <button
       onClick={onClick}
-      className={`border px-2.5 py-1 font-mono text-[0.66rem] tracking-wider transition-colors ${
-        on ? "border-cyan/60 bg-cyan/10 text-cyan" : "border-line text-dim hover:text-mist"
+      className={`rounded-full border px-3 py-1 text-[0.78rem] transition-colors ${
+        on ? "border-fog bg-fog text-ink" : "border-line text-dim hover:text-mist"
       }`}
-      style={on && tint ? { borderColor: tint, color: tint } : undefined}
+      style={on && tint ? { borderColor: tint, background: tint, color: "#fff" } : undefined}
     >
       {label}
     </button>
