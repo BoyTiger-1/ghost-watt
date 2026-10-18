@@ -137,3 +137,21 @@ describe("lamps", () => {
     expect(c.confidence).toBe(0);
   });
 });
+
+describe("observationsToItems: the AI's answer on the live picture", () => {
+  it("draws one item per located box, lights as lights, and prices an off light at nothing", async () => {
+    const { observationsToItems } = await import("./ondevice");
+    const { DEFAULT_SETTINGS } = await import("./types");
+    const items = observationsToItems(
+      [
+        { device: "ceiling light", count: 2, state: "on", categoryId: "ceiling_light", boxes: [[0.1, 0.05, 0.3, 0.12], [0.5, 0.05, 0.7, 0.12]] },
+        { device: "monitor", count: 3, state: "off", categoryId: "monitor", boxes: [[0.4, 0.5, 0.6, 0.7]] },
+        { device: "mystery", count: 1, state: "on", categoryId: "not-a-category", boxes: [[0, 0, 1, 1]] },
+      ],
+      DEFAULT_SETTINGS,
+    );
+    expect(items.map((i) => i.kind)).toEqual(["light", "light", "device"]);
+    expect(items[0].costPerYear).toBeGreaterThan(0);
+    expect(items[2].typicalCostPerYear).toBe(0);
+  });
+});

@@ -2,17 +2,32 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { COCO_MAP, Tracker, type Track } from "@/lib/live";
+import {
+  COCO_MAP,
+  COOLDOWN_MIN_MS,
+  SIG_H,
+  SIG_W,
+  STEADY_MS,
+  STILL_DIFF,
+  Tracker,
+  frameSignature,
+  nearestView,
+  nextCooldown,
+  shouldAutoAudit,
+  sigDiff,
+  type Track,
+} from "@/lib/live";
 import { classifyRegion, getClassifier, getDetector, padBox, toPixelDetections } from "@/lib/detector";
 import { CENTER_ROI, CenterLamp, Verifier, judge, lampScore, withLamps } from "@/lib/verify";
-import { readItems, peopleIn, type LiveItem } from "@/lib/ondevice";
+import { observationsToItems, readItems, peopleIn, type LiveItem } from "@/lib/ondevice";
+import { analysisSquare } from "@/lib/image";
 import { LightTracker, readScene, regionSaturation, type SceneRead } from "@/lib/scene";
-import { FrameReader, KeyframeCollector, itemColor, recorderMime, toJpeg, type Keyframe } from "@/lib/media";
+import { FrameReader, KeyframeCollector, PixelReader, itemColor, recorderMime, toJpeg, type Keyframe } from "@/lib/media";
 import { fmtMoney, fmtWatts } from "@/lib/energy";
 import { readTime, type GeoContext } from "@/lib/capture";
 import { nowLocal } from "@/lib/exif";
 import type { WeeklySchedule } from "@/lib/schedule";
-import type { AuditSettings } from "@/lib/types";
+import type { AnalysisResult, AuditSettings } from "@/lib/types";
 import { Icon } from "./icons";
 
 /**
@@ -38,6 +53,32 @@ export interface VideoShot {
 }
 
 type Phase = "starting" | "live" | "error";
+
+/**
+ * A view the full AI audit has answered for, keyed by what it looked like.
+ *
+ * The on-device models are a fast first look; the AI is what a photo gets, and
+ * it is far better at telling a ceiling light from a sunlit window. So when the
+ * camera settles on a view, that frame goes to the same audit as a photo, and
+ * while the camera stays there its answer replaces the on-device guesses.
+ */
+interface AuditedView {
+  id: number;
+  sig: Float32Array;
+  /** Empty when the AI found nothing powered: kept so the same view is not re-sent. */
+  items: LiveItem[];
+}
+
+type AiStatus =
+  | { kind: "off" }
+  | { kind: "moving" }
+  | { kind: "auditing" }
+  | { kind: "showing"; count: number }
+  | { kind: "waiting"; seconds: number }
+  | { kind: "unavailable"; text: string };
+
+/** How many audited views to remember; older ones are re-audited if revisited. */
+const MAX_VIEWS = 24;
 
 /** Where a source of size (sw, sh) lands in a box (cw, ch) with object-fit: cover. */
 function coverRect(sw: number, sh: number, cw: number, ch: number) {
@@ -78,6 +119,9 @@ export function CameraMode({
   const recRef = useRef<{ rec: MediaRecorder; chunks: Blob[]; collector: KeyframeCollector; start: number; lastSample: number } | null>(null);
   const genRef = useRef(0);
   const mirroredRef = useRef(false);
+  // Live AI audit. Read by the frame loop, so it lives in refs.
+  const viewsRef = useRef<AuditedView[]>([]);
+  const aiRef = useRef({ enabled: true, inFlight: false, cooldown: COOLDOWN_MIN_MS, lastDone: 0, unavailable: null as string | null });
 
   const [phase, setPhase] = useState<Phase>("starting");
   const [error, setError] = useState<{ text: string; noCamera: boolean } | null>(null);
@@ -93,6 +137,8 @@ export function CameraMode({
   const [flash, setFlash] = useState(0);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [full, setFull] = useState(false);
+  const [aiOn, setAiOn] = useState(true);
+  const [ai, setAi] = useState<AiStatus>({ kind: "moving" });
   const viewRef = useRef<HTMLDivElement>(null);
   // Null until mounted: the page is prerendered, and a build-time clock would not match.
   const [now, setNow] = useState<string | null>(null);
@@ -117,6 +163,53 @@ export function CameraMode({
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     trackerRef.current.reset();
+    // A different camera sees different views.
+    viewsRef.current = [];
+  }, []);
+
+  useEffect(() => {
+    aiRef.current.enabled = aiOn;
+  }, [aiOn]);
+
+  /** Send the current frame through the full AI audit, the same one a photo gets. */
+  const runAudit = useCallback(async (sig: Float32Array) => {
+    const v = videoRef.current;
+    const a = aiRef.current;
+    if (!v || a.inFlight) return;
+    const gen = genRef.current;
+    const dataUrl = toJpeg(v, 1280, 0.85);
+    if (!dataUrl) return;
+    a.inFlight = true;
+    let ok = false;
+    try {
+      const square = await analysisSquare(dataUrl, 0.8);
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: square.dataUrl, frame: square.frame, roomType: "unknown", source: "Live view", settings: settingsRef.current }),
+      });
+      if (!res.ok) throw new Error(`server ${res.status}`);
+      const result = (await res.json()) as AnalysisResult;
+      if (gen !== genRef.current) return;
+      if (result.mode === "live" || result.fallbackReason === "nothing-found") {
+        ok = true;
+        a.unavailable = null;
+        const items = result.mode === "live" ? observationsToItems(result.observations ?? [], settingsRef.current) : [];
+        const id = (viewsRef.current.at(-1)?.id ?? 0) + 1;
+        viewsRef.current = [...viewsRef.current, { id, sig, items }].slice(-MAX_VIEWS);
+      } else {
+        // Rate-limited or no engine configured: the on-device read stands.
+        a.unavailable = result.fallbackReason === "limited" ? "AI limit reached · on-device only for now" : "AI unavailable · on-device only";
+      }
+    } catch {
+      a.unavailable = "AI unreachable · on-device only";
+    } finally {
+      a.inFlight = false;
+      a.lastDone = performance.now();
+      a.cooldown = nextCooldown(a.cooldown, ok);
+      // No engine configured at all: no point asking every few seconds.
+      if (!ok && a.unavailable?.startsWith("AI unavailable")) a.cooldown = 60000;
+    }
   }, []);
 
   const start = useCallback(
@@ -226,6 +319,12 @@ export function CameraMode({
     const lightTracker = new LightTracker();
     let luma: ReturnType<FrameReader["read"]> = null;
     let tracks: Track[] = [];
+    // Is the camera still, and on which audited view? Ten times a second, on a thumbnail.
+    const sigReader = new PixelReader(SIG_W, SIG_H);
+    let lastSig = 0;
+    let prevSig: Float32Array | null = null;
+    let steadySince = 0;
+    let view: AuditedView | null = null;
 
     const frame = () => {
       raf = requestAnimationFrame(frame);
@@ -248,6 +347,29 @@ export function CameraMode({
 
       const sw = v.videoWidth;
       const sh = v.videoHeight;
+      if (now - lastSig > 100) {
+        lastSig = now;
+        const px = sigReader.rgba(v);
+        if (px) {
+          const sig = frameSignature(px);
+          const still = prevSig ? sigDiff(prevSig, sig) < STILL_DIFF : false;
+          prevSig = sig;
+          steadySince = still ? steadySince || now : 0;
+          view = nearestView(sig, viewsRef.current)?.view ?? null;
+          const a = aiRef.current;
+          if (
+            shouldAutoAudit({
+              enabled: a.enabled,
+              inFlight: a.inFlight,
+              steadyMs: steadySince ? now - steadySince : 0,
+              alreadyAudited: !!view,
+              sinceLastMs: now - a.lastDone,
+              cooldownMs: a.cooldown,
+            })
+          )
+            runAudit(sig);
+        }
+      }
       if (det) {
         try {
           const ts = Math.max(now, lastTs + 1);
@@ -318,8 +440,12 @@ export function CameraMode({
         score: t.score,
         box: [t.box.x / sw, t.box.y / sh, (t.box.x + t.box.w) / sw, (t.box.y + t.box.h) / sh] as [number, number, number, number],
       }));
-      itemsRef.current = readItems(dets, sceneRef.current?.lights ?? [], settingsRef.current, luma ?? undefined);
-      drawOverlay(canvas, sw, sh, itemsRef.current, now, mirroredRef.current);
+      const onDevice = readItems(dets, sceneRef.current?.lights ?? [], settingsRef.current, luma ?? undefined);
+      // On an audited view, the AI's answer replaces the on-device guesses; people
+      // still come from the detector, since they move.
+      const aiView = aiRef.current.enabled ? view : null;
+      itemsRef.current = aiView ? [...aiView.items, ...onDevice.filter((i) => i.kind === "person")] : onDevice;
+      drawOverlay(canvas, sw, sh, itemsRef.current, now, mirroredRef.current, aiRef.current.inFlight);
 
       const dt = now - lastFrame;
       lastFrame = now;
@@ -329,11 +455,26 @@ export function CameraMode({
         setFps(Math.round(fpsEma));
         setItems(itemsRef.current);
         setScene(sceneRef.current);
+        const a = aiRef.current;
+        const wait = Math.ceil((a.cooldown - (now - a.lastDone)) / 1000);
+        setAi(
+          !a.enabled
+            ? { kind: "off" }
+            : a.inFlight
+              ? { kind: "auditing" }
+              : aiView
+                ? { kind: "showing", count: aiView.items.length }
+                : a.unavailable
+                  ? { kind: "unavailable", text: a.unavailable }
+                  : wait > 0 && steadySince && now - steadySince >= STEADY_MS
+                    ? { kind: "waiting", seconds: wait }
+                    : { kind: "moving" },
+        );
       }
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [phase]);
+  }, [phase, runAudit]);
 
   // ---- actions -----------------------------------------------------------
 
@@ -519,15 +660,29 @@ export function CameraMode({
               <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${phase === "live" ? "bg-[#ff6a5c] pulse-dot" : "bg-white/40"}`} />
               <span className="font-semibold tracking-wide">LIVE</span>
               <span className="truncate text-white/60">
-                {typeof detector === "object"
-                  ? `${detector.model.replace("EfficientDet-", "")} · ${detector.delegate} · ${fps} fps`
-                  : detector === "loading"
-                    ? "loading detector…"
-                    : "detector offline"}
+                {ai.kind === "showing" || ai.kind === "auditing" || ai.kind === "waiting" || ai.kind === "unavailable"
+                  ? aiLine(ai)
+                  : typeof detector === "object"
+                    ? `${detector.model.replace("EfficientDet-", "")} · ${detector.delegate} · ${fps} fps`
+                    : detector === "loading"
+                      ? "loading detector…"
+                      : "detector offline"}
               </span>
             </div>
           )}
           <div className="flex shrink-0 gap-2">
+            {!recording && (
+              <button
+                onClick={() => setAiOn((o) => !o)}
+                aria-pressed={aiOn}
+                title={aiOn ? "The AI audits each view you hold still on. Tap for on-device only." : "On-device only. Tap to let the AI audit each view you hold still on."}
+                className={`h-10 rounded-full px-3 font-mono text-[0.7rem] font-semibold backdrop-blur-md transition-colors ${
+                  aiOn ? "bg-[#ffd84d] text-black" : "bg-black/45 text-white/80"
+                }`}
+              >
+                AI {aiOn ? "on" : "off"}
+              </button>
+            )}
             {torch !== null && !recording && (
               <RoundButton label={torch ? "Torch off" : "Torch on"} onClick={toggleTorch} active={torch}>
                 <Icon name="torch" className="h-[1.15rem] w-[1.15rem]" />
@@ -584,7 +739,7 @@ export function CameraMode({
                   exit={{ opacity: 0, y: 12 }}
                   className={`mb-2 overflow-y-auto rounded-2xl bg-black/70 p-3 backdrop-blur-xl ${full ? "max-h-[48dvh]" : "max-h-[38svh]"}`}
                 >
-                  <LiveRead items={items} scene={scene} time={time} geo={geo} geoBusy={geoBusy} onLocate={onLocate} dark />
+                  <LiveRead items={items} scene={scene} ai={ai} time={time} geo={geo} geoBusy={geoBusy} onLocate={onLocate} dark />
                 </motion.div>
               )}
             </AnimatePresence>
@@ -667,7 +822,7 @@ export function CameraMode({
             </p>
           </div>
         ) : (
-          <LiveRead items={items} scene={scene} time={time} geo={geo} geoBusy={geoBusy} onLocate={onLocate} />
+          <LiveRead items={items} scene={scene} ai={ai} time={time} geo={geo} geoBusy={geoBusy} onLocate={onLocate} />
         )}
       </aside>
     </div>
@@ -723,9 +878,28 @@ function SummaryLine({ items, dark }: { items: readonly LiveItem[]; dark?: boole
   );
 }
 
+/** One line on what the live AI audit is doing. */
+function aiLine(ai: AiStatus): string {
+  switch (ai.kind) {
+    case "off":
+      return "AI off · on-device read only";
+    case "moving":
+      return "Hold still on a view and the AI audits it";
+    case "auditing":
+      return "AI auditing this view…";
+    case "showing":
+      return ai.count ? `AI audit of this view · ${ai.count} found` : "AI audit of this view · nothing powered";
+    case "waiting":
+      return `AI audits this view in ${ai.seconds}s`;
+    case "unavailable":
+      return ai.text;
+  }
+}
+
 function LiveRead({
   items,
   scene,
+  ai,
   time,
   geo,
   geoBusy,
@@ -734,6 +908,7 @@ function LiveRead({
 }: {
   items: readonly LiveItem[];
   scene: SceneRead | null;
+  ai: AiStatus;
   time: ReturnType<typeof readTime>;
   geo: GeoContext | null;
   geoBusy: boolean;
@@ -753,8 +928,8 @@ function LiveRead({
     <div className="flex min-h-0 flex-1 flex-col">
       {!dark && (
         <div className="flex items-center justify-between">
-          <span className="mono-label">live read · on-device</span>
-          <span className="font-mono text-[0.66rem] text-dim">nothing uploaded</span>
+          <span className="mono-label">{ai.kind === "showing" ? "live read · AI audit" : "live read · on-device"}</span>
+          <span className="font-mono text-[0.66rem] text-dim">{ai.kind === "off" ? "nothing uploaded" : "still views go to the AI"}</span>
         </div>
       )}
 
@@ -801,8 +976,16 @@ function LiveRead({
       </ul>
 
       <div className={`mt-3 space-y-1.5 border-t ${t.line} pt-3 text-[0.76rem] ${t.mist}`}>
+        <ContextRow icon="sparkle" dark={dark}>
+          <span className={ai.kind === "showing" ? "text-lime" : ai.kind === "unavailable" ? "text-amber" : ""}>{aiLine(ai)}</span>
+        </ContextRow>
         <ContextRow icon="bulb" dark={dark}>
-          {scene
+          {ai.kind === "showing"
+            ? (() => {
+                const lit = items.filter((i) => i.kind === "light" && i.state !== "off").length;
+                return lit ? `AI: ${lit} light${lit > 1 ? "s" : ""} on in this view` : "AI: no lights on in this view";
+              })()
+            : scene
             ? scene.outdoor
               ? "Looking outdoors: lights aren't judged in daylight"
               : scene.lights.length
@@ -844,7 +1027,8 @@ function LiveRead({
 
       {!dark && (
         <p className="mt-3 rounded-xl bg-surface2 px-3 py-2.5 text-[0.76rem] leading-relaxed text-mist">
-          <span className="font-medium text-fog">Photo</span> runs the full AI audit on this view.{" "}
+          Hold the camera still on a view and the AI audits it - the same audit a photo gets.{" "}
+          <span className="font-medium text-fog">Photo</span> saves this view to your results.{" "}
           <span className="font-medium text-fog">Video</span> records a walkthrough and audits the whole clip.
         </p>
       )}
@@ -852,7 +1036,7 @@ function LiveRead({
   );
 }
 
-function ContextRow({ icon, dark, children }: { icon: "bulb" | "clock" | "pin" | "person"; dark?: boolean; children: React.ReactNode }) {
+function ContextRow({ icon, dark, children }: { icon: "bulb" | "clock" | "pin" | "person" | "sparkle"; dark?: boolean; children: React.ReactNode }) {
   return (
     <div className="flex items-start gap-2">
       <Icon name={icon} className={`mt-px h-4 w-4 shrink-0 ${dark ? "text-white/55" : "text-dim"}`} />
@@ -912,7 +1096,8 @@ function bracket(ctx: CanvasRenderingContext2D, x: number, y: number, w: number,
 
 function label(it: LiveItem): string {
   if (it.kind === "person") return "person · room in use";
-  const state = it.why === "screen dark" ? " · dark" : it.why === "screen lit" ? " · lit" : "";
+  if (it.state === "off") return `${it.label} · off`;
+  const state = it.why === "screen dark" ? " · dark" : it.state === "standby" ? " · standby" : it.why === "screen lit" ? " · lit" : "";
   // Typical use on the picture: the honest everyday figure. The panel adds the left-on one.
   return `${it.label}${state} · ${fmtWatts(it.watts)} · ${fmtMoney(it.typicalCostPerYear)}/yr typ`;
 }
@@ -929,17 +1114,19 @@ function drawOverlay(
   items: readonly LiveItem[],
   now: number,
   mirrored: boolean,
+  auditing = false,
 ) {
   const { ctx, cw, ch } = prepare(canvas);
   if (!ctx) return;
   const r = coverRect(sw, sh, cw, ch);
   const small = cw < 520;
 
-  // Slow sweep: reads as "scanning" without hiding anything.
-  const sweepY = ((now / 2600) % 1) * ch;
+  // Slow sweep: reads as "scanning" without hiding anything. Faster and brighter
+  // while the AI is reading the view.
+  const sweepY = ((now / (auditing ? 1100 : 2600)) % 1) * ch;
   const g = ctx.createLinearGradient(0, sweepY - 60, 0, sweepY);
   g.addColorStop(0, "rgba(255,216,77,0)");
-  g.addColorStop(1, "rgba(255,216,77,0.09)");
+  g.addColorStop(1, `rgba(255,216,77,${auditing ? 0.22 : 0.09})`);
   ctx.fillStyle = g;
   ctx.fillRect(0, sweepY - 60, cw, 60);
 
