@@ -34,6 +34,11 @@ export interface VisionResult {
   provider: string;
   kind: VisionKind;
   error?: string;
+  /**
+   * On failure: whether an engine was configured at all. False means "nothing to
+   * try" (no key, no local daemon); true means an engine exists and did not answer.
+   */
+  configured?: boolean;
 }
 
 interface HostedProvider {
@@ -277,13 +282,18 @@ export async function describeImageAny(
 export async function describeImagesAny(images: string[], prompt: string): Promise<VisionResult> {
   const forced = process.env.VISION_PROVIDER?.trim().toLowerCase();
   const errors: string[] = [];
+  let localConfigured = false;
 
   if (forced !== "hosted" && !HOSTED.some((h) => h.id === forced)) {
     const local = await describeViaOllama(images, prompt);
     if (local.ok && local.text.trim()) {
       return { ...local, provider: "Ollama (local)", kind: "local" };
     }
-    if (local.error) errors.push(`local: ${local.error}`);
+    if (local.error) {
+      errors.push(`local: ${local.error}`);
+      // A daemon that answered and failed is configured; a refused connection is not.
+      localConfigured = !/fetch failed|ECONNREFUSED|ENOTFOUND|ECONNRESET/i.test(local.error);
+    }
   }
 
   const hosted = activeHosted();
@@ -325,6 +335,7 @@ export async function describeImagesAny(images: string[], prompt: string): Promi
     provider: "none",
     kind: "none",
     error: errors.join("; "),
+    configured: Boolean(hosted) || localConfigured,
   };
 }
 

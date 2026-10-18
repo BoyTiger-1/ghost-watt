@@ -42,27 +42,27 @@ export function SolarOffset({
   ratePerKwh: number;
   co2PerKwh: number;
 }) {
-  const [data, setData] = useState<SolarEstimate | null>(null);
-  const [failed, setFailed] = useState(false);
+  const q =
+    typeof lat === "number" && typeof lon === "number"
+      ? `lat=${lat}&lon=${lon}&state=${encodeURIComponent(regionCode)}`
+      : `state=${encodeURIComponent(regionCode)}`;
+  // Keyed by the query, so an answer for the last location never shows for this one.
+  const [got, setGot] = useState<{ key: string; data: SolarEstimate | null; failed: boolean } | null>(null);
+  const data = got?.key === q ? got.data : null;
+  const failed = got?.key === q ? got.failed : false;
   /** How much of the waste to offset, 0-1.5. Starts at exactly 100%. */
   const [coverage, setCoverage] = useState(1);
 
   useEffect(() => {
     let alive = true;
-    setData(null);
-    setFailed(false);
-    const q =
-      typeof lat === "number" && typeof lon === "number"
-        ? `lat=${lat}&lon=${lon}&state=${encodeURIComponent(regionCode)}`
-        : `state=${encodeURIComponent(regionCode)}`;
     fetch(`/api/solar?${q}`, { cache: "no-store" })
       .then((r) => r.json())
-      .then((d: SolarEstimate) => alive && setData(d))
-      .catch(() => alive && setFailed(true));
+      .then((d: SolarEstimate) => alive && setGot({ key: q, data: d, failed: false }))
+      .catch(() => alive && setGot({ key: q, data: null, failed: true }));
     return () => {
       alive = false;
     };
-  }, [lat, lon, regionCode]);
+  }, [q]);
 
   const proposal = useMemo(
     () =>

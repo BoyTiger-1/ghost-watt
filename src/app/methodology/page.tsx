@@ -121,8 +121,9 @@ export default function MethodologyPage() {
           {/* engines */}
           <Section id="engines" title="Which engine read the photo">
             <p className="mt-3 text-[1rem] leading-relaxed text-mist">
-              Perception is a chain, tried in order, stopping at the first that answers. Whichever
-              one ran, it contributes the same single thing: a list of devices and their states.
+              Two paths can read a picture, and the pill in the header always says which one is
+              about to run. Whichever one ran, it contributes the same single thing: a list of
+              devices and their states. Nothing is ever filled in from a typical room.
             </p>
             <ol className="mt-8 space-y-7">
               <Engine tone="bg-lime" title="A model on your own machine" badge="live model">
@@ -133,10 +134,11 @@ export default function MethodologyPage() {
                 reads the photo instead, so a visitor with nothing installed still gets a real
                 reading. The photo is sent for the scan and is not stored.
               </Engine>
-              <Engine tone="bg-sodium" title="A room-profile estimate" badge="estimated">
-                No engine, no devices recognised, or no photo at all: Ghost Watt uses a typical
-                fixture set for the room type, so a scan never comes back empty, and labels it so the
-                two are never confused.
+              <Engine tone="bg-lime" title="The detector in your browser" badge="on-device">
+                With no cloud model, or when you choose to keep pictures on the device, a small
+                object detector reads the picture in the browser. It recognises screens, laptops,
+                common appliances and lit fixtures and nothing else, so it undercounts. There is no
+                third path: a scan that could not be read says so instead of guessing.
               </Engine>
             </ol>
           </Section>

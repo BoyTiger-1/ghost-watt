@@ -48,7 +48,7 @@ function audit(patch: Partial<SavedAudit> = {}): SavedAudit {
     areas: ["Room 214"],
     offenders: [offender()],
     settings: { ratePerKwh: 0.16, co2PerKwh: 0.4, unoccupiedHoursPerYear: 6000 },
-    mode: "live",
+    mode: "enhanced",
     engine: "test",
     ...patch,
   };
@@ -190,15 +190,15 @@ describe("confidence is weighted by money, not by row count", () => {
 });
 
 describe("caveats fire only when they are true", () => {
-  it("says nothing about model readings when the audit was fully live", () => {
-    const b = buildBrief(audit({ mode: "live" }), building({ bill: {} as Building["bill"] }));
-    expect(b.caveats.join(" ")).not.toContain("room profile");
-    expect(b.caveats.join(" ")).not.toMatch(/No photograph/);
+  it("says nothing about the detector when the cloud model read every room", () => {
+    const b = buildBrief(audit({ mode: "enhanced" }), building({ bill: {} as Building["bill"] }));
+    expect(b.caveats.join(" ")).not.toMatch(/on-device|detector/);
   });
 
-  it("leads with the profile warning when nothing was actually read", () => {
-    const b = buildBrief(audit({ mode: "fallback" }));
-    expect(b.caveats[0]).toMatch(/No photograph/);
+  it("leads with the undercount warning when the on-device detector did the reading", () => {
+    const b = buildBrief(audit({ mode: "on-device" }));
+    expect(b.caveats[0]).toMatch(/detector/);
+    expect(b.caveats[0]).toMatch(/low/);
   });
 
   it("flags a missing utility bill, and stops once one exists", () => {

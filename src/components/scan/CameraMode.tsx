@@ -26,8 +26,9 @@ import { FrameReader, KeyframeCollector, PixelReader, itemColor, recorderMime, t
 import { fmtMoney, fmtWatts } from "@/lib/energy";
 import { readTime, type GeoContext } from "@/lib/capture";
 import { nowLocal } from "@/lib/exif";
+import { useEngine } from "@/lib/engine";
 import type { WeeklySchedule } from "@/lib/schedule";
-import type { AnalysisResult, AuditSettings } from "@/lib/types";
+import type { AnalysisResult, AnalyzeError, AuditSettings } from "@/lib/types";
 import { Icon } from "./icons";
 
 /**
@@ -137,7 +138,9 @@ export function CameraMode({
   const [flash, setFlash] = useState(0);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [full, setFull] = useState(false);
-  const [aiOn, setAiOn] = useState(true);
+  // Whether still views go to the cloud model follows the one app-wide mode.
+  const engine = useEngine();
+  const aiOn = engine.mode === "enhanced";
   const [ai, setAi] = useState<AiStatus>({ kind: "moving" });
   const viewRef = useRef<HTMLDivElement>(null);
   // Null until mounted: the page is prerendered, and a build-time clock would not match.
@@ -186,29 +189,34 @@ export function CameraMode({
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: square.dataUrl, frame: square.frame, roomType: "unknown", source: "Live view", settings: settingsRef.current }),
+        body: JSON.stringify({ image: square.dataUrl, frame: square.frame, source: "Live view", settings: settingsRef.current }),
       });
-      if (!res.ok) throw new Error(`server ${res.status}`);
+      if (!res.ok) {
+        const err = (await res.json().catch(() => null)) as AnalyzeError | null;
+        if (gen !== genRef.current) return;
+        // Rate-limited or no engine: say so, and the on-device read stands.
+        a.unavailable =
+          err?.code === "rate-limited"
+            ? "Cloud limit reached · on-device only for now"
+            : err?.code === "no-engine"
+              ? "No cloud model configured · on-device only"
+              : "Cloud model did not answer · on-device only";
+        if (err?.code === "no-engine") a.cooldown = 60000;
+        return;
+      }
       const result = (await res.json()) as AnalysisResult;
       if (gen !== genRef.current) return;
-      if (result.mode === "live" || result.fallbackReason === "nothing-found") {
-        ok = true;
-        a.unavailable = null;
-        const items = result.mode === "live" ? observationsToItems(result.observations ?? [], settingsRef.current) : [];
-        const id = (viewsRef.current.at(-1)?.id ?? 0) + 1;
-        viewsRef.current = [...viewsRef.current, { id, sig, items }].slice(-MAX_VIEWS);
-      } else {
-        // Rate-limited or no engine configured: the on-device read stands.
-        a.unavailable = result.fallbackReason === "limited" ? "AI limit reached · on-device only for now" : "AI unavailable · on-device only";
-      }
+      ok = true;
+      a.unavailable = null;
+      const items = observationsToItems(result.observations ?? [], settingsRef.current);
+      const id = (viewsRef.current.at(-1)?.id ?? 0) + 1;
+      viewsRef.current = [...viewsRef.current, { id, sig, items }].slice(-MAX_VIEWS);
     } catch {
-      a.unavailable = "AI unreachable · on-device only";
+      a.unavailable = navigator.onLine ? "Cloud model unreachable · on-device only" : "Offline · on-device only";
     } finally {
       a.inFlight = false;
       a.lastDone = performance.now();
-      a.cooldown = nextCooldown(a.cooldown, ok);
-      // No engine configured at all: no point asking every few seconds.
-      if (!ok && a.unavailable?.startsWith("AI unavailable")) a.cooldown = 60000;
+      if (a.cooldown !== 60000) a.cooldown = nextCooldown(a.cooldown, ok);
     }
   }, []);
 
@@ -671,16 +679,15 @@ export function CameraMode({
           )}
           <div className="flex shrink-0 gap-2">
             {!recording && (
-              <button
-                onClick={() => setAiOn((o) => !o)}
-                aria-pressed={aiOn}
-                title={aiOn ? "The AI audits each view you hold still on. Tap for on-device only." : "On-device only. Tap to let the AI audit each view you hold still on."}
-                className={`h-10 rounded-full px-3 font-mono text-[0.7rem] font-semibold backdrop-blur-md transition-colors ${
-                  aiOn ? "bg-[#ffd84d] text-black" : "bg-black/45 text-white/80"
+              <span
+                title={engine.detail}
+                className={`flex h-10 items-center gap-1.5 rounded-full px-3 font-mono text-[0.68rem] font-semibold backdrop-blur-md ${
+                  engine.offline ? "bg-[#e5372a]/80 text-white" : aiOn ? "bg-[#ffd84d] text-black" : "bg-black/45 text-white/85"
                 }`}
               >
-                AI {aiOn ? "on" : "off"}
-              </button>
+                <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                {engine.offline ? "Offline" : aiOn ? "Enhanced" : "On-device"}
+              </span>
             )}
             {torch !== null && !recording && (
               <RoundButton label={torch ? "Torch off" : "Torch on"} onClick={toggleTorch} active={torch}>
@@ -881,15 +888,15 @@ function SummaryLine({ items, dark }: { items: readonly LiveItem[]; dark?: boole
 function aiLine(ai: AiStatus): string {
   switch (ai.kind) {
     case "off":
-      return "AI off · on-device read only";
+      return "On-device only · nothing is uploaded";
     case "moving":
-      return "Hold still on a view and the AI audits it";
+      return "Hold still on a view and the cloud model reads it";
     case "auditing":
-      return "AI auditing this view…";
+      return "Cloud model reading this view…";
     case "showing":
-      return ai.count ? `AI audit of this view · ${ai.count} found` : "AI audit of this view · nothing powered";
+      return ai.count ? `Cloud reading of this view · ${ai.count} found` : "Cloud reading of this view · nothing powered";
     case "waiting":
-      return `AI audits this view in ${ai.seconds}s`;
+      return `Cloud model reads this view in ${ai.seconds}s`;
     case "unavailable":
       return ai.text;
   }
@@ -926,8 +933,8 @@ function LiveRead({
     <div className="flex min-h-0 flex-1 flex-col">
       {!dark && (
         <div className="flex items-center justify-between">
-          <span className="mono-label">{ai.kind === "showing" ? "live read · AI audit" : "live read · on-device"}</span>
-          <span className="font-mono text-[0.66rem] text-dim">{ai.kind === "off" ? "nothing uploaded" : "still views go to the AI"}</span>
+          <span className="mono-label">{ai.kind === "showing" ? "live read · cloud model" : "live read · on-device"}</span>
+          <span className="font-mono text-[0.66rem] text-dim">{ai.kind === "off" ? "nothing uploaded" : "still views go to the cloud model"}</span>
         </div>
       )}
 
@@ -981,7 +988,7 @@ function LiveRead({
           {ai.kind === "showing"
             ? (() => {
                 const lit = items.filter((i) => i.kind === "light" && i.state !== "off").length;
-                return lit ? `AI: ${lit} light${lit > 1 ? "s" : ""} on in this view` : "AI: no lights on in this view";
+                return lit ? `Cloud model: ${lit} light${lit > 1 ? "s" : ""} on in this view` : "Cloud model: no lights on in this view";
               })()
             : scene
             ? scene.outdoor
@@ -1020,7 +1027,7 @@ function LiveRead({
 
       {!dark && (
         <p className="mt-3 rounded-xl bg-surface2 px-3 py-2.5 text-[0.76rem] leading-relaxed text-mist">
-          Hold the camera still on a view and the AI audits it - the same audit a photo gets.{" "}
+          {ai.kind !== "off" ? "Hold the camera still on a view and the cloud model reads it - the same reading a photo gets. " : "On-device only: boxes come from the detector in this browser and nothing is uploaded. "}
           <span className="font-medium text-fog">Photo</span> saves this view to your results.{" "}
           <span className="font-medium text-fog">Video</span> records a walkthrough and audits the whole clip.
         </p>

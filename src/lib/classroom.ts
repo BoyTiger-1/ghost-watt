@@ -17,6 +17,7 @@
 // for a class exercise and it means there is no student data to protect.
 
 import type { Offender } from "./types";
+import type { SavedMode } from "./storage";
 
 /** How long a session stays alive without anyone touching it. */
 export const SESSION_TTL_DAYS = 14;
@@ -61,8 +62,8 @@ export interface Contribution {
   contributor: string;
   /** ISO timestamp. */
   at: string;
-  /** Whether a vision model read it or it came from a room profile. */
-  mode: "live" | "fallback" | "mixed";
+  /** Whether the pictures were read in the browser or by the cloud model. */
+  mode: SavedMode;
   offenders: Offender[];
 }
 
@@ -99,7 +100,8 @@ export interface ClassTotals {
   recoverable: number;
   areaCount: number;
   contributorCount: number;
-  liveShare: number;
+  /** Share of contributions read by the cloud model rather than the on-device detector. */
+  enhancedShare: number;
 }
 
 /**
@@ -151,7 +153,7 @@ export function classTotals(contributions: Contribution[]): ClassTotals {
   const people = new Set(
     contributions.map((c) => c.contributor.trim().toLowerCase()).filter(Boolean),
   );
-  const live = contributions.filter((c) => c.mode !== "fallback").length;
+  const enhanced = contributions.filter((c) => c.mode === "enhanced").length;
 
   return {
     costPerYear: rows.reduce((s, r) => s + r.costPerYear, 0),
@@ -160,7 +162,7 @@ export function classTotals(contributions: Contribution[]): ClassTotals {
     recoverable: rows.reduce((s, r) => s + r.annualSavings, 0),
     areaCount: areas.size,
     contributorCount: people.size,
-    liveShare: contributions.length ? live / contributions.length : 0,
+    enhancedShare: contributions.length ? enhanced / contributions.length : 0,
   };
 }
 
@@ -290,8 +292,8 @@ export function sanitizeContribution(raw: unknown, id: string): Contribution | n
 
   if (offenders.length === 0) return null;
 
-  const mode =
-    c.mode === "live" || c.mode === "fallback" || c.mode === "mixed" ? c.mode : "fallback";
+  // An unrecognised mode is treated as the weaker reading, never the stronger one.
+  const mode: SavedMode = c.mode === "enhanced" || c.mode === "mixed" ? c.mode : "on-device";
 
   return {
     id,

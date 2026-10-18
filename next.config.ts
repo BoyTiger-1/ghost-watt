@@ -6,6 +6,9 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: import.meta.dirname,
   },
+  async redirects() {
+    return [{ source: "/class", destination: "/buildings", permanent: true }];
+  },
 };
 
 export default nextConfig;

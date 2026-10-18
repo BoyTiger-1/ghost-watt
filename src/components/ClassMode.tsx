@@ -61,21 +61,25 @@ export function ClassMode() {
   const [data, setData] = useState<MapResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [tier, setTier] = useState<{ durable: boolean } | null>(null);
+  const [tier, setTier] = useState<{ durable: boolean; local: boolean } | null>(null);
 
   // Remember the session across reloads - a student who backgrounds the tab
   // mid-audit should not have to find the code again.
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(CODE_KEY);
-      if (saved && isValidCode(saved)) setCode(saved);
-    } catch {
-      /* private mode; the feature still works, it just forgets */
-    }
+    // Deferred, so the first client render matches the prerendered page.
+    const t = setTimeout(() => {
+      try {
+        const saved = localStorage.getItem(CODE_KEY);
+        if (saved && isValidCode(saved)) setCode(saved);
+      } catch {
+        /* private mode; the feature still works, it just forgets */
+      }
+    }, 0);
     fetch("/api/class", { cache: "no-store" })
       .then((r) => r.json())
-      .then(setTier)
+      .then((t: { durable: boolean }) => setTier({ durable: t.durable, local: window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1" }))
       .catch(() => setTier(null));
+    return () => clearTimeout(t);
   }, []);
 
   const load = useCallback(async (c: string) => {
@@ -99,9 +103,12 @@ export function ClassMode() {
   // that thirty phones do not hammer the store.
   useEffect(() => {
     if (!code) return;
-    load(code);
+    const first = setTimeout(() => load(code), 0);
     const t = setInterval(() => load(code), POLL_MS);
-    return () => clearInterval(t);
+    return () => {
+      clearTimeout(first);
+      clearInterval(t);
+    };
   }, [code, load]);
 
   const open = (c: string) => {
@@ -170,6 +177,7 @@ export function ClassMode() {
         busy={busy}
         error={error}
         durable={tier?.durable ?? false}
+        usable={tier === null ? true : tier.durable || tier.local}
       />
     );
   }
@@ -196,6 +204,7 @@ function StartScreen({
   busy,
   error,
   durable,
+  usable,
 }: {
   buildingName: string;
   entry: string;
@@ -205,6 +214,8 @@ function StartScreen({
   busy: boolean;
   error: string | null;
   durable: boolean;
+  /** False on a deployment with no shared store: sessions would be lost between requests. */
+  usable: boolean;
 }) {
   return (
     <div className="space-y-5">
@@ -220,10 +231,10 @@ function StartScreen({
           </p>
           <button
             onClick={onCreate}
-            disabled={busy}
+            disabled={busy || !usable}
             className="mt-4 w-full rounded-full bg-fog px-4 py-3 text-sm font-medium text-ink transition-colors hover:bg-fog/85 disabled:opacity-50"
           >
-            {busy ? "Opening…" : "Open a session"}
+            {busy ? "Opening…" : usable ? "Open a session" : "Not available on this deployment"}
           </button>
         </section>
 
@@ -262,15 +273,14 @@ function StartScreen({
       )}
 
       {!durable && (
-        <section className="panel border-l-2 border-amber px-5 py-4 sm:px-6">
-          <div className="mono-label text-amber">single-machine mode</div>
+        <section className={`panel border-l-2 px-5 py-4 sm:px-6 ${usable ? "border-amber" : "border-ember"}`}>
+          <div className={`mono-label ${usable ? "text-amber" : "text-ember"}`}>{usable ? "single-machine mode" : "shared sessions are off here"}</div>
           <p className="mt-1.5 text-[0.84rem] leading-relaxed text-mist">
-            No shared store is configured, so sessions are held in this server&rsquo;s memory. That
-            is fine on a laptop and for a demo — everything works — but on a deployment that runs
-            more than one instance, two phones can land on two instances and never see each other.
+            {usable
+              ? "No shared store is configured, so sessions are held in this server's memory. That works on one machine; on a hosted deployment each request can land on a different instance and the session is lost."
+              : "This deployment has no shared store, so a session opened here would be lost between one request and the next. The building roll-up above works from scans saved on this device and needs no server."}{" "}
             Setting <code className="text-fog">UPSTASH_REDIS_REST_URL</code> and{" "}
-            <code className="text-fog">UPSTASH_REDIS_REST_TOKEN</code> fixes it; the free tier is
-            more than enough for a school.
+            <code className="text-fog">UPSTASH_REDIS_REST_TOKEN</code> turns shared sessions on; the free tier is enough for a school.
           </p>
         </section>
       )}
@@ -312,12 +322,15 @@ function LiveMap({
   // A quiet pulse when a new scan lands, so a room watching a projector notices.
   useEffect(() => {
     const n = data?.areas.length ?? 0;
-    if (n > prevAreas.current && prevAreas.current > 0) {
-      setFlash(true);
-      const t = setTimeout(() => setFlash(false), 1200);
-      return () => clearTimeout(t);
-    }
+    const grew = n > prevAreas.current && prevAreas.current > 0;
     prevAreas.current = n;
+    if (!grew) return;
+    const on = setTimeout(() => setFlash(true), 0);
+    const off = setTimeout(() => setFlash(false), 1200);
+    return () => {
+      clearTimeout(on);
+      clearTimeout(off);
+    };
   }, [data?.areas.length]);
 
   const copy = async () => {
@@ -342,7 +355,7 @@ function LiveMap({
             </div>
             <p className="mt-1.5 text-sm text-mist">
               {data?.buildingName ?? "Loading…"} · everyone types this on{" "}
-              <span className="text-fog">/class</span>
+              <span className="text-fog">/buildings</span>
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
@@ -378,7 +391,7 @@ function LiveMap({
         <section className="panel p-6 text-center">
           <h3 className="text-lg font-semibold text-fog">Waiting for the first scan</h3>
           <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-mist">
-            Send everyone to <span className="text-fog">/class</span>, have them enter{" "}
+            Send everyone to <span className="text-fog">/buildings</span>, have them enter{" "}
             <span className="font-mono text-lime">{code}</span>, then run a scan on{" "}
             <Link href="/scan" className="text-cyan underline-offset-4 hover:underline">
               the scanner
@@ -416,10 +429,10 @@ function LiveMap({
                 }`}
               />
               <Stat
-                label="read by a model"
-                value={`${Math.round(data.totals.liveShare * 100)}%`}
-                sub="rest estimated"
-                tint={data.totals.liveShare > 0.5 ? "var(--color-lime)" : "var(--color-amber)"}
+                label="read by the cloud model"
+                value={`${Math.round(data.totals.enhancedShare * 100)}%`}
+                sub="rest read on-device"
+                tint={data.totals.enhancedShare > 0.5 ? "var(--color-cyan)" : "var(--color-lime)"}
               />
             </div>
           </motion.section>
@@ -488,8 +501,8 @@ function LiveMap({
                         <div className="truncate text-sm text-fog">{a.area}</div>
                         <div className="truncate font-mono text-[0.66rem] text-dim">
                           {a.contributor} · {a.deviceCount} devices ·{" "}
-                          <span className={a.mode === "fallback" ? "text-amber" : "text-lime"}>
-                            {a.mode === "fallback" ? "estimated" : "live"}
+                          <span className={a.mode === "enhanced" ? "text-cyan" : "text-lime"}>
+                            {a.mode === "enhanced" ? "cloud" : "on-device"}
                           </span>
                         </div>
                       </div>

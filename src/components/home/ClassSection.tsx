@@ -59,7 +59,7 @@ export function ClassSection() {
             No accounts, no logins, no email addresses. Photos stay on the phone that took
             them; only the device counts travel.
           </p>
-          <Link href="/class" className="group mt-8 inline-flex items-center gap-2 text-[0.95rem] text-graphite">
+          <Link href="/buildings" className="group mt-8 inline-flex items-center gap-2 text-[0.95rem] text-graphite">
             <span className="underline decoration-graphite/25 underline-offset-[6px] group-hover:decoration-graphite">
               Start a class session
             </span>

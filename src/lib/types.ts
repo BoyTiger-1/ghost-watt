@@ -32,8 +32,28 @@ export interface DeviceObservation {
   tech?: string;
 }
 
-/** How a given offender was produced. Surfaced to the user as a badge. */
-export type AnalysisMode = "live" | "fallback";
+/**
+ * Which path read the picture. "on-device": the small detector in the browser,
+ * nothing uploaded. "enhanced": the frame was sent to the vision-language model
+ * behind /api/analyze. There is no third, invented path.
+ */
+export type AnalysisMode = "enhanced" | "on-device";
+
+/** Why an analysis could not be done. Shown to the user as a plain error. */
+export type AnalyzeErrorCode =
+  | "bad-request"
+  | "too-large"
+  | "rate-limited"
+  | "no-engine"
+  | "engine-failed"
+  | "unparseable";
+
+export interface AnalyzeError {
+  error: string;
+  code: AnalyzeErrorCode;
+  /** Seconds until a rate limit lifts, when that is the cause. */
+  retryAfterSeconds?: number;
+}
 
 /** Coarse device grouping, used for filtering and the load-mix breakdown. */
 export type DeviceGroup =
@@ -181,14 +201,8 @@ export interface AnalysisResult {
    * without asking the model again.
    */
   observations?: (DeviceObservation & { categoryId: string })[];
-  /** Present when the live path failed and we fell back. */
+  /** A true sentence about a limitation of this result, e.g. that nothing powered was recognised. */
   notice?: string;
-  /**
-   * Why this is a fallback, for code that has to react rather than read: the
-   * scanner shows "nothing-found" as an empty reading rather than a guess, and
-   * swaps "limited" and "unavailable" for the on-device reading when it has one.
-   */
-  fallbackReason?: "requested" | "limited" | "unavailable" | "nothing-found";
   /**
    * Devices the model located but judged switched off. They cost nothing, so
    * they are not offenders, but drawing them on the photo shows the scan looked
