@@ -135,10 +135,13 @@ export async function lookupUtility(lat: number, lon: number): Promise<RateLooku
   const demo = key === "DEMO_KEY";
 
   try {
-    const url =
-      `https://developer.nrel.gov/api/utility_rates/v3.json?api_key=${key}` +
-      `&lat=${lat}&lon=${lon}`;
-    const json = (await getJson(url)) as {
+    // NREL became the National Laboratory of the Rockies in 2025 and its API moved
+    // to developer.nlr.gov; the old host stopped answering, which silently turned
+    // every utility lookup into the state average. Old host kept as a fallback.
+    const path = `/api/utility_rates/v3.json?api_key=${key}&lat=${lat}&lon=${lon}`;
+    const json = (await getJson(`https://developer.nlr.gov${path}`).catch(() =>
+      getJson(`https://developer.nrel.gov${path}`),
+    )) as {
       outputs?: { commercial?: number; utility_name?: string };
       errors?: string[];
     };

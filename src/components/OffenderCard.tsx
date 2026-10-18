@@ -7,6 +7,8 @@ import { ModeBadge } from "./ModeBadge";
 import { offenderAnchor } from "./DetectionView";
 import { fmtCo2, fmtKwh, fmtMoney, fmtMoneyFull, fmtPayback, fmtWatts } from "@/lib/energy";
 import type { DeviceAdjust } from "@/lib/capture";
+import { assessEfficiency } from "@/lib/efficiency";
+import { GRADE_COLOR } from "./EfficiencyPanel";
 import type { AnalysisMode, Offender } from "@/lib/types";
 
 const STATE_LABEL: Record<Offender["state"], string> = {
@@ -50,6 +52,8 @@ export function OffenderCard({
 }) {
   const o = offender;
   const [editing, setEditing] = useState(false);
+  // Priced at this line's own rate: its capture may sit on a different tariff.
+  const eff = assessEfficiency(o, { ratePerKwh: o.kwhPerYear > 0 ? o.costPerYear / o.kwhPerYear : 0.15 });
   const perUnit = o.count > 0 ? o.totalWatts / o.count : o.perUnitWatts;
   const basis =
     o.basis === "measured"
@@ -126,7 +130,17 @@ export function OffenderCard({
           <div className="font-mono text-2xl font-bold text-fog sm:text-3xl">
             {fmtMoneyFull(o.costPerYear)}
           </div>
-          <div className="mono-label">per year</div>
+          <div className="mono-label" title="Priced for every hour the space is empty">
+            a year if left on
+          </div>
+          {o.typicalCostPerYear !== undefined && (
+            <div
+              className="mt-1 font-mono text-[0.78rem] text-mist"
+              title={`Typical use: ${o.typicalHoursPerDay?.toFixed(1)} h/day in use, standby otherwise. ${o.usageBasis ?? ""}`}
+            >
+              {fmtMoney(o.typicalCostPerYear)}/yr typical
+            </div>
+          )}
         </div>
       </div>
 
@@ -143,9 +157,31 @@ export function OffenderCard({
 
       {/* stat strip */}
       <div className="mt-4 grid grid-cols-3 divide-x divide-line border border-line bg-surface2/50">
-        <Stat label="wasted / yr" value={fmtKwh(o.kwhPerYear)} />
+        <Stat label="energy if left on" value={fmtKwh(o.kwhPerYear)} />
         <Stat label="CO₂ / yr" value={fmtCo2(o.co2KgPerYear)} />
         <Stat label="confidence" value={o.confidence} />
+      </div>
+
+      {/* efficiency: bad hardware, or good hardware used badly? */}
+      <div className="mt-4 flex gap-3 rounded-xl border border-line bg-surface2/40 p-3">
+        <span
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-lg font-mono text-lg font-bold text-white"
+          style={{ background: GRADE_COLOR[eff.grade] }}
+          aria-label={`Efficiency grade ${eff.grade}`}
+        >
+          {eff.grade}
+        </span>
+        <div className="min-w-0">
+          <div className="text-[0.86rem] font-medium text-fog">{eff.headline}</div>
+          <p className="mt-0.5 text-[0.8rem] leading-relaxed text-mist">{eff.detail}</p>
+          {o.typicalHoursPerDay !== undefined && (
+            <p className="mt-1 text-[0.72rem] text-dim">
+              Typical use here: {o.typicalHoursPerDay < 1 ? `${Math.round(o.typicalHoursPerDay * 60)} min` : `${o.typicalHoursPerDay.toFixed(1)} h`}/day
+              {o.usageBasis ? ` · ${o.usageBasis}` : ""}
+              {eff.assumed ? " · graded on a typical unit" : ""}
+            </p>
+          )}
+        </div>
       </div>
 
       {/* recommended fix */}

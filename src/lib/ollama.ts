@@ -71,7 +71,7 @@ Also give "boxes": where each unit is, as [x1, y1, x2, y2] pixel coordinates in 
 
   const example = video
     ? `[{"device":"computer monitor","count":24,"state":"on","watts":22,"evidence":"screens lit, login page"},{"device":"overhead lights","count":12,"state":"on","watts":35,"evidence":"LED panels lit"}]`
-    : `[{"device":"computer monitor","count":12,"state":"on","watts":22,"evidence":"screens lit, 24-inch LED","boxes":[[112,388,201,470],[236,392,318,468]]},{"device":"overhead lights","count":6,"state":"on","watts":35,"evidence":"LED troffers lit","boxes":[[300,20,420,60]]},{"device":"projector","count":1,"state":"standby","watts":250,"evidence":"amber standby light","boxes":[[480,90,560,140]]}]`;
+    : `[{"device":"computer monitor","count":12,"state":"on","watts":22,"technology":"LED","evidence":"screens lit, 24-inch LED","boxes":[[112,388,201,470],[236,392,318,468]]},{"device":"overhead lights","count":6,"state":"on","watts":35,"evidence":"LED troffers lit","boxes":[[300,20,420,60]]},{"device":"projector","count":1,"state":"standby","watts":250,"evidence":"amber standby light","boxes":[[480,90,560,140]]}]`;
 
   return `You are auditing ${video ? "a video walkthrough" : "a photo"} of a room in a school or office, ideally taken after hours. Your job is to spot electrical devices and appliances that are left running or drawing power, and to judge how much each draws.
 
@@ -82,6 +82,7 @@ List every electrical device or appliance you can see. For each give:
 - "count": how many.
 - "state": ON (lit, running, display showing something), STANDBY (dark but with an indicator light or clock), or OFF.
 - "watts": your best estimate of ONE unit's power draw in watts while running, judged from its visible size, age and technology. Reference points: ${WATT_GUIDE}.
+- "technology": the kind of unit if you can tell, e.g. "LED", "halogen", "incandescent", "CFL", "T8 fluorescent", "T12 fluorescent", "CRT", "CCFL LCD", "plasma", "lamp projector", "laser projector". Omit if unsure.
 - "evidence": a few words on what you saw that decided the state and wattage.
 
 Counting rules - these are where audits go wrong:

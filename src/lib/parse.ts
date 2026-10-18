@@ -95,6 +95,8 @@ function fromJson(arr: unknown[], frame: Frame): CategorizedObservation[] {
     const boxes = cleanBoxes(rec, frame);
     const watts = Number(rec.watts ?? rec.wattage ?? rec.power_w ?? rec.power);
     const evidence = typeof rec.evidence === "string" ? rec.evidence.trim().slice(0, 120) : "";
+    const techRaw = rec.technology ?? rec.tech ?? rec.type;
+    const tech = typeof techRaw === "string" ? techRaw.trim().slice(0, 40) : "";
     out.push({
       device: label,
       // A model that boxed more units than it counted has told us its count was low.
@@ -104,6 +106,7 @@ function fromJson(arr: unknown[], frame: Frame): CategorizedObservation[] {
       ...(boxes.length ? { boxes } : {}),
       ...(Number.isFinite(watts) && watts > 0 ? { wattsHint: watts } : {}),
       ...(evidence ? { evidence } : {}),
+      ...(tech ? { tech } : {}),
     });
   }
   return out;

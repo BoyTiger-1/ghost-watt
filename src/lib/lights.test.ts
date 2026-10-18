@@ -145,6 +145,37 @@ describe("findLightSources, live: a camera pointed around", () => {
     expect(live(s)).toHaveLength(1);
   });
 
+  /** A light with a soft radial falloff into a tinted glow, as a phone records one. */
+  const radial = (sc: ReturnType<typeof scene>, cx: number, cy: number, rad: number, core: number[], tint: number[]) => {
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++) {
+        const d = Math.hypot((x / W - cx) * W, (y / H - cy) * H) / (rad * W);
+        if (d >= 3) continue;
+        const p = (y * W + x) * 4;
+        const c = d < 1 ? core : tint;
+        const t = d < 1 ? 1 : Math.max(0, 1 - (d - 1) / 2) * 0.85;
+        for (let k = 0; k < 3; k++) sc.rgba[p + k] = Math.round(sc.rgba[p + k] + (c[k] - sc.rgba[p + k]) * t);
+      }
+  };
+
+  it("finds a cool-white LED, whose glow a phone renders faintly blue, on a white ceiling", () => {
+    const s = scene([185, 190, 200]);
+    radial(s, 0.5, 0.3, 0.06, [255, 255, 255], [200, 220, 255]);
+    expect(live(s)).toHaveLength(1);
+  });
+
+  it("finds a frosted dome the camera keeps just under clipping", () => {
+    const s = scene([200, 200, 198]);
+    radial(s, 0.5, 0.35, 0.1, [246, 247, 248], [225, 228, 232]);
+    expect(live(s)).toHaveLength(1);
+  });
+
+  it("ignores a smooth, softly lit patch of wall", () => {
+    const s = scene([150, 145, 140]);
+    radial(s, 0.2, 0.35, 0.09, [238, 236, 232], [200, 196, 190]);
+    expect(live(s)).toHaveLength(0);
+  });
+
   it("sees nothing pointed outdoors: sunlit cars under a blue sky", () => {
     const s = scene([110, 112, 115]);
     s.paint([0, 0, 1, 0.4], SKY);

@@ -218,7 +218,9 @@ export function findLightSources(luma: Uint8Array, w: number, h: number, opts: L
         // blue; blue paint and artwork are deeply saturated. Neither counts.
         const mx = Math.max(R0, G0, B0);
         const sat = mx > 0 ? (mx - Math.min(R0, G0, B0)) / mx : 0;
-        const sky = luma[p] > 130 && B0 > 150 && B0 - R0 > 35 && B0 - G0 > 10 && sat < 0.6 ? 1 : 0;
+        // A cool-white LED's glow is faintly blue too (sat ~0.2); sky is properly
+        // saturated, and never clipped.
+        const sky = luma[p] > 130 && luma[p] < 242 && B0 > 150 && B0 - R0 > 40 && B0 - G0 > 10 && sat >= 0.25 && sat < 0.65 ? 1 : 0;
         row += sky;
         if (y < topRows) skyTop += sky;
         skyIntegral[(y + 1) * W1 + x + 1] = skyIntegral[y * W1 + x + 1] + row;
@@ -257,6 +259,8 @@ export function findLightSources(luma: Uint8Array, w: number, h: number, opts: L
     };
   };
   const near = Math.max(1, Math.round(w * 0.004));
+  /** What counts as clipped: a phone's live preview tone-maps highlights to ~245. */
+  const clipAt = live ? 244 : 250;
   const far = Math.max(3, Math.round(w * 0.02));
 
   const stack: number[] = [];
@@ -305,7 +309,9 @@ export function findLightSources(luma: Uint8Array, w: number, h: number, opts: L
       const i = y * w + x;
       const v = luma[i];
       const lift = liftOf(x, y, v);
-      if ((v >= 205 && lift >= 30) || (v >= 248 && lift >= 16)) cand[i] = 1;
+      // Live: a phone keeps a frosted dome or diffuser just under clipping (~245),
+      // so "bright" starts a little lower than in a still.
+      if ((v >= 205 && lift >= 30) || (v >= (live ? 240 : 248) && lift >= (live ? 12 : 16))) cand[i] = 1;
     }
   }
 
@@ -402,9 +408,10 @@ export function findLightSources(luma: Uint8Array, w: number, h: number, opts: L
       const rest = surfaceArea[c.surface] - c.count;
       const restMean = rest > 0 ? (surfaceSum[c.surface] - c.sum) / rest : mean;
       contrast = Math.min(contrast, mean - restMean);
-      if (contrast < 16) { drop("no brighter than the bright surface it sits in"); continue; }
+      if (contrast < (live ? 10 : 16)) { drop("no brighter than the bright surface it sits in"); continue; }
       // A white cloud in a blue sky outshines its surroundings too; the blue gives it away.
-      if (rgba && rest > 0 && (surfaceBlue[c.surface] - c.blue) / rest > 15) { drop("cloud in a blue sky"); continue; }
+      // (Live checks real sky around a light instead: a cool-white LED tints its ceiling blue.)
+      if (!live && rgba && rest > 0 && (surfaceBlue[c.surface] - c.blue) / rest > 15) { drop("cloud in a blue sky"); continue; }
     }
     // An emitter, not a bright surface. A lit fixture has a clipped core and its
     // light bleeds into the surroundings - brightness falls off smoothly. A white
@@ -423,14 +430,19 @@ export function findLightSources(luma: Uint8Array, w: number, h: number, opts: L
     for (let y = c.y1; y <= c.y2; y++) {
       for (let x = c.x1; x <= c.x2; x++) {
         const v = luma[y * w + x];
-        if (v >= 250) clipped++;
+        if (v >= clipAt) clipped++;
         sq += v * v;
       }
     }
     const clip = clipped / core.n;
     const std = Math.sqrt(Math.max(0, sq / core.n - boxMean * boxMean));
     // A fixture fills its own box with light; a thin streak or a reflection in glass does not.
-    if (boxMean < 170) { drop("box too dark to be a fixture"); continue; }
+    if (boxMean < (live ? 190 : 170)) { drop("box too dark to be a fixture"); continue; }
+    // Live: a sizeable smooth bright shape has to be mostly near-clipped to be a
+    // diffuser or panel; a lit patch of wall glows but never gets there.
+    // A lamp seen close up is not smooth - bright tubes or a filament against its
+    // reflector - so the test applies to smooth shapes only.
+    if (live && area > 0.004 && clip < 0.3 && std < 28) { drop("large, smooth, not clipped: a lit surface"); continue; }
     // Perfectly flat and not quite clipped: a wall panel catching the light, not a lamp.
     if (std < 6 && clip < 0.2) { drop("flat patch, not clipped"); continue; }
     // A far downlight is a few clipped pixels with no room to show a glow; anything
@@ -440,7 +452,7 @@ export function findLightSources(luma: Uint8Array, w: number, h: number, opts: L
     // hard edge and no room to bleed. A white grille or wall never clips like that;
     // a white page on a screen does, which is why lights inside screens are dropped.
     const clippedSolid = live && area >= 0.003 && clip >= 0.45 && boxMean >= 190;
-    const glows = c.peak >= 248 && (bleed >= 0.2 || farSpot || clippedSolid);
+    const glows = c.peak >= (live ? 240 : 248) && (bleed >= 0.2 || farSpot || clippedSolid);
     if (!glows) { drop(`no glow: peak=${c.peak} bleed=${bleed.toFixed(2)} clip=${clip.toFixed(2)} mean=${boxMean.toFixed(0)} area=${area.toFixed(4)}`); continue; }
     kept.push({ ...c, contrast });
   }

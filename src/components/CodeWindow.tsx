@@ -144,7 +144,7 @@ function highlight(line: string) {
 export const ENERGY_TS: CodeFile = {
   name: "energy.ts",
   path: "src/lib",
-  startLine: 83,
+  startLine: 84,
   code: `  const count = Math.max(1, Math.round(obs.count || 1));
   const unit = estimateUnitWatts(cat, obs.state, { aiWatts: obs.wattsHint, userWatts: obs.userWatts });
   const perUnitWatts = unit.mid;
@@ -196,7 +196,7 @@ export const DEVICES_TS: CodeFile = {
 export const ENERGY_TS_SHORT: CodeFile = {
   name: "energy.ts",
   path: "src/lib",
-  startLine: 90,
+  startLine: 91,
   code: `  const hours = hoursKnown ? Math.min(8760, obs.hoursPerYear!) : settings.unoccupiedHoursPerYear;
   const kwhPerYear = (totalWatts / 1000) * hours;
   const costPerYear = kwhPerYear * settings.ratePerKwh;
