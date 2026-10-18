@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Tracker, type Track } from "@/lib/live";
-import { getDetector, toPixelDetections } from "@/lib/detector";
+import { COCO_MAP, Tracker, type Track } from "@/lib/live";
+import { classifyRegion, getClassifier, getDetector, padBox, toPixelDetections } from "@/lib/detector";
+import { CENTER_ROI, CenterLamp, Verifier, judge, lampScore, withLamps } from "@/lib/verify";
 import { readItems, peopleIn, type LiveItem } from "@/lib/ondevice";
-import { LightTracker, readScene, type SceneRead } from "@/lib/scene";
+import { LightTracker, readScene, regionSaturation, type SceneRead } from "@/lib/scene";
 import { FrameReader, KeyframeCollector, itemColor, recorderMime, toJpeg, type Keyframe } from "@/lib/media";
 import { fmtMoney, fmtWatts } from "@/lib/energy";
 import { readTime, type GeoContext } from "@/lib/capture";
@@ -16,7 +17,8 @@ import { Icon } from "./icons";
 
 /**
  * Bright things inside these are not lights: glare on a car's paint or windscreen,
- * a white page or a bright UI on a screen.
+ * a white page or a bright UI on a screen. (A "screen" the classifier calls a lamp
+ * is not one, and does not block.)
  */
 const LIGHT_BLOCKERS = new Set(["car", "truck", "bus", "motorcycle", "train", "boat", "tv", "laptop", "cell phone"]);
 
@@ -211,6 +213,15 @@ export function CameraMode({
       .then((d) => (det = d.detector))
       .catch(() => {});
     // 256 across: enough to see a downlight as a shape, cheap enough for every few frames.
+    // The second opinion: checks the detector's boxes and finds lamps (lib/verify.ts).
+    let classifier: Awaited<ReturnType<typeof getClassifier>> | null = null;
+    getClassifier()
+      .then((c) => (classifier = c))
+      .catch(() => {});
+    const verifier = new Verifier();
+    const centerLamp = new CenterLamp();
+    let lastClassify = 0;
+    let classifyTurn = 0;
     const reader = new FrameReader(256);
     const lightTracker = new LightTracker();
     let luma: ReturnType<FrameReader["read"]> = null;
@@ -246,25 +257,62 @@ export function CameraMode({
           // A dropped frame is not worth a visible error.
         }
       }
+      const frac = (t: Track) =>
+        [t.box.x / sw, t.box.y / sh, (t.box.x + t.box.w) / sw, (t.box.y + t.box.h) / sh] as [number, number, number, number];
+      verifier.prune(trackerRef.current.ids());
+
+      // One classifier look every ~180 ms, alternating between the track most in
+      // need of a check and the middle of the frame (is the camera on a lamp?).
+      if (classifier && now - lastClassify > 180) {
+        lastClassify = now;
+        const job = verifier.due(tracks, now);
+        try {
+          if (job && classifyTurn++ % 2 === 0) {
+            const box = frac(job);
+            let verdict = judge(job.cls, classifyRegion(classifier, v, padBox(box)));
+            // A fridge is white, steel or black; a wooden door or cupboard is not.
+            if (job.cls === "refrigerator" && verdict !== "lamp" && luma?.rgba && regionSaturation(luma.rgba, luma.w, luma.h, box) > 0.33)
+              verdict = "reject";
+            verifier.record(job.id, verdict, now);
+          } else {
+            centerLamp.update(lampScore(classifyRegion(classifier, v, CENTER_ROI)));
+          }
+        } catch {
+          // A failed classification is just a missed vote.
+        }
+      }
+      const ready = classifier !== null;
+      const lampTracks = tracks.filter((t) => verifier.status(t.id, t.cls, t.score, ready) === "lamp");
+      const shown = tracks.filter((t) => verifier.status(t.id, t.cls, t.score, ready) === "show");
+
       if (now - lastScene > 220) {
         lastScene = now;
         luma = reader.read(v);
         if (luma) {
           const scene = readScene(luma.data, luma.w, luma.h, luma.rgba, "live");
-          const blockers = tracks
-            .filter((t) => LIGHT_BLOCKERS.has(t.cls))
-            .map((t) => [t.box.x / sw, t.box.y / sh, (t.box.x + t.box.w) / sw, (t.box.y + t.box.h) / sh]);
+          const blockers = [
+            ...shown.filter((t) => LIGHT_BLOCKERS.has(t.cls)),
+            // Vehicles are never drawn, but glare on them still is not a lamp.
+            ...tracks.filter((t) => LIGHT_BLOCKERS.has(t.cls) && COCO_MAP[t.cls]?.kind === "other"),
+          ].map(frac);
           const candidates = scene.lights.filter((l) => {
             const cx = (l.box[0] + l.box[2]) / 2;
             const cy = (l.box[1] + l.box[3]) / 2;
             return !blockers.some((b) => cx >= b[0] && cx <= b[2] && cy >= b[1] && cy <= b[3]);
           });
           // Only lights that hold steady across reads: no blinking LEDs, no passing glints.
-          const lights = lightTracker.update(candidates);
+          let lights = lightTracker.update(candidates);
+          // Lamps the classifier recognised - mislabelled detections, or what the
+          // camera is pointed at - where the pixels show them lit.
+          if (!scene.outdoor) {
+            const lamps: { box: number[]; confidence: number; min?: number }[] = lampTracks.map((t) => ({ box: frac(t), confidence: 0.75 }));
+            if (centerLamp.confidence) lamps.push({ box: CENTER_ROI, confidence: 0.5 + centerLamp.confidence / 2, min: 240 });
+            lights = withLamps(lights, lamps, luma);
+          }
           sceneRef.current = { ...scene, lights, lighting: lights.length ? "on" : scene.dark ? "off" : "unclear" };
         }
       }
-      const dets = tracks.map((t) => ({
+      const dets = shown.map((t) => ({
         id: t.id,
         cls: t.cls,
         score: t.score,

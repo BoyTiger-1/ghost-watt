@@ -29,7 +29,8 @@ import { occupiedHours, unoccupiedHours, SCHEDULE_BY_ID, SCHEDULE_PRESETS } from
 import { contextForBuildingType, type UsageContext } from "@/lib/usage";
 import { EfficiencyPanel } from "./EfficiencyPanel";
 import { nowLocal } from "@/lib/exif";
-import { detectStill } from "@/lib/detector";
+import { detectStill, verifyStill } from "@/lib/detector";
+import { withLamps } from "@/lib/verify";
 import { readScene } from "@/lib/scene";
 import { itemsToObservations, peopleIn, readItems, type LiveItem } from "@/lib/ondevice";
 import { FrameReader, annotateFrame, baseName, loadImage, readPhotoFile, videoFileKeyframes } from "@/lib/media";
@@ -85,10 +86,15 @@ function locate(lat: number, lon: number, sector: Sector): Promise<GeoContext | 
 /** What the on-device detector reads in one still image. */
 async function readStill(dataUrl: string, settings: AuditSettings) {
   const img = await loadImage(dataUrl);
-  const dets = await detectStill(img).catch(() => []);
+  const raw = await detectStill(img).catch(() => []);
+  const { dets, lamps } = await verifyStill(img, raw).catch(() => ({ dets: raw, lamps: [] }));
   // A still can afford a finer read than live video: far downlights are a few pixels at 256.
   const luma = new FrameReader(640).read(img);
   const scene = luma ? readScene(luma.data, luma.w, luma.h, luma.rgba) : null;
+  if (scene && luma && lamps.length) {
+    scene.lights = withLamps(scene.lights, lamps.map((box) => ({ box, confidence: 0.7 })), luma);
+    if (scene.lights.length) scene.lighting = "on";
+  }
   const items = readItems(dets, scene?.lights ?? [], settings, luma ?? undefined);
   return { items, scene };
 }

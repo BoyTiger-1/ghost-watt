@@ -51,12 +51,27 @@ describe("Tracker", () => {
     expect(a.box.x).toBeLessThan(20);
   });
 
-  it("does not match across classes", () => {
+  it("keeps one track when the detector changes its mind about a label, and votes on it", () => {
     const t = new Tracker();
     t.update([det("tv", 0)]);
     t.update([det("laptop", 0)]);
     const v = t.update([det("laptop", 0)]);
-    expect(v.map((x) => x.cls)).toEqual(["laptop"]);
+    expect(v.map((x) => [x.id, x.cls])).toEqual([[1, "laptop"]]);
+  });
+
+  it("never relabels a person as a device", () => {
+    const t = new Tracker();
+    t.update([det("person", 0)]);
+    t.update([det("tv", 0)]);
+    const v = t.update([det("tv", 0), det("person", 0)]);
+    expect(v.map((x) => x.cls).sort()).toEqual(["person", "tv"]);
+  });
+
+  it("holds back an easily invented appliance for an extra frame", () => {
+    const t = new Tracker();
+    t.update([det("refrigerator", 0)]);
+    expect(t.update([det("refrigerator", 0)])).toHaveLength(0);
+    expect(t.update([det("refrigerator", 0)])).toHaveLength(1);
   });
 
   it("gives two neighbouring screens stable, distinct ids", () => {

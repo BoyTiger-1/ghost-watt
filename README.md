@@ -53,6 +53,10 @@ The scanner has two modes, and opens in **Camera**.
   light fixture gets a box with its state, wattage and yearly cost drawn over the picture, and
   the side panel (a pull-up sheet on a phone) totals what's in view. Screens are judged lit or
   dark from their own pixels; lit fixtures are found as small bright blobs near the ceiling.
+  A second on-device model, an ImageNet classifier (EfficientNet-Lite0), checks each box:
+  an appliance such as a fridge is only drawn once the classifier agrees (so a door is not
+  a fridge), and a lamp the camera is pointed at is found even when it is a lit shade or a
+  ring the blob finder cannot see.
   Tap **Photo** to run the full AI audit on that frame. Tap **Video** to record a walkthrough:
   labels hide while you film, and when you stop, the sharpest frame from each distinct view
   is picked and the whole clip is audited at once, with each device counted once.
