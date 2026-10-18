@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { describeImageAny } from "@/lib/vision";
+import { describeImagesAny } from "@/lib/vision";
+import { buildVisionPrompt, type PromptContext } from "@/lib/ollama";
 import { fallbackObservations, parseModelOutput, ROOM_TYPE_BY_ID } from "@/lib/parse";
 import { rankObservations } from "@/lib/energy";
 import { CATALOG_BY_ID } from "@/lib/devices";
@@ -35,6 +36,16 @@ function sanitizeSettings(input: unknown): AuditSettings {
   };
 }
 
+/** Short strings only: this text goes into a prompt. */
+function sanitizeContext(input: unknown): PromptContext {
+  const c = (input ?? {}) as Record<string, unknown>;
+  const text = (v: unknown, max: number) => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : undefined);
+  const hints = Array.isArray(c.hints)
+    ? c.hints.map((h) => text(h, 80)).filter((h): h is string => !!h).slice(0, 6)
+    : undefined;
+  return { when: text(c.when, 100), place: text(c.place, 80), note: text(c.note, 200), hints };
+}
+
 export async function POST(req: Request) {
   let body: {
     image?: string;
@@ -44,6 +55,10 @@ export async function POST(req: Request) {
     forceFallback?: boolean;
     /** How much of the 1000 x 1000 analysis square is photo. See lib/boxes.ts. */
     frame?: unknown;
+    /** Keyframes of one video walkthrough, analysed together and counted once. */
+    images?: unknown;
+    /** What the client knows about the capture: time, place, a note, on-device hints. */
+    context?: unknown;
   };
   try {
     body = await req.json();
@@ -67,8 +82,13 @@ export async function POST(req: Request) {
     };
   };
 
+  const frames = Array.isArray(body.images)
+    ? body.images.filter((f): f is string => typeof f === "string" && f.startsWith("data:image/")).slice(0, 8)
+    : [];
+  const images = frames.length ? frames : body.image ? [body.image] : [];
+
   // Explicit fallback (no photo, or user asked for it).
-  if (body.forceFallback || !body.image) {
+  if (body.forceFallback || !images.length) {
     return NextResponse.json(
       buildFallback("Estimated from a typical room profile - no live model reading.", "requested"),
     );
@@ -77,7 +97,7 @@ export async function POST(req: Request) {
   // Everything above this line is free - local arithmetic, no outbound call. Below
   // this line costs money at a metered provider, so the ceiling belongs exactly
   // here: a request that trips it should still leave with a usable estimate.
-  if (body.image.length > MAX_IMAGE_CHARS) {
+  if (images.reduce((s, i) => s + i.length, 0) > MAX_IMAGE_CHARS) {
     return NextResponse.json(
       { error: "That image is too large. Photos are downscaled before upload; this one was not." },
       { status: 413 },
@@ -111,8 +131,11 @@ export async function POST(req: Request) {
 
   // Live path: whichever vision engine is available does perception, and only
   // perception. Every number below comes out of the deterministic pipeline.
-  const frame = sanitizeFrame(body.frame);
-  const vision = await describeImageAny(body.image, frame);
+  // Video frames carry no boxes, so they are not padded and have no frame.
+  const video = images.length > 1;
+  const frame = video ? undefined : sanitizeFrame(body.frame);
+  const prompt = buildVisionPrompt(frame, { ...sanitizeContext(body.context), kind: video ? "video" : "photo", frames: images.length });
+  const vision = await describeImagesAny(images, prompt);
 
   if (!vision.ok) {
     return NextResponse.json(
@@ -120,7 +143,8 @@ export async function POST(req: Request) {
     );
   }
 
-  const observations = parseModelOutput(vision.text, frame);
+  // A box from a multi-frame reply has no single photo to land on.
+  const observations = parseModelOutput(vision.text, frame).map((o) => (video ? { ...o, boxes: undefined } : o));
 
   if (observations.length === 0) {
     return NextResponse.json(
@@ -133,6 +157,7 @@ export async function POST(req: Request) {
     engine: `${vision.provider} · ${vision.model}`,
     source,
     offenders: rankObservations(observations, settings, source),
+    observations,
     raw: vision.text,
   };
   const sightings = observations

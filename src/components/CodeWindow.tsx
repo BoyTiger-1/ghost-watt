@@ -144,20 +144,21 @@ function highlight(line: string) {
 export const ENERGY_TS: CodeFile = {
   name: "energy.ts",
   path: "src/lib",
-  startLine: 77,
+  startLine: 83,
   code: `  const count = Math.max(1, Math.round(obs.count || 1));
-  const perUnitWatts = effectiveWatts(cat, obs.state);
+  const unit = estimateUnitWatts(cat, obs.state, { aiWatts: obs.wattsHint, userWatts: obs.userWatts });
+  const perUnitWatts = unit.mid;
   const totalWatts = perUnitWatts * count;
   if (totalWatts <= 0) return null;
 
-  const hours = settings.unoccupiedHoursPerYear;
+  const hoursKnown = obs.hoursPerYear !== undefined && Number.isFinite(obs.hoursPerYear) && obs.hoursPerYear >= 0;
+  const hours = hoursKnown ? Math.min(8760, obs.hoursPerYear!) : settings.unoccupiedHoursPerYear;
   const kwhPerYear = (totalWatts / 1000) * hours;
   const costPerYear = kwhPerYear * settings.ratePerKwh;
   const co2KgPerYear = kwhPerYear * settings.co2PerKwh;
 
-  const band = effectiveWattsRange(cat, obs.state);
-  const costLowPerYear = ((band.low * count) / 1000) * hours * settings.ratePerKwh;
-  const costHighPerYear = ((band.high * count) / 1000) * hours * settings.ratePerKwh;
+  const costLowPerYear = ((unit.low * count) / 1000) * hours * settings.ratePerKwh;
+  const costHighPerYear = ((unit.high * count) / 1000) * hours * settings.ratePerKwh;
 
   const annualSavings = costPerYear * cat.action.savingsFraction;
   const fixCost = cat.action.cost;
@@ -195,8 +196,8 @@ export const DEVICES_TS: CodeFile = {
 export const ENERGY_TS_SHORT: CodeFile = {
   name: "energy.ts",
   path: "src/lib",
-  startLine: 82,
-  code: `  const hours = settings.unoccupiedHoursPerYear;
+  startLine: 90,
+  code: `  const hours = hoursKnown ? Math.min(8760, obs.hoursPerYear!) : settings.unoccupiedHoursPerYear;
   const kwhPerYear = (totalWatts / 1000) * hours;
   const costPerYear = kwhPerYear * settings.ratePerKwh;
   const co2KgPerYear = kwhPerYear * settings.co2PerKwh;`,

@@ -10,6 +10,25 @@ import { FULL_FRAME, SQUARE, type Frame } from "./boxes";
 const DEVICE_NAMES =
   "computer monitor, desktop computer, laptop, projector, smartboard, TV, overhead lights, vending machine, refrigerator, water cooler, printer, copier, server rack, window AC unit, space heater, coffee maker, microwave";
 
+/** What the client knows about a capture, passed to the model as context. */
+export interface PromptContext {
+  /** "photo" (default) or "video": several frames of one walkthrough. */
+  kind?: "photo" | "video";
+  /** Number of frames, for video. */
+  frames?: number;
+  /** e.g. "9:42 PM on a Wednesday, outside the building's open hours". */
+  when?: string;
+  /** e.g. "Austin, Texas". */
+  place?: string;
+  /** What the person scanning said about it. */
+  note?: string;
+  /** On-device reads, offered as hints to verify, e.g. "3 lit light fixtures". */
+  hints?: string[];
+}
+
+const WATT_GUIDE =
+  "24-inch LED monitor ~20, 27-inch ~30, old CCFL monitor ~45, CRT ~80, desktop tower idle ~60, laptop charging ~30, lamp projector ~280, laser projector ~160, 75-inch interactive panel ~200, LED troffer ~35, 4-lamp T8 fluorescent troffer ~110, CFL/LED bulb ~10, vending machine ~400, mini fridge ~70";
+
 /**
  * The perception prompt, told exactly how much of the square is photo.
  *
@@ -18,28 +37,55 @@ const DEVICE_NAMES =
  * pad with zeros, and box chairs and keyboards. Each line below closes one of
  * those. The cap of 8 is deliberately under the parser's 10, so a model that
  * overshoots still gets trimmed rather than trusted.
+ *
+ * The model is also asked to read each unit's wattage off what it can see -
+ * size, age, lamp or LED - because that is the single biggest lever on the
+ * money: "projector" spans 150 W to 400 W. lib/estimate.ts blends that read
+ * with the catalog band rather than trusting it outright.
  */
-export function buildVisionPrompt(frame: Frame = FULL_FRAME): string {
+export function buildVisionPrompt(frame: Frame = FULL_FRAME, ctx: PromptContext = {}): string {
+  const video = ctx.kind === "video" && (ctx.frames ?? 0) > 1;
   const w = Math.round(frame.w);
   const h = Math.round(frame.h);
-  const layout =
-    w >= SQUARE && h >= SQUARE
+  const layout = video
+    ? `You are given ${ctx.frames} frames, in order, from ONE continuous walkthrough video of the same space. The same device often appears in several frames: count each physical device ONCE across all frames. Do not give boxes.`
+    : w >= SQUARE && h >= SQUARE
       ? `The image is ${SQUARE} x ${SQUARE} pixels.`
       : `The image is a ${SQUARE} x ${SQUARE} square. The photo fills the top-left ${w} x ${h} region; everything outside it is plain grey padding with nothing in it.`;
 
-  return `You are auditing a photo of a room in a school, taken after hours or when the room is empty. Your job is to spot electrical devices and appliances that appear to be left running or drawing power.
+  const context = [
+    ctx.when && `Captured: ${ctx.when}.`,
+    ctx.place && `Location: ${ctx.place}.`,
+    ctx.note && `The person scanning says: "${ctx.note.slice(0, 200).replace(/"/g, "'")}".`,
+    ctx.hints?.length && `An on-device detector suggests (verify, do not copy): ${ctx.hints.join("; ")}.`,
+  ].filter(Boolean);
 
-${layout}
-
-List every electrical device or appliance you can see. For each, note whether it appears ON, in STANDBY (a small light or clock but not in active use), or OFF. Use these names where they fit: ${DEVICE_NAMES}. Give the count of each.
-
+  const boxRules = video
+    ? ""
+    : `
 Also give "boxes": where each unit is, as [x1, y1, x2, y2] pixel coordinates in the ${SQUARE} x ${SQUARE} image (top-left corner, bottom-right corner). Rules for boxes:
 - At most 8 boxes per device type, for the most clearly visible units. The count may be higher than the number of boxes.
 - Only box a unit you can actually see. Never guess, never continue a pattern along a row, never pad with zeros.
 - Ignore things that do not use power: chairs, desks, tables, keyboards, mice, cables.
+`;
 
+  const example = video
+    ? `[{"device":"computer monitor","count":24,"state":"on","watts":22,"evidence":"screens lit, login page"},{"device":"overhead lights","count":12,"state":"on","watts":35,"evidence":"LED panels lit"}]`
+    : `[{"device":"computer monitor","count":12,"state":"on","watts":22,"evidence":"screens lit, 24-inch LED","boxes":[[112,388,201,470],[236,392,318,468]]},{"device":"overhead lights","count":6,"state":"on","watts":35,"evidence":"LED troffers lit","boxes":[[300,20,420,60]]},{"device":"projector","count":1,"state":"standby","watts":250,"evidence":"amber standby light","boxes":[[480,90,560,140]]}]`;
+
+  return `You are auditing ${video ? "a video walkthrough" : "a photo"} of a room in a school or office, ideally taken after hours. Your job is to spot electrical devices and appliances that are left running or drawing power, and to judge how much each draws.
+
+${layout}
+${context.length ? "\n" + context.join("\n") + "\n" : ""}
+List every electrical device or appliance you can see. For each give:
+- "device": use these names where they fit: ${DEVICE_NAMES}.
+- "count": how many.
+- "state": ON (lit, running, display showing something), STANDBY (dark but with an indicator light or clock), or OFF.
+- "watts": your best estimate of ONE unit's power draw in watts while running, judged from its visible size, age and technology. Reference points: ${WATT_GUIDE}.
+- "evidence": a few words on what you saw that decided the state and wattage.
+${boxRules}
 Respond ONLY with a JSON array, no other text. Example:
-[{"device":"computer monitor","count":12,"state":"on","boxes":[[112,388,201,470],[236,392,318,468]]},{"device":"overhead lights","count":6,"state":"on","boxes":[[300,20,420,60]]},{"device":"projector","count":1,"state":"standby","boxes":[[480,90,560,140]]}]`;
+${example}`;
 }
 
 /** The prompt for an unpadded square, kept for callers that have no frame. */
@@ -59,7 +105,7 @@ function toBareBase64(image: string): string {
 }
 
 export async function describeImage(
-  imageBase64: string,
+  images: string | string[],
   prompt: string = VISION_PROMPT,
 ): Promise<OllamaVisionResult> {
   const controller = new AbortController();
@@ -72,7 +118,7 @@ export async function describeImage(
       body: JSON.stringify({
         model: VISION_MODEL,
         prompt,
-        images: [toBareBase64(imageBase64)],
+        images: (Array.isArray(images) ? images : [images]).map(toBareBase64),
         stream: false,
         options: { temperature: 0.1 },
       }),

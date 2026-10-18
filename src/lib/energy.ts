@@ -3,6 +3,7 @@
 // depend on the model being right about watts, only about *what's there*.
 
 import { CATALOG_BY_ID } from "./devices";
+import { estimateUnitWatts } from "./estimate";
 import type {
   AuditSettings,
   DeviceCategory,
@@ -58,9 +59,14 @@ export function effectiveWattsRange(
   return { low: mid * 0.6, high: mid * 1.6 };
 }
 
-function confidenceFor(state: DeviceState, cat: DeviceCategory): Offender["confidence"] {
+function confidenceFor(
+  state: DeviceState,
+  cat: DeviceCategory,
+  basis: "measured" | "ai" | "catalog",
+): Offender["confidence"] {
+  if (basis === "measured") return "high";
   // Generic catch-all categories (lights, computer) are slightly less certain.
-  if (cat.id === "ceiling_light" || cat.id === "desktop") return "medium";
+  if (basis === "catalog" && (cat.id === "ceiling_light" || cat.id === "desktop")) return "medium";
   return state === "on" ? "high" : "medium";
 }
 
@@ -75,18 +81,19 @@ export function scoreObservation(
   if (!cat) return null;
 
   const count = Math.max(1, Math.round(obs.count || 1));
-  const perUnitWatts = effectiveWatts(cat, obs.state);
+  const unit = estimateUnitWatts(cat, obs.state, { aiWatts: obs.wattsHint, userWatts: obs.userWatts });
+  const perUnitWatts = unit.mid;
   const totalWatts = perUnitWatts * count;
   if (totalWatts <= 0) return null;
 
-  const hours = settings.unoccupiedHoursPerYear;
+  const hoursKnown = obs.hoursPerYear !== undefined && Number.isFinite(obs.hoursPerYear) && obs.hoursPerYear >= 0;
+  const hours = hoursKnown ? Math.min(8760, obs.hoursPerYear!) : settings.unoccupiedHoursPerYear;
   const kwhPerYear = (totalWatts / 1000) * hours;
   const costPerYear = kwhPerYear * settings.ratePerKwh;
   const co2KgPerYear = kwhPerYear * settings.co2PerKwh;
 
-  const band = effectiveWattsRange(cat, obs.state);
-  const costLowPerYear = ((band.low * count) / 1000) * hours * settings.ratePerKwh;
-  const costHighPerYear = ((band.high * count) / 1000) * hours * settings.ratePerKwh;
+  const costLowPerYear = ((unit.low * count) / 1000) * hours * settings.ratePerKwh;
+  const costHighPerYear = ((unit.high * count) / 1000) * hours * settings.ratePerKwh;
 
   const annualSavings = costPerYear * cat.action.savingsFraction;
   const fixCost = cat.action.cost;
@@ -112,8 +119,12 @@ export function scoreObservation(
     fixCost,
     annualSavings,
     paybackMonths,
-    confidence: confidenceFor(obs.state, cat),
+    confidence: confidenceFor(obs.state, cat, unit.basis),
     source,
+    basis: unit.basis,
+    hoursPerYear: hours,
+    hoursKnown,
+    ...(obs.evidence ? { evidence: obs.evidence } : {}),
     ...(obs.boxes?.length ? { boxes: obs.boxes } : {}),
   };
 }

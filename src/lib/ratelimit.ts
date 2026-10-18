@@ -54,6 +54,10 @@ export const RULES = {
   analyzeGlobal: { limit: 1500, windowSeconds: 86400 },
   classWriteIp: { limit: 90, windowSeconds: 600 },
   classCreateIp: { limit: 20, windowSeconds: 3600 },
+  // Reverse geocoding goes to OpenStreetMap's free Nominatim, which asks for at
+  // most one request a second. Results are cached per ~1 km, so this only bites
+  // a script, never a person.
+  locateIp: { limit: 40, windowSeconds: 600 },
 } as const satisfies Record<string, RateRule>;
 
 /**

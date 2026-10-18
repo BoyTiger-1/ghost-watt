@@ -189,6 +189,8 @@ export function DetectionView({
             const dimmed = hovered !== null && !isHot;
             const [x1, y1, x2, y2] = p.box;
             const labelBelow = y1 < 0.07;
+            // Boxes near the right edge hang their label leftwards, so it stays on the photo.
+            const labelRight = x1 > 0.55;
             return (
               <motion.button
                 key={`${photo.id}-${p.key}`}
@@ -221,7 +223,7 @@ export function DetectionView({
                 <Corners color={color} thick={isHot} />
                 {showLabels && (p.n === 0 || isHot) && (
                   <span
-                    className={`pointer-events-none absolute left-[-1px] whitespace-nowrap px-1.5 py-0.5 font-mono text-[0.6rem] font-bold text-black sm:text-[0.66rem] ${
+                    className={`pointer-events-none absolute ${labelRight ? "right-[-1px]" : "left-[-1px]"} whitespace-nowrap px-1.5 py-0.5 font-mono text-[0.6rem] font-bold text-black sm:text-[0.66rem] ${
                       labelBelow ? "top-full mt-px" : "bottom-full mb-px"
                     }`}
                     style={{ background: color }}

@@ -44,6 +44,41 @@ people actually act on are always something you can check by hand.
 Every card on screen is labelled `live model` if it came from your photo, or `estimated` if
 it came from the room-profile fallback, so you always know which is which.
 
+### Scanning: camera and upload
+
+The scanner has two modes, and opens in **Camera**.
+
+- **Camera** opens the camera straight away and runs an object detector (EfficientDet-Lite,
+  on the device, nothing uploaded) on the live video. Each screen, laptop, appliance and lit
+  light fixture gets a box with its state, wattage and yearly cost drawn over the picture, and
+  the side panel (a pull-up sheet on a phone) totals what's in view. Screens are judged lit or
+  dark from their own pixels; lit fixtures are found as small bright blobs near the ceiling.
+  Tap **Photo** to run the full AI audit on that frame. Tap **Video** to record a walkthrough:
+  labels hide while you film, and when you stop, the sharpest frame from each distinct view
+  is picked and the whole clip is audited at once, with each device counted once.
+- **Upload** takes photos or videos (drag, paste or pick). A photo's EXIF supplies where and
+  when it was taken; a video is split into keyframes the same way as a recording.
+
+Every capture can carry what you know: the **watts** of its main device (off a label or a
+plug-in meter), **hours on per day**, and a note for the AI. Leave them blank and the
+estimate is built from everything else:
+
+- the AI reads each device's wattage from what it can see (size, age, lamp or LED), which is
+  blended with the published band for that device class (a log-normal Bayesian update in
+  [`src/lib/estimate.ts`](src/lib/estimate.ts)); a reading outside the plausible band is
+  dropped,
+- the photo's GPS (or your phone's location) picks the serving utility's rate and the state
+  grid's carbon ([`/api/locate`](src/app/api/locate/route.ts)),
+- the timestamp is checked against the building's schedule, so the AI knows whether the room
+  should have been empty,
+- the on-device detector's read is passed to the AI as hints to verify.
+
+Typed-in figures re-price instantly without asking the AI again, since perception and costing
+are kept separate. The headline range is an 80% interval from a Monte Carlo over wattage,
+hours and price rather than a sum of every worst case, so it narrows as you add real figures.
+With no AI engine reachable, a capture falls back to the on-device reading of that capture,
+and only to a room-profile estimate if the detector saw nothing either.
+
 ### The pipeline at a glance
 
 | Stage | Goes in | What happens | Comes out |

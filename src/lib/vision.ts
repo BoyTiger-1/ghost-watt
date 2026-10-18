@@ -44,7 +44,7 @@ interface HostedProvider {
   model: string;
   signup: string;
   note: string;
-  call: (image: DecodedImage, key: string, model: string, prompt: string) => Promise<string>;
+  call: (images: DecodedImage[], key: string, model: string, prompt: string) => Promise<string>;
   /**
    * Where to list this provider's models, for recovering when the default model
    * is retired. Only set for providers whose model list says which models take
@@ -57,6 +57,19 @@ interface HostedProvider {
 // type is 1000+ tokens. 700 used to cut the JSON off mid-array, and a truncated
 // array parses as nothing, so the whole scan fell through to the estimate.
 const MAX_TOKENS = 1500;
+/** A video's frames share one reply, and current models think before answering. */
+const MAX_TOKENS_LARGE = 4000;
+
+/**
+ * Claude models from generation 5 on run adaptive thinking and reject a
+ * non-default temperature; older ones take temperature 0 and no effort field.
+ * Effort "low" keeps a perception call fast - it is counting, not reasoning.
+ */
+function anthropicTuning(model: string): Record<string, unknown> {
+  return /^claude-(haiku|sonnet|opus|fable|mythos)-([5-9]|\d{2})/.test(model)
+    ? { output_config: { effort: "low" } }
+    : { temperature: 0 };
+}
 
 const TIMEOUT_MS = Number(process.env.VISION_TIMEOUT_MS ?? 45000);
 
@@ -118,7 +131,7 @@ async function postJson(
  * there are exactly two call shapes here and three providers share the second.
  */
 async function callAnthropic(
-  img: DecodedImage,
+  imgs: DecodedImage[],
   key: string,
   model: string,
   prompt: string,
@@ -128,16 +141,16 @@ async function callAnthropic(
     { "x-api-key": key, "anthropic-version": "2023-06-01" },
     {
       model,
-      max_tokens: MAX_TOKENS,
-      temperature: 0,
+      max_tokens: imgs.length > 1 || anthropicTuning(model).output_config ? MAX_TOKENS_LARGE : MAX_TOKENS,
+      ...anthropicTuning(model),
       messages: [
         {
           role: "user",
           content: [
-            {
+            ...imgs.map((img) => ({
               type: "image",
               source: { type: "base64", media_type: img.mediaType, data: img.base64 },
-            },
+            })),
             { type: "text", text: prompt },
           ],
         },
@@ -153,20 +166,20 @@ async function callAnthropic(
 }
 
 function openAiCompatible(endpoint: string) {
-  return async (img: DecodedImage, key: string, model: string, prompt: string): Promise<string> => {
+  return async (imgs: DecodedImage[], key: string, model: string, prompt: string): Promise<string> => {
     const json = (await postJson(
       endpoint,
       { Authorization: `Bearer ${key}` },
       {
         model,
-        max_tokens: MAX_TOKENS,
+        max_tokens: imgs.length > 1 ? MAX_TOKENS_LARGE : MAX_TOKENS,
         temperature: 0,
         messages: [
           {
             role: "user",
             content: [
               { type: "text", text: prompt },
-              { type: "image_url", image_url: { url: img.dataUrl } },
+              ...imgs.map((img) => ({ type: "image_url", image_url: { url: img.dataUrl } })),
             ],
           },
         ],
@@ -182,7 +195,7 @@ const HOSTED: HostedProvider[] = [
     id: "anthropic",
     label: "Anthropic Claude",
     env: "ANTHROPIC_API_KEY",
-    model: "claude-haiku-4-5-20251001",
+    model: "claude-haiku-5-5",
     signup: "https://console.anthropic.com/settings/keys",
     note: "Best device recognition of the four, and cheap at Haiku size. Recommended.",
     call: callAnthropic,
@@ -256,12 +269,16 @@ export async function describeImageAny(
   image: string,
   frame: Frame = FULL_FRAME,
 ): Promise<VisionResult> {
+  return describeImagesAny([image], buildVisionPrompt(frame));
+}
+
+/** The same chain over one or more images (a video's keyframes) and a prompt. */
+export async function describeImagesAny(images: string[], prompt: string): Promise<VisionResult> {
   const forced = process.env.VISION_PROVIDER?.trim().toLowerCase();
   const errors: string[] = [];
-  const prompt = buildVisionPrompt(frame);
 
   if (forced !== "hosted" && !HOSTED.some((h) => h.id === forced)) {
-    const local = await describeViaOllama(image, prompt);
+    const local = await describeViaOllama(images, prompt);
     if (local.ok && local.text.trim()) {
       return { ...local, provider: "Ollama (local)", kind: "local" };
     }
@@ -273,7 +290,7 @@ export async function describeImageAny(
     const key = keyFor(hosted)!;
     let model = effectiveModel(hosted);
     try {
-      const img = decodeImage(image);
+      const img = images.map(decodeImage);
       let text: string;
       try {
         text = await callWithRetry(hosted, img, key, model, prompt);
@@ -323,7 +340,7 @@ export async function describeImageAny(
  */
 async function callWithRetry(
   p: HostedProvider,
-  img: DecodedImage,
+  img: DecodedImage[],
   key: string,
   model: string,
   prompt: string,

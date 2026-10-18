@@ -108,3 +108,21 @@ export function describeSchedule(s: WeeklySchedule): string {
   const weekdayHours = s.hoursPerDay[1];
   return `${weekdayHours}h weekdays, ${s.operatingWeeks} weeks - ${empty} h empty`;
 }
+
+/** When the building opens each day. Schedules give hours, not times; 7am fits schools and offices. */
+export const OPENS_AT = 7;
+
+/**
+ * Was the building meant to be occupied at this moment?
+ *
+ * Used to read a photo's timestamp: a projector running at 9pm is the waste this
+ * app exists to find; the same projector at 10am is a lesson in progress.
+ */
+export function isOccupiedAt(s: WeeklySchedule, weekday: number, hour: number): boolean {
+  const hours = s.hoursPerDay[((weekday % 7) + 7) % 7] ?? 0;
+  if (hours >= 24) return true;
+  if (hours <= 0) return false;
+  // Long days start earlier rather than run past midnight.
+  const start = Math.max(0, Math.min(OPENS_AT, 24 - hours));
+  return hour >= start && hour < start + hours;
+}
