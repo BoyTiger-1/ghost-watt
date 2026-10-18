@@ -253,6 +253,8 @@ export const ITEM_COLOR = {
 } as const;
 
 export function itemColor(it: Pick<LiveItem, "kind" | "state">): string {
+  // Judged switched off by the AI: drawn, so the view reads as checked, but not as a cost.
+  if (it.state === "off") return ITEM_COLOR.other;
   if (it.kind === "light") return ITEM_COLOR.light;
   if (it.kind === "person") return ITEM_COLOR.person;
   if (it.kind === "other" || !it.state) return ITEM_COLOR.other;

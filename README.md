@@ -56,7 +56,10 @@ The scanner has two modes, and opens in **Camera**.
   A second on-device model, an ImageNet classifier (EfficientNet-Lite0), checks each box:
   an appliance such as a fridge is only drawn once the classifier agrees (so a door is not
   a fridge), and a lamp the camera is pointed at is found even when it is a lit shade or a
-  ring the blob finder cannot see.
+  ring the blob finder cannot see. Hold the camera still on a view and that frame goes to the
+  same full AI audit a photo gets; while the camera stays on that view, the AI's boxes replace
+  the on-device guesses (so a sunlit window is not counted as a light). Each view is sent once,
+  and the **AI on/off** button keeps everything on the device.
   Tap **Photo** to run the full AI audit on that frame. Tap **Video** to record a walkthrough:
   labels hide while you film, and when you stop, the sharpest frame from each distinct view
   is picked and the whole clip is audited at once, with each device counted once.

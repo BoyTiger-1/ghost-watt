@@ -147,6 +147,44 @@ export function readItems(
   return items;
 }
 
+/**
+ * The full AI audit's observations as items to draw over the live picture: one
+ * per located box. Devices it counted but could not box are left off the
+ * picture; it is the same answer a photo gets, so the panel can trust it.
+ */
+export function observationsToItems(
+  observations: readonly CategorizedObservation[],
+  settings: AuditSettings,
+  prefix = "ai",
+): LiveItem[] {
+  const items: LiveItem[] = [];
+  const hours = settings.unoccupiedHoursPerYear;
+  const ctx = settings.usageContext ?? "school";
+  const occupied = settings.occupiedHoursPerYear ?? Math.max(0, 8760 - hours);
+  observations.forEach((o, i) => {
+    const cat = CATALOG_BY_ID[o.categoryId];
+    if (!cat || !o.boxes?.length) return;
+    const watts = o.userWatts ?? estimateUnitWatts(cat, o.state).mid;
+    const typical = typicalUse(cat, estimateUnitWatts(cat, "on").mid, ctx, occupied).kwhPerYear * settings.ratePerKwh;
+    o.boxes.forEach((box, j) => {
+      items.push({
+        key: `${prefix}${i}-${j}`,
+        kind: cat.group === "lighting" ? "light" : "device",
+        label: o.device || cat.label,
+        categoryId: o.categoryId,
+        box,
+        score: 0.9,
+        state: o.state,
+        why: o.evidence,
+        watts,
+        costPerYear: (watts / 1000) * hours * settings.ratePerKwh,
+        typicalCostPerYear: o.state === "off" ? 0 : typical,
+      });
+    });
+  });
+  return items;
+}
+
 /** The items as catalog observations: one line per category and state, with boxes. */
 export function itemsToObservations(items: readonly LiveItem[]): CategorizedObservation[] {
   const lines = new Map<string, CategorizedObservation>();
