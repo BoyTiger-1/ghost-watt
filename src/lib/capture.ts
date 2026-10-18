@@ -6,12 +6,12 @@
 // anything the user types afterwards - a wattage off a nameplate, how many hours
 // it runs, a different count - re-prices the capture instantly and for free.
 
-import { fallbackObservations, type CategorizedObservation } from "./parse";
+import type { CategorizedObservation } from "./parse";
 import { rankObservations } from "./energy";
 import { localClock, type PhotoMeta } from "./exif";
 import { isOccupiedAt, type WeeklySchedule } from "./schedule";
 import type { RateQuality } from "./estimate";
-import type { AnalysisResult, AuditSettings, Offender } from "./types";
+import type { AnalysisResult, AnalyzeErrorCode, AuditSettings, Offender } from "./types";
 
 export interface GeoContext {
   place: string | null;
@@ -71,7 +71,7 @@ export interface Capture {
   geo?: GeoContext | null;
   details: CaptureDetails;
   adjust: Record<string, DeviceAdjust>;
-  /** Room preset for the no-model fallback. */
+  /** What kind of room this is: sets how many hours a day each device is typically in use. */
   roomType: string;
   status: CaptureStatus;
   stage?: string;
@@ -79,6 +79,8 @@ export interface Capture {
   error?: string;
   /** The audit as the engine returned it. */
   result?: AnalysisResult;
+  /** Why the last analysis failed, when it did. */
+  errorCode?: AnalyzeErrorCode;
   /** What the on-device detector read, kept as a fallback and for hints. */
   onDevice?: CategorizedObservation[];
 }
@@ -136,11 +138,7 @@ export function applyInputs(
 
 /** The perception a capture's costing starts from. */
 export function baseObservations(c: Capture): CategorizedObservation[] {
-  const r = c.result;
-  if (!r) return [];
-  if (r.observations) return r.observations;
-  // A room-profile estimate carries no observations; rebuild them from the preset.
-  return r.mode === "fallback" ? fallbackObservations(c.roomType) : [];
+  return c.result?.observations ?? [];
 }
 
 /** A capture's offenders, priced with its own location and the user's inputs. */
@@ -194,31 +192,4 @@ export function promptContext(c: Capture, schedule: WeeklySchedule | undefined) 
     note: c.details.note,
     hints: hints.slice(0, 6),
   };
-}
-
-/** The engine's reply, turned into the result a capture should show. */
-export function resolveResult(
-  server: AnalysisResult,
-  onDevice: CategorizedObservation[] | undefined,
-  engineLabel: string,
-): AnalysisResult {
-  if (server.mode === "live") return server;
-  // The model looked and found nothing powered: that is an answer, not a reason to guess.
-  if (server.fallbackReason === "nothing-found") {
-    return { ...server, mode: "live", offenders: [], observations: [], notice: "No powered devices found in this capture." };
-  }
-  // No model reachable: the detector's own reading of this capture beats a room preset.
-  if (onDevice?.length) {
-    return {
-      mode: "live",
-      engine: engineLabel,
-      source: server.source,
-      offenders: [],
-      observations: onDevice,
-      notice: `${
-        server.fallbackReason === "limited" ? "AI readings are paused for a few minutes." : "No AI vision engine is reachable."
-      } Read on this device instead: screens, laptops, appliances and lit fixtures only.`,
-    };
-  }
-  return server;
 }

@@ -41,23 +41,23 @@ export function WeatherContext({
   lon?: number;
   offenders: Offender[];
 }) {
-  const [data, setData] = useState<WeatherResponse | null>(null);
   const has = typeof lat === "number" && typeof lon === "number";
+  const key = has ? `${lat},${lon}` : "";
+  // Keyed by location, so an answer for the last location never shows for this one.
+  const [got, setGot] = useState<{ key: string; data: WeatherResponse } | null>(null);
+  const data = got?.key === key ? got.data : null;
 
   useEffect(() => {
     if (!has) return;
     let alive = true;
-    setData(null);
     fetch(`/api/weather?lat=${lat}&lon=${lon}`, { cache: "no-store" })
       .then((r) => r.json())
-      .then((d: WeatherResponse) => alive && setData(d))
-      .catch(() =>
-        alive && setData({ status: "error", source: "Weather lookup failed" }),
-      );
+      .then((d: WeatherResponse) => alive && setGot({ key, data: d }))
+      .catch(() => alive && setGot({ key, data: { status: "error", source: "Weather lookup failed" } }));
     return () => {
       alive = false;
     };
-  }, [lat, lon, has]);
+  }, [lat, lon, has, key]);
 
   // No location set: invite it once, quietly, and take up no more room than that.
   if (!has) {

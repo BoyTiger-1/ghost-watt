@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { applyInputs, captureSettings, costCapture, parseOffenderKey, readTime, resolveResult, type Capture } from "./capture";
+import { applyInputs, captureSettings, costCapture, parseOffenderKey, readTime, type Capture } from "./capture";
 import { SCHEDULE_PRESETS } from "./schedule";
-import { DEFAULT_SETTINGS, type AnalysisResult } from "./types";
+import { DEFAULT_SETTINGS } from "./types";
 import type { CategorizedObservation } from "./parse";
 
 const obs: CategorizedObservation[] = [
@@ -21,7 +21,7 @@ function capture(over: Partial<Capture> = {}): Capture {
     adjust: {},
     roomType: "unknown",
     status: "done",
-    result: { mode: "live", engine: "test", source: "Lab", offenders: [], observations: obs },
+    result: { mode: "enhanced", engine: "test", source: "Lab", offenders: [], observations: obs },
     ...over,
   };
 }
@@ -63,13 +63,6 @@ describe("costCapture", () => {
     expect(parseOffenderKey(m1.id)).toEqual({ captureId: "c1", categoryId: "monitor" });
   });
 
-  it("rebuilds a room-profile estimate from its preset", () => {
-    const c = capture({
-      roomType: "hallway",
-      result: { mode: "fallback", engine: "preset", source: "Lab", offenders: [] },
-    });
-    expect(costCapture(c, DEFAULT_SETTINGS).map((o) => o.categoryId)).toEqual(["ceiling_light"]);
-  });
 });
 
 describe("captureSettings", () => {
@@ -83,29 +76,6 @@ describe("captureSettings", () => {
     const r = captureSettings({ ...DEFAULT_SETTINGS, ratePerKwh: 0.2 }, { geo }, true);
     expect(r.settings.ratePerKwh).toBe(0.2);
     expect(r.rateQuality).toBe("bill");
-  });
-});
-
-describe("resolveResult", () => {
-  const fallback = (reason: AnalysisResult["fallbackReason"]): AnalysisResult => ({
-    mode: "fallback",
-    engine: "preset",
-    source: "Lab",
-    offenders: [],
-    fallbackReason: reason,
-  });
-  it("shows nothing-found as an empty reading, not a guess", () => {
-    const r = resolveResult(fallback("nothing-found"), obs, "on-device");
-    expect(r.mode).toBe("live");
-    expect(r.observations).toEqual([]);
-  });
-  it("prefers the on-device reading over a room preset when no model answers", () => {
-    const r = resolveResult(fallback("unavailable"), obs, "on-device");
-    expect(r.engine).toBe("on-device");
-    expect(r.observations).toBe(obs);
-  });
-  it("keeps the preset when the detector saw nothing either", () => {
-    expect(resolveResult(fallback("unavailable"), [], "on-device").mode).toBe("fallback");
   });
 });
 

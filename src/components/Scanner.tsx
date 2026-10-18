@@ -21,7 +21,8 @@ import { UploadMode } from "./scan/UploadMode";
 import { CaptureCard } from "./scan/CaptureCard";
 import { Icon } from "./scan/icons";
 import { analysisSquare } from "@/lib/image";
-import { ROOM_TYPE_BY_ID, type CategorizedObservation } from "@/lib/parse";
+import type { CategorizedObservation } from "@/lib/parse";
+import { ON_DEVICE_ENGINE, describeAnalyzeError, useEngine } from "@/lib/engine";
 import { aggregate, fmtCo2, fmtKwh, fmtMoney, fmtMoneyFull } from "@/lib/energy";
 import { costRange, RATE_SIGMA, type RateQuality } from "@/lib/estimate";
 import { regionOrDefault, regionRate } from "@/lib/grid";
@@ -33,27 +34,52 @@ import { detectStill, verifyStill } from "@/lib/detector";
 import { withLamps } from "@/lib/verify";
 import { readScene } from "@/lib/scene";
 import { itemsToObservations, peopleIn, readItems, type LiveItem } from "@/lib/ondevice";
-import { FrameReader, annotateFrame, baseName, loadImage, readPhotoFile, videoFileKeyframes } from "@/lib/media";
+import { FrameReader, annotateFrame, baseName, loadImage, readPhotoFile, toJpeg, videoFileKeyframes } from "@/lib/media";
 import {
   captureId,
   captureSettings,
   costCapture,
   parseOffenderKey,
   promptContext,
-  resolveResult,
   type Capture,
   type CaptureDetails,
   type DeviceAdjust,
   type GeoContext,
 } from "@/lib/capture";
-import { uid, type Building, type SavedAudit } from "@/lib/storage";
-import { addAudit, addBuilding, currentStore, newBuilding, useStore } from "@/lib/useStore";
-import type { AnalysisResult, AuditSettings, Offender } from "@/lib/types";
+import type { Building, SavedAudit } from "@/lib/storage";
+import { addBuilding, currentStore, newBuilding, removeAudit, upsertAudit, useStore } from "@/lib/useStore";
+import type { AnalysisResult, AnalyzeError, AuditSettings, Offender } from "@/lib/types";
 
 type Mode = "camera" | "upload";
 type ResultTab = "offenders" | "plan" | "grid" | "context";
 
-const ON_DEVICE_ENGINE = "On-device · EfficientDet + scene analysis";
+/** The saved-scan id a capture writes to, so a re-analysis replaces rather than duplicates. */
+const auditIdFor = (captureId: string) => `scan_${captureId}`;
+
+/** A small JPEG of a capture for the saved room list, never the full photo. */
+async function thumbOf(dataUrl: string | null): Promise<string | undefined> {
+  if (!dataUrl) return undefined;
+  try {
+    return toJpeg(await loadImage(dataUrl), 240, 0.6) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The on-device reading of a capture as a result: what it is, labelled as what it is. */
+function onDeviceResult(c: Pick<Capture, "name" | "onDevice">): AnalysisResult {
+  const observations = c.onDevice ?? [];
+  return {
+    mode: "on-device",
+    engine: ON_DEVICE_ENGINE,
+    source: c.name,
+    offenders: [],
+    observations,
+    notice: observations.length
+      ? "Read on this device: screens, laptops, common appliances and lit fixtures only. Other device types are not recognised and counts tend to run low."
+      : "The on-device detector recognised nothing powered in this picture.",
+  };
+}
 
 /** Shown for the single frame before the first building is written to storage. */
 const PLACEHOLDER_BUILDING: Building = {
@@ -118,7 +144,11 @@ export function Scanner() {
   const [captures, setCaptures] = useState<Capture[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [tab, setTab] = useState<ResultTab>("offenders");
-  const [savedAuditId, setSavedAuditId] = useState<string | null>(null);
+  const engine = useEngine();
+  const engineRef = useRef(engine);
+  useEffect(() => {
+    engineRef.current = engine;
+  }, [engine]);
   const [liveRate, setLiveRate] = useState<{ ratePerKwh: number; source: string } | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
   const [deviceGeo, setDeviceGeo] = useState<{ lat: number; lon: number; geo: GeoContext | null } | null>(null);
@@ -145,7 +175,6 @@ export function Scanner() {
   }, []);
   const choosePlace = (p: UsageContext) => {
     setPlaceChoice(p);
-    setSavedAuditId(null);
     try {
       localStorage.setItem("gw-place", p);
     } catch {
@@ -278,7 +307,6 @@ export function Scanner() {
   }, []);
 
   const add = useCallback((c: Capture) => {
-    setSavedAuditId(null);
     setCaptures((prev) => [c, ...prev]);
   }, []);
 
@@ -371,24 +399,6 @@ export function Scanner() {
     [add, patch],
   );
 
-  function addEstimate() {
-    const c = blank("photo", "upload", `Estimate ${String(captures.length + 1).padStart(2, "0")}`);
-    const roomType = "classroom";
-    add({
-      ...c,
-      roomType,
-      status: "done",
-      result: {
-        mode: "fallback",
-        engine: `room preset · ${ROOM_TYPE_BY_ID[roomType].label}`,
-        source: c.name,
-        offenders: [],
-        notice: "Estimated from a typical room profile - no photo.",
-        fallbackReason: "requested",
-      },
-    });
-  }
-
   // ---- the analysis queue -------------------------------------------------
 
   const busyRef = useRef(false);
@@ -431,9 +441,13 @@ export function Scanner() {
           patch(id, { geo });
         }
 
-        // 3. The full AI reading.
+        // 3. The reading itself. On-device mode stops here: the picture never leaves.
         c = get() ?? c;
-        patch(id, { stage: c.kind === "video" ? `AI reading ${keyframes?.length ?? 0} frames` : "AI reading the photo", progress: 0.65 });
+        if (engineRef.current.mode === "on-device") {
+          patch(id, { status: "done", result: onDeviceResult({ name: c.name, onDevice }), errorCode: undefined, stage: undefined, progress: undefined });
+          return;
+        }
+        patch(id, { stage: c.kind === "video" ? `Cloud model reading ${keyframes?.length ?? 0} frames` : "Cloud model reading the photo", progress: 0.65 });
         const context = promptContext({ ...c, onDevice, meta, geo }, building.schedule);
         let body: Record<string, unknown>;
         if (c.kind === "video") {
@@ -442,37 +456,48 @@ export function Scanner() {
           const square = c.dataUrl ? await analysisSquare(c.dataUrl, 0.8) : null;
           body = { image: square?.dataUrl, frame: square?.frame };
         }
-        const res = await fetch("/api/analyze", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...body, roomType: c.roomType, source: c.name, settings: s, context }),
-        });
-        if (!res.ok) throw new Error(res.status === 413 ? "That capture is too large to send." : `Server returned ${res.status}`);
-        const result = resolveResult((await res.json()) as AnalysisResult, onDevice, ON_DEVICE_ENGINE);
-        patch(id, { status: "done", result, stage: undefined, progress: undefined });
-      } catch (err) {
-        // Offline or the server is down: the device's own reading still stands.
-        const onDevice = get()?.onDevice;
-        if (onDevice?.length) {
-          patch(id, {
-            status: "done",
-            stage: undefined,
-            progress: undefined,
-            result: {
-              mode: "live",
-              engine: ON_DEVICE_ENGINE,
-              source: c.name,
-              offenders: [],
-              observations: onDevice,
-              notice: "Couldn't reach the AI. Read on this device instead: screens, laptops, appliances and lit fixtures only.",
-            },
+        let res: Response;
+        try {
+          res = await fetch("/api/analyze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...body, source: c.name, settings: s, context }),
           });
-        } else {
-          patch(id, { status: "error", stage: undefined, progress: undefined, error: err instanceof Error ? err.message : "Analysis failed" });
+        } catch {
+          throw Object.assign(new Error(navigator.onLine ? "The server could not be reached." : "You are offline, so the cloud model cannot read this picture."), {
+            code: "engine-failed",
+          });
         }
+        if (!res.ok) {
+          const errBody = (await res.json().catch(() => null)) as AnalyzeError | null;
+          throw Object.assign(new Error(describeAnalyzeError(res.status, errBody)), { code: errBody?.code ?? "engine-failed" });
+        }
+        const result = (await res.json()) as AnalysisResult;
+        patch(id, { status: "done", result, errorCode: undefined, stage: undefined, progress: undefined });
+      } catch (err) {
+        // No invented answer. The card shows the error and, when the detector saw
+        // something, offers that reading as a choice the user makes.
+        const code = (err as { code?: AnalyzeError["code"] }).code;
+        patch(id, {
+          status: "error",
+          stage: undefined,
+          progress: undefined,
+          error: err instanceof Error ? err.message : "Analysis failed.",
+          errorCode: code,
+        });
       }
     },
     [patch, building.schedule],
+  );
+
+  /** The user chose the on-device reading after the cloud model failed. */
+  const adoptOnDevice = useCallback(
+    (id: string) => {
+      const c = capturesRef.current.find((x) => x.id === id);
+      if (!c) return;
+      patch(id, { status: "done", error: undefined, errorCode: undefined, result: onDeviceResult(c) });
+    },
+    [patch],
   );
 
   // One at a time: hosted vision endpoints rate-limit, and order is what the user expects.
@@ -489,14 +514,12 @@ export function Scanner() {
   }, [captures, analyze]);
 
   const setDetails = (id: string, d: Partial<CaptureDetails>) => {
-    setSavedAuditId(null);
     setCaptures((prev) => prev.map((c) => (c.id === id ? { ...c, details: { ...c.details, ...d } } : c)));
   };
 
   const setAdjust = (offenderId: string, a: DeviceAdjust) => {
     const key = parseOffenderKey(offenderId);
     if (!key) return;
-    setSavedAuditId(null);
     setCaptures((prev) =>
       prev.map((c) => (c.id === key.captureId ? { ...c, adjust: { ...c.adjust, [key.categoryId]: a } } : c)),
     );
@@ -508,6 +531,8 @@ export function Scanner() {
       if (c?.videoUrl) URL.revokeObjectURL(c.videoUrl);
       return prev.filter((x) => x.id !== id);
     });
+    // The saved room goes with it: removing a capture is saying it was not a reading to keep.
+    removeAudit(auditIdFor(id));
   }
 
   // ---- pricing ------------------------------------------------------------
@@ -561,34 +586,59 @@ export function Scanner() {
     [priced],
   );
 
-  /** live / fallback / mixed across every capture scanned so far. */
+  /** enhanced / on-device / mixed across every capture scanned so far. */
   const auditMode = useMemo<SavedAudit["mode"]>(() => {
     const modes = new Set(done.map((p) => p.c.result!.mode));
-    return modes.size > 1 ? "mixed" : modes.has("live") ? "live" : "fallback";
+    return modes.size > 1 ? "mixed" : modes.has("enhanced") ? "enhanced" : "on-device";
   }, [done]);
 
   /**
-   * Write this audit into the building's history.
+   * Every finished capture is saved as a room of the active building, and
+   * re-saved whenever its pricing or its name changes.
    *
-   * Saving is what turns a one-shot estimate into an accountability record: the
-   * portfolio page can then say "this room cost $310 a year in September, you
-   * installed a timer in October, and the November re-scan says it is gone".
+   * Saving used to be a button, and a brief or a building roll-up that depended
+   * on someone having pressed it was a brief that usually said "nothing saved".
+   * The saved record is what the rooms page, the brief and the building total
+   * are built from, so it is written as soon as there is a reading to write.
    */
-  function saveAudit() {
-    if (!hasResults || !ready) return;
-    const audit: SavedAudit = {
-      id: uid("a"),
-      buildingId: building.id,
-      at: new Date().toISOString(),
-      areas: done.map((p) => p.c.name),
-      offenders,
-      settings,
-      mode: auditMode,
-      engine: done[0]?.c.result?.engine ?? "unknown",
+  const buildingIdRef = useRef(building.id);
+  useEffect(() => {
+    buildingIdRef.current = building.id;
+  }, [building.id]);
+  useEffect(() => {
+    if (!ready) return;
+    let alive = true;
+    const t = setTimeout(async () => {
+      for (const p of priced) {
+        const r = p.c.result;
+        if (!r || p.c.status !== "done") continue;
+        const id = auditIdFor(p.c.id);
+        const existing = currentStore().audits.find((a) => a.id === id);
+        const thumb = existing?.thumb ?? (await thumbOf(p.c.dataUrl));
+        if (!alive) return;
+        const audit: SavedAudit = {
+          id,
+          buildingId: existing?.buildingId ?? buildingIdRef.current,
+          at: existing?.at ?? new Date().toISOString(),
+          areas: [p.c.name],
+          offenders: p.offenders,
+          settings: captureSettings(settings, { geo: p.c.geo ?? null }, rateOverridden).settings,
+          mode: r.mode,
+          engine: r.engine,
+          roomType: p.c.roomType,
+          thumb,
+          captureId: p.c.id,
+        };
+        // Skip the write when nothing about the record changed.
+        if (existing && JSON.stringify({ ...existing, at: 0 }) === JSON.stringify({ ...audit, at: 0 })) continue;
+        upsertAudit(audit);
+      }
+    }, 400);
+    return () => {
+      alive = false;
+      clearTimeout(t);
     };
-    addAudit(audit);
-    setSavedAuditId(audit.id);
-  }
+  }, [priced, ready, settings, rateOverridden]);
 
   const basisMix = useMemo(() => {
     const m = { measured: 0, ai: 0, catalog: 0 };
@@ -600,7 +650,7 @@ export function Scanner() {
     <section id="scanner" className="relative z-10 mx-auto max-w-6xl scroll-mt-20 px-4 pb-16 pt-[4.25rem] sm:px-6 md:pt-24">
       <div className="mb-3 flex flex-col gap-4 md:mb-6 md:flex-row md:items-end md:justify-between">
         <PageHeader eyebrow="Scanner" title="Point at the building." accent="See what it's costing you." className="hidden md:block">
-          Live detection on the camera, a full AI audit on every photo or walkthrough video, priced for your utility.{" "}
+          Point the camera at a room, or add a photo. Every powered device is found, costed at your rate, and matched to the fix that pays back first.{" "}
           <Link href="/methodology" className="text-cyan underline decoration-cyan/30 underline-offset-4 hover:decoration-cyan">
             How the numbers work
           </Link>
@@ -634,9 +684,6 @@ export function Scanner() {
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
             <span className="mono-label">captures · {captures.length}</span>
             <div className="flex items-center gap-3">
-              <button onClick={addEstimate} className="text-[0.74rem] text-dim hover:text-amber">
-                + estimate without a photo
-              </button>
               {captures.length > 0 && (
                 <button onClick={() => setCaptures([])} className="text-[0.74rem] text-dim hover:text-ember">
                   Clear
@@ -647,8 +694,8 @@ export function Scanner() {
           {captures.length === 0 && (
             <div className="rounded-2xl border border-dashed border-line2 px-4 py-6 text-center text-[0.84rem] leading-relaxed text-mist">
               {mode === "camera"
-                ? "Take a photo or record a walkthrough. Each one shows up here as it's analysed."
-                : "Photos and videos you add show up here as they're analysed."}
+                ? "Take a photo or record a walkthrough. Each one shows up here as it's analysed, and is saved as a room of this building."
+                : "Photos and videos you add show up here as they're analysed, and are saved as rooms of this building."}
             </div>
           )}
           <AnimatePresence initial={false}>
@@ -662,7 +709,8 @@ export function Scanner() {
                 defaultOpen={c.origin === "upload" && captures.length <= 2}
                 onDetails={(d) => setDetails(c.id, d)}
                 onPatch={(p) => patch(c.id, p)}
-                onReanalyze={() => patch(c.id, { status: "pending", result: undefined })}
+                onReanalyze={() => patch(c.id, { status: "pending", result: undefined, error: undefined, errorCode: undefined })}
+                onUseOnDevice={c.onDevice?.length ? () => adoptOnDevice(c.id) : undefined}
                 onRemove={() => remove(c.id)}
               />
             ))}
@@ -688,7 +736,7 @@ export function Scanner() {
                 place={place}
               />
 
-              <ExportBar offenders={offenders} settings={settings} buildingName={building.name} onSave={ready ? saveAudit : undefined} saved={savedAuditId !== null} />
+              <ExportBar offenders={offenders} settings={settings} buildingName={building.name} savedTo={ready ? building.name : undefined} roomCount={done.length} />
 
               <ContributeBar offenders={offenders} mode={auditMode} defaultArea={done[0]?.c.name ?? building.name} />
 

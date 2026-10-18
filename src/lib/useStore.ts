@@ -123,6 +123,17 @@ export function addAudit(audit: SavedAudit) {
   mutate((s) => ({ ...s, audits: [...s.audits, audit] }));
 }
 
+/** Write a scan, replacing an earlier save of the same capture. */
+export function upsertAudit(audit: SavedAudit) {
+  mutate((s) => {
+    const i = s.audits.findIndex((a) => a.id === audit.id);
+    if (i === -1) return { ...s, audits: [...s.audits, audit] };
+    const audits = s.audits.slice();
+    audits[i] = audit;
+    return { ...s, audits };
+  });
+}
+
 export function removeAudit(id: string) {
   mutate((s) => ({ ...s, audits: s.audits.filter((a) => a.id !== id) }));
 }

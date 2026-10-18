@@ -8,14 +8,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { StatusPill } from "./StatusPill";
+import { EngineIndicator } from "./EngineIndicator";
 import { Mark } from "./home/HomeNav";
 
 const TABS = [
   { href: "/scan", label: "Scanner", short: "Scan", icon: "scan" },
-  { href: "/portfolio", label: "Portfolio", short: "Buildings", icon: "building" },
+  { href: "/portfolio", label: "Rooms", short: "Rooms", icon: "rooms" },
   { href: "/report", label: "Brief", short: "Brief", icon: "doc" },
-  { href: "/class", label: "Class", short: "Class", icon: "people" },
+  { href: "/buildings", label: "Buildings", short: "Buildings", icon: "building" },
   { href: "/methodology", label: "Method", short: "Method", icon: "book" },
 ] as const;
 
@@ -57,10 +57,10 @@ export function Nav() {
 
           <div className="flex shrink-0 items-center gap-2 justify-self-end">
             <div className="hidden sm:block">
-              <StatusPill />
+              <EngineIndicator />
             </div>
             <div className="sm:hidden">
-              <StatusPill compact />
+              <EngineIndicator compact />
             </div>
             <Link
               href="/settings"
@@ -122,6 +122,14 @@ function Icon({ name, className }: { name: string; className?: string }) {
         <>
           <path d="M4 20V8l8-4 8 4v12" {...P} />
           <path d="M9 20v-5h6v5M8 10h1M11.5 10h1M15 10h1" {...P} />
+        </>
+      )}
+      {name === "rooms" && (
+        <>
+          <rect x="3.5" y="4" width="7" height="7" rx="1.2" {...P} />
+          <rect x="13.5" y="4" width="7" height="7" rx="1.2" {...P} />
+          <rect x="3.5" y="13" width="7" height="7" rx="1.2" {...P} />
+          <rect x="13.5" y="13" width="7" height="7" rx="1.2" {...P} />
         </>
       )}
       {name === "doc" && (

@@ -175,16 +175,16 @@ function buildCaveats(
 ): string[] {
   const out: string[] = [];
 
-  if (audit.mode === "fallback") {
+  if (audit.mode === "on-device") {
     out.push(
-      "No photograph was read by a model for this audit. Every figure below comes from " +
-        "a typical-room profile and should be treated as a starting hypothesis, not a " +
-        "measurement.",
+      "These pictures were read by the small detector in the browser, not by the cloud " +
+        "model. It finds screens, laptops, common appliances and lit fixtures only, and " +
+        "tends to undercount, so the total is more likely low than high.",
     );
   } else if (audit.mode === "mixed") {
     out.push(
-      "Some areas were read from photographs and some were estimated from a room " +
-        "profile. The estimated areas carry the same uncertainty as any assumption.",
+      "Some rooms were read by the cloud model and some by the on-device detector, which " +
+        "finds fewer kinds of device. The on-device rooms are more likely undercounted.",
     );
   }
 

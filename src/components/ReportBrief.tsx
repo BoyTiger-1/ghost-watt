@@ -14,10 +14,9 @@
 // print stylesheet in globals.css turns this from a dark dashboard into black ink
 // on white with the controls dropped.
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/useStore";
-import { SampleData } from "./SampleData";
 import { auditsFor } from "@/lib/storage";
 import { buildBrief, headline, type BriefItem } from "@/lib/report";
 import { fmtCo2, fmtMoneyFull, fmtPayback } from "@/lib/energy";
@@ -26,31 +25,25 @@ export function ReportBrief() {
   const store = useStore();
   const [auditId, setAuditId] = useState<string | null>(null);
 
-  const building = store.buildings.find((b) => b.id === store.activeBuildingId);
+  // Fall back to the first building: an active id can go stale when its building is deleted.
+  const building = store.buildings.find((b) => b.id === store.activeBuildingId) ?? store.buildings[0];
   const audits = building ? auditsFor(store, building.id) : [];
   const audit = audits.find((a) => a.id === auditId) ?? audits[0];
-
-  const brief = useMemo(
-    () => (audit ? buildBrief(audit, building) : null),
-    [audit, building],
-  );
+  const brief = audit ? buildBrief(audit, building) : null;
 
   if (!building || !audit || !brief) {
     return (
-      <div className="space-y-6">
-        <SampleData />
-        <div className="panel p-8 text-center">
-        <p className="text-mist">
-          A brief is generated from a saved audit. Run a scan and save it to the
-          portfolio first, or load the worked example above.
+      <div className="panel p-8 text-center">
+        <h2 className="text-lg font-semibold text-fog">No scans to brief yet</h2>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-mist">
+          A brief is built from the rooms you have scanned. Scan one room and it is saved to your building automatically; the brief appears here.
         </p>
         <Link
           href="/scan"
-          className="mt-4 inline-block px-4 py-2 text-[0.75rem] transition-colors rounded-full bg-fog text-ink font-medium hover:bg-fog/85"
+          className="mt-4 inline-block rounded-full bg-fog px-4 py-2 text-[0.8rem] font-medium text-ink transition-colors hover:bg-fog/85"
         >
-          go to the scanner →
+          Scan a room
         </Link>
-        </div>
       </div>
     );
   }
@@ -185,11 +178,11 @@ export function ReportBrief() {
             <div>
               <span className="mono-label">how it was read</span>
               <p className="mt-1 text-mist">
-                {audit.mode === "live"
-                  ? "Photographs read by a vision model"
+                {audit.mode === "enhanced"
+                  ? "Photographs read by the cloud vision model"
                   : audit.mode === "mixed"
-                    ? "Part photographs, part room profile"
-                    : "Room profile estimate, no photograph read"}
+                    ? "Part cloud model, part on-device detector"
+                    : "Photographs read by the on-device detector"}
                 {" · "}
                 {audit.engine}
               </p>

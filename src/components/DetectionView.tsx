@@ -89,7 +89,7 @@ export function DetectionView({
   const counted =
     photo.offenders.reduce((s, o) => s + o.count, 0) +
     (photo.sightings ?? []).reduce((s, o) => s + o.count, 0);
-  const isLive = photo.mode === "live";
+  const cloud = photo.mode === "enhanced";
 
   function toggleState(s: DeviceState) {
     setHidden((prev) => {
@@ -240,9 +240,9 @@ export function DetectionView({
         {!located && (
           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent px-4 pb-3 pt-10">
             <p className="font-mono text-[0.7rem] leading-relaxed text-mist">
-              {isLive
-                ? "This engine counted the devices but did not say where they are, so nothing is marked. A hosted model (Groq, Claude, OpenAI) reports locations."
-                : "No live reading for this photo - the counts are a room-profile estimate, so there is nothing to mark on it."}
+              {cloud
+                ? "The model counted devices but did not say where they are, so nothing is marked on this photo."
+                : "The on-device detector found nothing it could box in this photo."}
             </p>
           </div>
         )}
