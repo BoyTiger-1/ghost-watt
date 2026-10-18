@@ -112,6 +112,63 @@ describe("findLightSources: what is not", () => {
   });
 });
 
+describe("findLightSources, live: a camera pointed around", () => {
+  const live = (s: ReturnType<typeof scene>) => findLightSources(toLuma(s.rgba, W, H), W, H, { rgba: s.rgba, mode: "live" });
+  const SKY: [number, number, number] = [120, 175, 235];
+
+  it("finds a ceiling light held right in the middle of the frame, or low in it", () => {
+    const mid = scene([70, 65, 60]);
+    mid.lamp([0.42, 0.42, 0.56, 0.6]);
+    expect(live(mid)).toHaveLength(1);
+    const low = scene([70, 65, 60]);
+    low.lamp([0.42, 0.7, 0.5, 0.8]);
+    expect(live(low)).toHaveLength(1);
+  });
+
+  it("finds a flat LED panel: clipped solid, hard-edged, no glow", () => {
+    const s = scene([215, 215, 212]);
+    s.paint([0.15, 0.1, 0.38, 0.22], WHITE);
+    s.paint([0.6, 0.12, 0.82, 0.22], WHITE);
+    expect(live(s)).toHaveLength(2);
+  });
+
+  it("finds a light seen close up, filling a fifth of the frame", () => {
+    const s = scene([60, 58, 55]);
+    s.lamp([0.3, 0.25, 0.7, 0.75]);
+    expect(live(s)).toHaveLength(1);
+  });
+
+  it("keeps a warm bulb whose glow is orange around a white centre", () => {
+    const s = scene([60, 50, 40]);
+    s.paint([0.4, 0.35, 0.5, 0.5], [255, 170, 90]);
+    s.paint([0.43, 0.39, 0.47, 0.46], WHITE);
+    expect(live(s)).toHaveLength(1);
+  });
+
+  it("sees nothing pointed outdoors: sunlit cars under a blue sky", () => {
+    const s = scene([110, 112, 115]);
+    s.paint([0, 0, 1, 0.4], SKY);
+    for (const x of [0.15, 0.4, 0.65]) {
+      s.paint([x, 0.55, x + 0.15, 0.68], [40, 40, 50]);
+      s.lamp([x + 0.05, 0.57, x + 0.08, 0.6]);
+    }
+    expect(live(s)).toHaveLength(0);
+  });
+
+  it("does not mistake blue artwork indoors for the outdoors", () => {
+    const s = scene([200, 200, 205]);
+    s.paint([0.7, 0.45, 0.95, 0.8], [30, 80, 220]);
+    s.lamp([0.3, 0.1, 0.33, 0.14]);
+    expect(live(s)).toHaveLength(1);
+  });
+
+  it("ignores a bright window running off the edge of the frame", () => {
+    const s = scene([90, 85, 80]);
+    s.paint([0.75, 0.2, 1, 0.7], [250, 250, 250]);
+    expect(live(s)).toHaveLength(0);
+  });
+});
+
 describe("LightTracker", () => {
   const blob = (x: number): LightBlob => ({ box: [x, 0.1, x + 0.03, 0.14], area: 0.001, peak: 255, kind: "spot", confidence: 0.8 });
 

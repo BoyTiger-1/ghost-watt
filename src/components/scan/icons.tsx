@@ -16,7 +16,9 @@ export type IconName =
   | "refresh"
   | "person"
   | "chip"
-  | "edit";
+  | "edit"
+  | "expand"
+  | "collapse";
 
 export function Icon({ name, className = "h-5 w-5" }: { name: IconName; className?: string }) {
   return (
@@ -72,6 +74,8 @@ export function Icon({ name, className = "h-5 w-5" }: { name: IconName; classNam
         </>
       )}
       {name === "edit" && <path d="M4.5 19.5h4l10-10-4-4-10 10zM13 7l4 4" {...P} />}
+      {name === "expand" && <path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" {...P} />}
+      {name === "collapse" && <path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5" {...P} />}
     </svg>
   );
 }

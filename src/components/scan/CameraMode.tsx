@@ -14,6 +14,12 @@ import type { WeeklySchedule } from "@/lib/schedule";
 import type { AuditSettings } from "@/lib/types";
 import { Icon } from "./icons";
 
+/**
+ * Bright things inside these are not lights: glare on a car's paint or windscreen,
+ * a white page or a bright UI on a screen.
+ */
+const LIGHT_BLOCKERS = new Set(["car", "truck", "bus", "motorcycle", "train", "boat", "tv", "laptop", "cell phone"]);
+
 /** A walkthrough longer than this is several rooms; better as several clips. */
 const MAX_RECORD_S = 60;
 
@@ -84,6 +90,8 @@ export function CameraMode({
   const [recSeconds, setRecSeconds] = useState(0);
   const [flash, setFlash] = useState(0);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [full, setFull] = useState(false);
+  const viewRef = useRef<HTMLDivElement>(null);
   // Null until mounted: the page is prerendered, and a build-time clock would not match.
   const [now, setNow] = useState<string | null>(null);
 
@@ -242,9 +250,17 @@ export function CameraMode({
         lastScene = now;
         luma = reader.read(v);
         if (luma) {
-          const scene = readScene(luma.data, luma.w, luma.h, luma.rgba);
+          const scene = readScene(luma.data, luma.w, luma.h, luma.rgba, "live");
+          const blockers = tracks
+            .filter((t) => LIGHT_BLOCKERS.has(t.cls))
+            .map((t) => [t.box.x / sw, t.box.y / sh, (t.box.x + t.box.w) / sw, (t.box.y + t.box.h) / sh]);
+          const candidates = scene.lights.filter((l) => {
+            const cx = (l.box[0] + l.box[2]) / 2;
+            const cy = (l.box[1] + l.box[3]) / 2;
+            return !blockers.some((b) => cx >= b[0] && cx <= b[2] && cy >= b[1] && cy <= b[3]);
+          });
           // Only lights that hold steady across reads: no blinking LEDs, no passing glints.
-          const lights = lightTracker.update(scene.lights);
+          const lights = lightTracker.update(candidates);
           sceneRef.current = { ...scene, lights, lighting: lights.length ? "on" : scene.dark ? "off" : "unclear" };
         }
       }
@@ -272,6 +288,59 @@ export function CameraMode({
   }, [phase]);
 
   // ---- actions -----------------------------------------------------------
+
+  // ---- full screen ---------------------------------------------------------
+  //
+  // The viewfinder takes the whole screen as a fixed layer, which works on every
+  // phone. Where the browser allows it (Android, desktop) it also asks for real
+  // full screen so the address bar goes too; iOS Safari only allows that for a
+  // bare <video>, which would lose the overlay, so there it stays a layer. A
+  // history entry makes the phone's back gesture leave full screen, not the page.
+
+  const enterFull = useCallback(() => {
+    setFull(true);
+    setSheetOpen(false);
+    document.body.classList.add("cam-full");
+    history.pushState({ camFull: true }, "");
+    const el = viewRef.current as (HTMLDivElement & { webkitRequestFullscreen?: () => void }) | null;
+    try {
+      const req = el?.requestFullscreen?.({ navigationUI: "hide" });
+      req?.catch(() => {});
+      if (!req) el?.webkitRequestFullscreen?.();
+    } catch {
+      // A fixed layer is full screen enough.
+    }
+  }, []);
+
+  const leaveFull = useCallback(() => {
+    setFull(false);
+    document.body.classList.remove("cam-full");
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  }, []);
+
+  const exitFull = useCallback(() => {
+    // Unwind our history entry; the popstate handler does the rest.
+    if ((history.state as { camFull?: boolean } | null)?.camFull) history.back();
+    else leaveFull();
+  }, [leaveFull]);
+
+  useEffect(() => {
+    if (!full) return;
+    const onPop = () => leaveFull();
+    // Leaving the browser's own full screen (Esc, a system gesture) leaves ours.
+    const onFs = () => {
+      if (!document.fullscreenElement) exitFull();
+    };
+    window.addEventListener("popstate", onPop);
+    document.addEventListener("fullscreenchange", onFs);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      document.removeEventListener("fullscreenchange", onFs);
+    };
+  }, [full, leaveFull, exitFull]);
+
+  // Unmounting (switching to Upload, leaving the page) must not strand the class.
+  useEffect(() => () => document.body.classList.remove("cam-full"), []);
 
   function shoot() {
     const v = videoRef.current;
@@ -355,7 +424,14 @@ export function CameraMode({
   return (
     <div ref={rootRef} className="lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-4">
       {/* ---- viewfinder ---- */}
-      <div className="relative h-[calc(100svh-12rem-env(safe-area-inset-bottom))] min-h-[420px] overflow-hidden rounded-[1.5rem] bg-[#07090c] text-white shadow-[0_30px_80px_-40px_rgba(0,0,0,0.6)] lg:h-auto lg:min-h-0 lg:aspect-[4/3]">
+      <div
+        ref={viewRef}
+        className={`overflow-hidden bg-[#07090c] text-white ${
+          full
+            ? "fixed inset-0 z-[200] h-[100dvh] w-screen"
+            : "relative h-[calc(100svh-12rem-env(safe-area-inset-bottom))] min-h-[420px] rounded-[1.5rem] shadow-[0_30px_80px_-40px_rgba(0,0,0,0.6)] lg:h-auto lg:min-h-0 lg:aspect-[4/3]"
+        }`}
+      >
         <video
           ref={videoRef}
           playsInline
@@ -379,7 +455,11 @@ export function CameraMode({
         </AnimatePresence>
 
         {/* top bar */}
-        <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-2 bg-gradient-to-b from-black/70 to-transparent p-3 pb-10 sm:p-4">
+        <div
+          className={`absolute inset-x-0 top-0 flex items-start justify-between gap-2 bg-gradient-to-b from-black/70 to-transparent p-3 pb-10 sm:p-4 ${
+            full ? "pt-[max(0.75rem,env(safe-area-inset-top))]" : ""
+          }`}
+        >
           {recording ? (
             <div className="flex items-center gap-2 rounded-full bg-[#e5372a] px-3 py-1.5 font-mono text-[0.78rem] font-semibold">
               <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
@@ -405,6 +485,9 @@ export function CameraMode({
                 <Icon name="torch" className="h-[1.15rem] w-[1.15rem]" />
               </RoundButton>
             )}
+            <RoundButton label={full ? "Exit full screen" : "Full screen"} onClick={full ? exitFull : enterFull}>
+              <Icon name={full ? "collapse" : "expand"} className="h-[1.15rem] w-[1.15rem]" />
+            </RoundButton>
           </div>
         </div>
 
@@ -440,14 +523,18 @@ export function CameraMode({
 
         {/* phone: the live read, as a sheet over the picture */}
         {phase === "live" && !recording && (
-          <div className="absolute inset-x-3 bottom-[7.25rem] lg:hidden">
+          <div
+            className={`absolute inset-x-3 ${
+              full ? "bottom-[calc(7.5rem+env(safe-area-inset-bottom))] mx-auto max-w-md" : "bottom-[7.25rem] lg:hidden"
+            }`}
+          >
             <AnimatePresence initial={false}>
               {sheetOpen && (
                 <motion.div
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 12 }}
-                  className="mb-2 max-h-[38svh] overflow-y-auto rounded-2xl bg-black/70 p-3 backdrop-blur-xl"
+                  className={`mb-2 overflow-y-auto rounded-2xl bg-black/70 p-3 backdrop-blur-xl ${full ? "max-h-[48dvh]" : "max-h-[38svh]"}`}
                 >
                   <LiveRead items={items} scene={scene} time={time} geo={geo} geoBusy={geoBusy} onLocate={onLocate} dark />
                 </motion.div>
@@ -465,7 +552,11 @@ export function CameraMode({
         )}
 
         {/* controls */}
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/30 to-transparent px-6 pb-5 pt-12">
+        <div
+          className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/30 to-transparent px-6 pt-12 ${
+            full ? "pb-[max(1.5rem,env(safe-area-inset-bottom))]" : "pb-5"
+          }`}
+        >
           <div className="mx-auto flex max-w-sm items-center justify-between">
             <div className="flex w-16 justify-center">
               <button
@@ -656,7 +747,9 @@ function LiveRead({
       <div className={`mt-3 space-y-1.5 border-t ${t.line} pt-3 text-[0.76rem] ${t.mist}`}>
         <ContextRow icon="bulb" dark={dark}>
           {scene
-            ? scene.lights.length
+            ? scene.outdoor
+              ? "Looking outdoors: lights aren't judged in daylight"
+              : scene.lights.length
               ? `${scene.lights.length} light fixture${scene.lights.length > 1 ? "s" : ""} look lit`
               : scene.dark
                 ? "Room is dark: lights look off"
