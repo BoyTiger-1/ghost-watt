@@ -8,7 +8,8 @@
 import { CATALOG_BY_ID } from "./devices";
 import { COCO_MAP } from "./live";
 import { estimateUnitWatts } from "./estimate";
-import { classifyScreen, regionStats, ringStats, type LightBlob } from "./scene";
+import { classifyScreen, regionSaturation, regionStats, ringStats, type LightBlob } from "./scene";
+import { iou } from "./boxes";
 import type { CategorizedObservation } from "./parse";
 import type { AuditSettings, Box, DeviceState } from "./types";
 
@@ -51,20 +52,29 @@ export function panelOf(cls: string, b: Box): Box {
     : [b[0] + w * 0.16, b[1] + h * 0.12, b[2] - w * 0.16, b[1] + h * 0.66];
 }
 
-/** A lit fixture seen as one light; costed as a ceiling light. */
-const LIGHT_CATEGORY = "ceiling_light";
+/** Lit fixtures: a compact one is a downlight or pendant, a long one a tube or troffer bank. */
+const LIGHT_CATEGORY = { spot: "downlight", panel: "ceiling_light" } as const;
+const LIGHT_LABEL = { spot: "lamp", panel: "light panel" } as const;
+
+/** A small copy of the frame: greyscale always, colour when the caller has it. */
+export interface FramePixels {
+  data: Uint8Array;
+  w: number;
+  h: number;
+  rgba?: ArrayLike<number>;
+}
 
 /**
  * One frame's worth of things to draw, each with a state, a wattage and a cost.
  *
- * `luma` is a small greyscale copy of the same frame (any size); screens are
- * judged on it. Without it, every screen is priced as on - the worst case.
+ * `luma` is a small copy of the same frame (any size); screens are judged on
+ * it. Without it, every screen is priced as on - the worst case.
  */
 export function readItems(
   dets: readonly FracDetection[],
   lights: readonly LightBlob[],
   settings: AuditSettings,
-  luma?: { data: Uint8Array; w: number; h: number },
+  luma?: FramePixels,
 ): LiveItem[] {
   const items: LiveItem[] = [];
   const hours = settings.unoccupiedHoursPerYear;
@@ -79,9 +89,11 @@ export function readItems(
     if (c.kind === "device") {
       state = "on";
       if (SCREEN_CLASSES.has(d.cls) && luma) {
+        const panel = panelOf(d.cls, d.box);
         const read = classifyScreen(
-          regionStats(luma.data, luma.w, luma.h, panelOf(d.cls, d.box)),
+          regionStats(luma.data, luma.w, luma.h, panel),
           ringStats(luma.data, luma.w, luma.h, d.box),
+          luma.rgba ? regionSaturation(luma.rgba, luma.w, luma.h, panel) : undefined,
         );
         state = read.state;
         why = read.why;
@@ -103,16 +115,17 @@ export function readItems(
     });
   }
 
-  const light = CATALOG_BY_ID[LIGHT_CATEGORY];
   for (const [i, b] of lights.entries()) {
+    const categoryId = LIGHT_CATEGORY[b.kind];
+    const light = CATALOG_BY_ID[categoryId];
     const watts = light ? estimateUnitWatts(light, "on").mid : 0;
     items.push({
       key: `l${i}`,
       kind: "light",
-      label: "light",
-      categoryId: LIGHT_CATEGORY,
+      label: LIGHT_LABEL[b.kind],
+      categoryId,
       box: b.box,
-      score: Math.min(0.9, 0.5 + b.area * 20),
+      score: b.confidence,
       state: "on",
       why: "fixture lit",
       watts,
@@ -149,4 +162,43 @@ export function itemsToObservations(items: readonly LiveItem[]): CategorizedObse
 /** People in frame: the room is in use, so its load is not phantom yet. */
 export function peopleIn(items: readonly LiveItem[]): number {
   return items.filter((i) => i.kind === "person").length;
+}
+
+/** Share of the smaller box covered by the larger: 1 when one sits inside the other. */
+function containment(a: Box, b: Box): number {
+  const ix = Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0]));
+  const iy = Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
+  const small = Math.min((a[2] - a[0]) * (a[3] - a[1]), (b[2] - b[0]) * (b[3] - b[1]));
+  return small > 0 ? (ix * iy) / small : 0;
+}
+
+/** Screens and laptops are often both reported for one monitor; they compete as one. */
+const SAME_THING: Record<string, string> = { tv: "screen", laptop: "screen" };
+
+/**
+ * Detections from the whole photo and from zoomed tiles of it, as one list.
+ *
+ * Tiling is what finds the far row of monitors: the detector sees at 320-448
+ * pixels, so a monitor 40 pixels wide in a 1280-pixel photo is a few pixels to
+ * it, and a quarter-size tile doubles that. The cost is duplicates - the same
+ * monitor whole in one tile, cut in half at the edge of another - so overlapping
+ * boxes of the same kind keep only the best, and a fragment inside a bigger box
+ * of the same kind is dropped.
+ */
+export function mergeDetections(lists: readonly (readonly FracDetection[])[]): FracDetection[] {
+  const all = lists.flat().slice().sort((a, b) => b.score - a.score);
+  const kept: FracDetection[] = [];
+  for (const d of all) {
+    const group = SAME_THING[d.cls] ?? d.cls;
+    const dup = kept.some((k) => (SAME_THING[k.cls] ?? k.cls) === group && (iou(k.box, d.box) > 0.45 || containment(k.box, d.box) > 0.75));
+    if (!dup) kept.push(d);
+  }
+  return kept;
+}
+
+/** Overlapping crops covering a frame: the whole of it, then a 2 x 2 grid with 25% overlap. */
+export function tileGrid(): Box[] {
+  const s = 0.58;
+  const at = [0, 1 - s];
+  return [[0, 0, 1, 1], ...at.flatMap((y) => at.map((x) => [x, y, x + s, y + s] as Box))] as Box[];
 }

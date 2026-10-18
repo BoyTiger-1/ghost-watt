@@ -99,7 +99,7 @@ export const CORE_DEVICES: DeviceCategory[] = [
   {
     id: "desktop",
     label: "Desktop computer",
-    keywords: ["desktop", "computer tower", "pc tower", "workstation", "tower", "desktop computer", "computer"],
+    keywords: ["desktop", "computer tower", "pc tower", "workstation", "tower", "desktop computer", "all-in-one", "all in one", "imac", "computer"],
     wattsOn: 80,
     wattsStandby: 3,
     wattsLow: 40,

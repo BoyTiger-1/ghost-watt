@@ -30,7 +30,7 @@ import { nowLocal } from "@/lib/exif";
 import { detectStill } from "@/lib/detector";
 import { readScene } from "@/lib/scene";
 import { itemsToObservations, peopleIn, readItems, type LiveItem } from "@/lib/ondevice";
-import { PixelReader, annotateFrame, baseName, loadImage, readPhotoFile, videoFileKeyframes } from "@/lib/media";
+import { FrameReader, annotateFrame, baseName, loadImage, readPhotoFile, videoFileKeyframes } from "@/lib/media";
 import {
   captureId,
   captureSettings,
@@ -82,8 +82,9 @@ function locate(lat: number, lon: number): Promise<GeoContext | null> {
 async function readStill(dataUrl: string, settings: AuditSettings) {
   const img = await loadImage(dataUrl);
   const dets = await detectStill(img).catch(() => []);
-  const luma = new PixelReader(160, 120).luma(img);
-  const scene = luma ? readScene(luma.data, luma.w, luma.h) : null;
+  // A still can afford a finer read than live video: far downlights are a few pixels at 256.
+  const luma = new FrameReader(640).read(img);
+  const scene = luma ? readScene(luma.data, luma.w, luma.h, luma.rgba) : null;
   const items = readItems(dets, scene?.lights ?? [], settings, luma ?? undefined);
   return { items, scene };
 }

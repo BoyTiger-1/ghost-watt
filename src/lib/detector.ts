@@ -6,7 +6,7 @@
 
 import type { ObjectDetector } from "@mediapipe/tasks-vision";
 import { COCO_MAP } from "./live";
-import type { FracDetection } from "./ondevice";
+import { mergeDetections, tileGrid, type FracDetection } from "./ondevice";
 
 // Pinned to the installed package version: the WASM runtime and the JS that
 // drives it must match exactly, or the detector fails to start with an opaque
@@ -71,16 +71,54 @@ export function toPixelDetections(raw: Raw[]) {
     .filter((d) => COCO_MAP[d.cls]);
 }
 
-/** Detect objects in a still image or canvas, as fractional boxes. */
+/**
+ * Detect objects in a still image, as fractional boxes: the whole frame, then
+ * zoomed overlapping tiles of it, merged. Five passes instead of one, which a
+ * photo can afford and live video cannot - and what finds the far monitors.
+ */
 export async function detectStill(el: HTMLCanvasElement | HTMLImageElement): Promise<FracDetection[]> {
   const { detector } = await getDetector("IMAGE");
-  const w = el instanceof HTMLImageElement ? el.naturalWidth : el.width;
-  const h = el instanceof HTMLImageElement ? el.naturalHeight : el.height;
-  if (!w || !h) return [];
-  const res = detector.detect(el);
-  return toPixelDetections(res.detections as Raw[]).map((d) => ({
-    cls: d.cls,
-    score: d.score,
-    box: [d.box.x / w, d.box.y / h, (d.box.x + d.box.w) / w, (d.box.y + d.box.h) / h],
-  }));
+  const W = el instanceof HTMLImageElement ? el.naturalWidth : el.width;
+  const H = el instanceof HTMLImageElement ? el.naturalHeight : el.height;
+  if (!W || !H) return [];
+  const lists: FracDetection[][] = [];
+  const crop = document.createElement("canvas");
+  const ctx = crop.getContext("2d");
+  for (const [tx1, ty1, tx2, ty2] of tileGrid()) {
+    const sx = tx1 * W, sy = ty1 * H, sw = (tx2 - tx1) * W, sh = (ty2 - ty1) * H;
+    let src: HTMLCanvasElement | HTMLImageElement = el;
+    if (tx2 - tx1 < 1 && ctx) {
+      crop.width = Math.round(sw);
+      crop.height = Math.round(sh);
+      ctx.drawImage(el, sx, sy, sw, sh, 0, 0, crop.width, crop.height);
+      src = crop;
+    }
+    const cw = src === el ? W : crop.width;
+    const ch = src === el ? H : crop.height;
+    const res = detector.detect(src);
+    lists.push(
+      toPixelDetections(res.detections as Raw[])
+        // A box clipped by a tile edge is a fragment; the whole frame or a neighbour has it whole.
+        // Only interior tile edges cut objects; the photo's own border does not.
+        .filter(
+          (d) =>
+            src === el ||
+            ((tx1 === 0 || d.box.x > 2) &&
+              (ty1 === 0 || d.box.y > 2) &&
+              (tx2 >= 1 || d.box.x + d.box.w < cw - 2) &&
+              (ty2 >= 1 || d.box.y + d.box.h < ch - 2)),
+        )
+        .map((d) => ({
+          cls: d.cls,
+          score: d.score,
+          box: [
+            tx1 + (d.box.x / cw) * (tx2 - tx1),
+            ty1 + (d.box.y / ch) * (ty2 - ty1),
+            tx1 + ((d.box.x + d.box.w) / cw) * (tx2 - tx1),
+            ty1 + ((d.box.y + d.box.h) / ch) * (ty2 - ty1),
+          ] as [number, number, number, number],
+        })),
+    );
+  }
+  return mergeDetections(lists);
 }

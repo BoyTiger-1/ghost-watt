@@ -5,8 +5,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Tracker, type Track } from "@/lib/live";
 import { getDetector, toPixelDetections } from "@/lib/detector";
 import { readItems, peopleIn, type LiveItem } from "@/lib/ondevice";
-import { readScene, type SceneRead } from "@/lib/scene";
-import { KeyframeCollector, PixelReader, itemColor, recorderMime, toJpeg, type Keyframe } from "@/lib/media";
+import { LightTracker, readScene, type SceneRead } from "@/lib/scene";
+import { FrameReader, KeyframeCollector, itemColor, recorderMime, toJpeg, type Keyframe } from "@/lib/media";
 import { fmtMoney, fmtWatts } from "@/lib/energy";
 import { readTime, type GeoContext } from "@/lib/capture";
 import { nowLocal } from "@/lib/exif";
@@ -202,8 +202,10 @@ export function CameraMode({
     getDetector("VIDEO")
       .then((d) => (det = d.detector))
       .catch(() => {});
-    const reader = new PixelReader(160, 120);
-    let luma: ReturnType<PixelReader["luma"]> = null;
+    // 256 across: enough to see a downlight as a shape, cheap enough for every few frames.
+    const reader = new FrameReader(256);
+    const lightTracker = new LightTracker();
+    let luma: ReturnType<FrameReader["read"]> = null;
     let tracks: Track[] = [];
 
     const frame = () => {
@@ -238,8 +240,13 @@ export function CameraMode({
       }
       if (now - lastScene > 220) {
         lastScene = now;
-        luma = reader.luma(v);
-        if (luma) sceneRef.current = readScene(luma.data, luma.w, luma.h);
+        luma = reader.read(v);
+        if (luma) {
+          const scene = readScene(luma.data, luma.w, luma.h, luma.rgba);
+          // Only lights that hold steady across reads: no blinking LEDs, no passing glints.
+          const lights = lightTracker.update(scene.lights);
+          sceneRef.current = { ...scene, lights, lighting: lights.length ? "on" : scene.dark ? "off" : "unclear" };
+        }
       }
       const dets = tracks.map((t) => ({
         id: t.id,

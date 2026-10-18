@@ -63,11 +63,12 @@ const MAX_TOKENS_LARGE = 4000;
 /**
  * Claude models from generation 5 on run adaptive thinking and reject a
  * non-default temperature; older ones take temperature 0 and no effort field.
- * Effort "low" keeps a perception call fast - it is counting, not reasoning.
+ * Effort "medium": "low" answered fast but undercounted - thirty downlights and
+ * a row of monitors seen from behind take a moment's thought to tally.
  */
 function anthropicTuning(model: string): Record<string, unknown> {
   return /^claude-(haiku|sonnet|opus|fable|mythos)-([5-9]|\d{2})/.test(model)
-    ? { output_config: { effort: "low" } }
+    ? { output_config: { effort: "medium" } }
     : { temperature: 0 };
 }
 
