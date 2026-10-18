@@ -38,9 +38,8 @@ export const COCO_MAP: Record<string, LiveClass> = {
   keyboard: { categoryId: null, label: "keyboard", kind: "other" },
   mouse: { categoryId: null, label: "mouse", kind: "other" },
   remote: { categoryId: null, label: "remote", kind: "other" },
-  // A person in frame means the room is in use, and phantom load is about
-  // empty rooms - so people are shown, as the reason a reading may not count.
-  person: { categoryId: null, label: "person", kind: "person" },
+  // People are deliberately not tracked: their boxes covered the lights and
+  // screens that the audit is about, and nobody needs to be followed around.
   // Never drawn. Tracked so a sunlit windscreen or chrome trim inside one is not
   // mistaken for a lamp.
   car: { categoryId: null, label: "car", kind: "other" },

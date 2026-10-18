@@ -59,12 +59,12 @@ describe("Tracker", () => {
     expect(v.map((x) => [x.id, x.cls])).toEqual([[1, "laptop"]]);
   });
 
-  it("never relabels a person as a device", () => {
+  it("never relabels a car as a device", () => {
     const t = new Tracker();
-    t.update([det("person", 0)]);
+    t.update([det("car", 0)]);
     t.update([det("tv", 0)]);
-    const v = t.update([det("tv", 0), det("person", 0)]);
-    expect(v.map((x) => x.cls).sort()).toEqual(["person", "tv"]);
+    const v = t.update([det("tv", 0), det("car", 0)]);
+    expect(v.map((x) => x.cls).sort()).toEqual(["car", "tv"]);
   });
 
   it("holds back an easily invented appliance for an extra frame", () => {
@@ -109,9 +109,10 @@ describe("tallyView", () => {
     expect(tally.costPerYear).toBeGreaterThan(0);
   });
 
-  it("counts people separately and never costs them", () => {
+  it("does not track people at all", () => {
+    expect(COCO_MAP.person).toBeUndefined();
     const tally = tallyView([track("person", 1)], settings);
-    expect(tally.people).toBe(1);
+    expect(tally.people).toBe(0);
     expect(tally.devices).toBe(0);
     expect(tally.costPerYear).toBe(0);
   });

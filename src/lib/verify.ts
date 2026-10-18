@@ -69,7 +69,6 @@ export const MIN_SCORE: Record<string, number> = {
   keyboard: 0.45,
   mouse: 0.45,
   remote: 0.5,
-  person: 0.45,
   car: 0.3,
   truck: 0.3,
   bus: 0.3,
