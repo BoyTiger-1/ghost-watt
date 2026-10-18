@@ -79,7 +79,7 @@ export function Nav() {
       {/* the phone's tab bar */}
       <nav
         aria-label="Sections"
-        className="no-print fixed inset-x-0 bottom-0 z-50 border-t border-line/80 bg-ink/85 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl backdrop-saturate-150 md:hidden"
+        className="app-tabbar no-print fixed inset-x-0 bottom-0 z-50 border-t border-line/80 bg-ink/85 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl backdrop-saturate-150 md:hidden"
       >
         <ul className="mx-auto grid max-w-md grid-cols-5">
           {TABS.map((tab) => {

@@ -40,6 +40,14 @@ export const COCO_MAP: Record<string, LiveClass> = {
   // A person in frame means the room is in use, and phantom load is about
   // empty rooms - so people are shown, as the reason a reading may not count.
   person: { categoryId: null, label: "person", kind: "person" },
+  // Never drawn. Tracked so a sunlit windscreen or chrome trim inside one is not
+  // mistaken for a lamp.
+  car: { categoryId: null, label: "car", kind: "other" },
+  truck: { categoryId: null, label: "truck", kind: "other" },
+  bus: { categoryId: null, label: "bus", kind: "other" },
+  motorcycle: { categoryId: null, label: "motorcycle", kind: "other" },
+  train: { categoryId: null, label: "train", kind: "other" },
+  boat: { categoryId: null, label: "boat", kind: "other" },
 };
 
 /** Pixel box in source-image coordinates. */

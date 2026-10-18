@@ -114,6 +114,15 @@ export interface LightOptions {
   /** RGBA pixels of the same frame, for colour checks. Without them, colour is not judged. */
   rgba?: ArrayLike<number>;
   maxBlobs?: number;
+  /**
+   * "photo" (default): a still, framed level, where lights are up in the ceiling.
+   * "live": a camera being pointed around - at a light, at a window, out at the
+   * street - so position says nothing, a light may fill the frame, and the
+   * outdoors has to be recognised rather than assumed away.
+   */
+  mode?: "photo" | "live";
+  /** Called with the reason each sizeable candidate was dropped. For tuning, never for the UI. */
+  onReject?: (reason: string, box: [number, number, number, number]) => void;
 }
 
 interface Core {
@@ -128,6 +137,12 @@ interface Core {
   blue: number;
   surface: number;
   contrast: number;
+  r: number;
+  g: number;
+  b: number;
+  /** Saturation summed over the near-white pixels only, and how many there were. */
+  satHi: number;
+  nHi: number;
 }
 
 /**
@@ -157,6 +172,7 @@ export function findLightSources(luma: Uint8Array, w: number, h: number, opts: L
   const n = w * h;
   const rgba = opts.rgba;
   const maxBlobs = opts.maxBlobs ?? 40;
+  const live = opts.mode === "live";
 
   // Integral image, for the local mean around every pixel in O(1).
   const W1 = w + 1;
@@ -169,12 +185,62 @@ export function findLightSources(luma: Uint8Array, w: number, h: number, opts: L
     }
   }
   const r = Math.max(2, Math.round(Math.min(w, h) * 0.06));
-  const localMean = (x: number, y: number) => {
-    const x1 = Math.max(0, x - r);
-    const y1 = Math.max(0, y - r);
-    const x2 = Math.min(w, x + r + 1);
-    const y2 = Math.min(h, y + r + 1);
+  const meanAround = (x: number, y: number, rad: number) => {
+    const x1 = Math.max(0, x - rad);
+    const y1 = Math.max(0, y - rad);
+    const x2 = Math.min(w, x + rad + 1);
+    const y2 = Math.min(h, y + rad + 1);
     const s = integral[y2 * W1 + x2] - integral[y1 * W1 + x2] - integral[y2 * W1 + x1] + integral[y1 * W1 + x1];
+    return s / ((x2 - x1) * (y2 - y1));
+  };
+  const localMean = (x: number, y: number) => meanAround(x, y, r);
+  // Live: a light close to the camera is bigger than the small window, so the
+  // middle of it is no brighter than its own neighbourhood. A second, wide window
+  // sees past it to the ceiling.
+  const R = Math.max(r + 1, Math.round(Math.min(w, h) * 0.22));
+  const liftOf = (x: number, y: number, v: number) =>
+    live ? v - Math.min(meanAround(x, y, r), meanAround(x, y, R)) : v - localMean(x, y);
+
+  // Sky: bright and clearly blue. Live only: pointed out of a window at the street,
+  // every sunlit windscreen and chrome trim is a clipped, glowing highlight.
+  const skyIntegral = new Float64Array(W1 * (h + 1));
+  let skyTop = 0;
+  const topRows = Math.round(h * 0.35);
+  if (live && rgba) {
+    for (let y = 0; y < h; y++) {
+      let row = 0;
+      for (let x = 0; x < w; x++) {
+        const p = y * w + x;
+        const R0 = rgba[p * 4];
+        const G0 = rgba[p * 4 + 1];
+        const B0 = rgba[p * 4 + 2];
+        // Sky is a moderately saturated, bright blue. A cool-white wall is barely
+        // blue; blue paint and artwork are deeply saturated. Neither counts.
+        const mx = Math.max(R0, G0, B0);
+        const sat = mx > 0 ? (mx - Math.min(R0, G0, B0)) / mx : 0;
+        const sky = luma[p] > 130 && B0 > 150 && B0 - R0 > 35 && B0 - G0 > 10 && sat < 0.6 ? 1 : 0;
+        row += sky;
+        if (y < topRows) skyTop += sky;
+        skyIntegral[(y + 1) * W1 + x + 1] = skyIntegral[y * W1 + x + 1] + row;
+      }
+    }
+    // Looking outdoors in daylight - sky across the top of the frame - there is no
+    // phantom load to light up, and every sunlit windscreen is a glowing highlight.
+    // The top band, not the whole frame: blue artwork or tinted glass indoors puts
+    // blue pixels in the frame too, but not a band of them overhead.
+    const topShare = skyTop / Math.max(1, topRows * w);
+    if (topShare > 0.18) {
+      opts.onReject?.(`outdoors (sky ${topShare.toFixed(2)} of the top band)`, [0, 0, 1, 1]);
+      return [];
+    }
+  }
+  const skyShare = (x1: number, y1: number, x2: number, y2: number) => {
+    x1 = Math.max(0, x1);
+    y1 = Math.max(0, y1);
+    x2 = Math.min(w, x2);
+    y2 = Math.min(h, y2);
+    if (x2 <= x1 || y2 <= y1) return 0;
+    const s = skyIntegral[y2 * W1 + x2] - skyIntegral[y1 * W1 + x2] - skyIntegral[y2 * W1 + x1] + skyIntegral[y1 * W1 + x1];
     return s / ((x2 - x1) * (y2 - y1));
   };
 
@@ -238,7 +304,7 @@ export function findLightSources(luma: Uint8Array, w: number, h: number, opts: L
     for (let x = 0; x < w; x++) {
       const i = y * w + x;
       const v = luma[i];
-      const lift = v - localMean(x, y);
+      const lift = liftOf(x, y, v);
       if ((v >= 205 && lift >= 30) || (v >= 248 && lift >= 16)) cand[i] = 1;
     }
   }
@@ -247,7 +313,7 @@ export function findLightSources(luma: Uint8Array, w: number, h: number, opts: L
   const seen = new Uint8Array(n);
   for (let start = 0; start < n; start++) {
     if (!cand[start] || seen[start]) continue;
-    const c: Core = { x1: w, y1: h, x2: 0, y2: 0, count: 0, sum: 0, peak: 0, sat: 0, blue: 0, surface: surfaceLabel[start], contrast: 0 };
+    const c: Core = { x1: w, y1: h, x2: 0, y2: 0, count: 0, sum: 0, peak: 0, sat: 0, blue: 0, surface: surfaceLabel[start], contrast: 0, r: 0, g: 0, b: 0, satHi: 0, nHi: 0 };
     seen[start] = 1;
     stack.push(start);
     while (stack.length) {
@@ -267,8 +333,16 @@ export function findLightSources(luma: Uint8Array, w: number, h: number, opts: L
         const G = rgba[p * 4 + 1];
         const B = rgba[p * 4 + 2];
         const mx = Math.max(R, G, B);
-        c.sat += mx > 0 ? (mx - Math.min(R, G, B)) / mx : 0;
+        const sat = mx > 0 ? (mx - Math.min(R, G, B)) / mx : 0;
+        c.sat += sat;
         c.blue += B - R;
+        c.r += R;
+        c.g += G;
+        c.b += B;
+        if (v >= 235) {
+          c.satHi += sat;
+          c.nHi++;
+        }
       }
       for (const q of neighbours(p)) {
         if (q >= 0 && q < n && cand[q] && !seen[q]) {
@@ -284,28 +358,53 @@ export function findLightSources(luma: Uint8Array, w: number, h: number, opts: L
   const kept: Core[] = [];
   for (const c of cores) {
     if (c.count < minPx) continue; // specks: LEDs, glints, noise
+    const drop = (why: string) => opts.onReject?.(why, [c.x1 / w, c.y1 / h, (c.x2 + 1) / w, (c.y2 + 1) / h]);
     const bh = c.y2 - c.y1 + 1;
     const area = c.count / n;
     const cy = (c.y1 + c.y2 + 1) / 2 / h;
-    if (area > 0.035 || cy > 0.6 || bh / h > 0.2) continue; // windows, doors, desks, floor reflections
-    // A solid bright rectangle below ceiling height is a window pane or a glass door.
-    // Ceiling panels sit high in the frame and are foreshortened into trapezoids.
-    const fill = c.count / ((c.x2 - c.x1 + 1) * bh);
-    if (fill > 0.82 && area > 0.004 && cy > 0.3) continue;
+    const bw = c.x2 - c.x1 + 1;
+    const fill = c.count / (bw * bh);
+    if (live) {
+      // Pointed at a light, it can be anywhere and fill a good part of the frame.
+      if (area > 0.25) { drop("too big"); continue; }
+      // A big solid rectangle running off the edge of the frame is a window.
+      const touches = c.x1 === 0 || c.y1 === 0 || c.x2 === w - 1 || c.y2 === h - 1;
+      if (touches && area > 0.02 && fill > 0.8) { drop("window: solid rectangle off the frame edge"); continue; }
+      // Anything bright with sky around it is outside, or a reflection of outside.
+      const px = Math.max(3, Math.round(bw * 0.5));
+      const py = Math.max(3, Math.round(bh * 0.5));
+      if (rgba && skyShare(c.x1 - px, c.y1 - py, c.x2 + 1 + px, c.y2 + 1 + py) > 0.08) { drop("sky around it"); continue; }
+    } else {
+      if (area > 0.035 || cy > 0.6 || bh / h > 0.2) { drop("too big, too tall or too low"); continue; } // windows, doors, desks, floor reflections
+      // A solid bright rectangle below ceiling height is a window pane or a glass door.
+      // Ceiling panels sit high in the frame and are foreshortened into trapezoids.
+      if (fill > 0.82 && area > 0.004 && cy > 0.3) { drop("window pane shape"); continue; }
+    }
     const mean = c.sum / c.count;
     if (rgba) {
-      if (c.sat / c.count > 0.3) continue; // coloured: RGB backlight, status LED, screen
-      if (c.blue / c.count > 22) continue; // blue-white: sky
+      if (live) {
+        // A warm 2700 K bulb glows orange at its edges but is white where it clips;
+        // an RGB backlight is coloured all the way through.
+        const warm = c.r >= c.g && c.g >= c.b && (c.r - c.b) / c.count > 20;
+        if (c.nHi && c.satHi / c.nHi > 0.25) { drop("coloured where it clips"); continue; }
+        if (c.sat / c.count > 0.3 && !warm) { drop("coloured, not warm white"); continue; }
+      } else if (c.sat / c.count > 0.3) { drop("coloured"); continue; } // coloured: RGB backlight, status LED, screen
+      if (c.blue / c.count > 22) { drop("blue-white: sky"); continue; } // blue-white: sky
     }
     // Inside a big bright surface, a light has to outshine it.
-    let contrast = mean - localMean(Math.round((c.x1 + c.x2) / 2), Math.round((c.y1 + c.y2) / 2));
-    if (c.surface >= 0 && surfaceArea[c.surface] > n * 0.06) {
+    const cx0 = Math.round((c.x1 + c.x2) / 2);
+    const cy0 = Math.round((c.y1 + c.y2) / 2);
+    let contrast = live ? mean - Math.min(localMean(cx0, cy0), meanAround(cx0, cy0, R)) : mean - localMean(cx0, cy0);
+    // Live: when the bright surface is mostly the light itself (a lamp filling the
+    // frame), there is nothing else in it to outshine.
+    const selfSurface = live && c.surface >= 0 && surfaceArea[c.surface] - c.count < c.count * 0.5;
+    if (c.surface >= 0 && surfaceArea[c.surface] > n * 0.06 && !selfSurface) {
       const rest = surfaceArea[c.surface] - c.count;
       const restMean = rest > 0 ? (surfaceSum[c.surface] - c.sum) / rest : mean;
       contrast = Math.min(contrast, mean - restMean);
-      if (contrast < 16) continue;
+      if (contrast < 16) { drop("no brighter than the bright surface it sits in"); continue; }
       // A white cloud in a blue sky outshines its surroundings too; the blue gives it away.
-      if (rgba && rest > 0 && (surfaceBlue[c.surface] - c.blue) / rest > 15) continue;
+      if (rgba && rest > 0 && (surfaceBlue[c.surface] - c.blue) / rest > 15) { drop("cloud in a blue sky"); continue; }
     }
     // An emitter, not a bright surface. A lit fixture has a clipped core and its
     // light bleeds into the surroundings - brightness falls off smoothly. A white
@@ -331,14 +430,18 @@ export function findLightSources(luma: Uint8Array, w: number, h: number, opts: L
     const clip = clipped / core.n;
     const std = Math.sqrt(Math.max(0, sq / core.n - boxMean * boxMean));
     // A fixture fills its own box with light; a thin streak or a reflection in glass does not.
-    if (boxMean < 170) continue;
+    if (boxMean < 170) { drop("box too dark to be a fixture"); continue; }
     // Perfectly flat and not quite clipped: a wall panel catching the light, not a lamp.
-    if (std < 6 && clip < 0.2) continue;
+    if (std < 6 && clip < 0.2) { drop("flat patch, not clipped"); continue; }
     // A far downlight is a few clipped pixels with no room to show a glow; anything
     // bigger that is clipped edge to edge with no bleed is a white surface.
     const farSpot = c.count / n < 0.0008 && clip >= 0.3 && boxMean >= 235;
-    const glows = c.peak >= 248 && (bleed >= 0.2 || farSpot);
-    if (!glows) continue;
+    // Live: a flat LED panel, or any light seen up close, is clipped solid with a
+    // hard edge and no room to bleed. A white grille or wall never clips like that;
+    // a white page on a screen does, which is why lights inside screens are dropped.
+    const clippedSolid = live && area >= 0.003 && clip >= 0.45 && boxMean >= 190;
+    const glows = c.peak >= 248 && (bleed >= 0.2 || farSpot || clippedSolid);
+    if (!glows) { drop(`no glow: peak=${c.peak} bleed=${bleed.toFixed(2)} clip=${clip.toFixed(2)} mean=${boxMean.toFixed(0)} area=${area.toFixed(4)}`); continue; }
     kept.push({ ...c, contrast });
   }
 
@@ -444,15 +547,30 @@ export interface SceneRead {
   /** "on" when fixtures are visibly lit. */
   lighting: "on" | "off" | "unclear";
   dark: boolean;
+  /** Live only: the camera is looking outdoors in daylight, so lights are not judged. */
+  outdoor?: boolean;
 }
 
-export function readScene(luma: Uint8Array, w: number, h: number, rgba?: ArrayLike<number>): SceneRead {
+export function readScene(
+  luma: Uint8Array,
+  w: number,
+  h: number,
+  rgba?: ArrayLike<number>,
+  mode: LightOptions["mode"] = "photo",
+): SceneRead {
   let sum = 0;
   for (let i = 0; i < luma.length; i++) sum += luma[i];
   const brightness = sum / luma.length;
-  const lights = findLightSources(luma, w, h, { rgba });
+  let outdoor = false;
+  const lights = findLightSources(luma, w, h, {
+    rgba,
+    mode,
+    onReject: (why) => {
+      if (why.startsWith("outdoors")) outdoor = true;
+    },
+  });
   const lighting = lights.length >= 1 ? "on" : brightness < 60 ? "off" : "unclear";
-  return { brightness, lights, lighting, dark: brightness < 60 };
+  return { brightness, lights, lighting, dark: brightness < 60, ...(outdoor ? { outdoor } : {}) };
 }
 
 /** Mean saturation (0-1) of the RGBA pixels inside a fractional box. */

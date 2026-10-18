@@ -80,6 +80,16 @@
   }
 }
 
+/* Fullscreen camera: the viewfinder owns the screen, so the app chrome steps aside. */
+body.cam-full {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+body.cam-full .site-header,
+body.cam-full .app-tabbar {
+  display: none;
+}
+
 /* Keyboard focus: visible for keyboard users, never for mouse users. */
 :focus-visible {
   outline: 2px solid var(--color-cyan);
