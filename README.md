@@ -79,6 +79,28 @@ hours and price rather than a sum of every worst case, so it narrows as you add 
 With no AI engine reachable, a capture falls back to the on-device reading of that capture,
 and only to a room-profile estimate if the detector saw nothing either.
 
+### Two costs, real prices, and an efficiency verdict
+
+- **Left on vs. typical use.** Each device shows what it costs if it is left on
+  whenever the space is empty (the phantom-load figure), and what it costs at typical
+  use: hours actually in use for that kind of device at a home, school or office, and
+  standby the rest ([`src/lib/usage.ts`](src/lib/usage.ts)). Home lights run about
+  3 h a day (DOE lighting study), a microwave about 10 minutes plus its clock, a TV
+  4-5 h (Nielsen); school and office hours follow the building's occupied hours.
+  Pick **Home / School / Office** on the scanner.
+- **Prices.** A home pays the residential rate and a school or office the
+  commercial one, often 2x apart in the same state. When a capture has a location,
+  the serving utility's current published tariff comes from OpenEI's Utility Rate
+  Database, at the marginal rate a typical customer's month reaches, hour-weighted for
+  time-of-use plans ([`src/lib/tariff.ts`](src/lib/tariff.ts)). Otherwise the
+  state's 2026 average for that sector (EIA Electric Power Monthly, Table 5.6.B).
+- **Efficiency.** Every device is graded A-F against an efficient modern
+  equivalent (an LED bulb, an ENERGY STAR monitor, an LED troffer...) and given a
+  verdict: *replace* (with savings and payback at typical use), *fix the habit*
+  (efficient but left on), *standby*, or *fine* ([`src/lib/efficiency.ts`](src/lib/efficiency.ts)).
+  With an AI key, the model reports each unit's technology (halogen, T12, CRT...), so
+  grades reflect the actual unit rather than a typical one.
+
 ### The pipeline at a glance
 
 | Stage | Goes in | What happens | Comes out |

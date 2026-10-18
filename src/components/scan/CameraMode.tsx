@@ -636,6 +636,7 @@ interface Row {
   count: number;
   watts: number;
   cost: number;
+  typical: number;
   score: number;
 }
 
@@ -649,9 +650,10 @@ function group(items: readonly LiveItem[]): Row[] {
       r.count++;
       r.watts += it.watts;
       r.cost += it.costPerYear;
+      r.typical += it.typicalCostPerYear;
       r.score = Math.max(r.score, it.score);
     } else {
-      rows.set(key, { key, label: it.label, kind: it.kind, state: it.state, count: 1, watts: it.watts, cost: it.costPerYear, score: it.score });
+      rows.set(key, { key, label: it.label, kind: it.kind, state: it.state, count: 1, watts: it.watts, cost: it.costPerYear, typical: it.typicalCostPerYear, score: it.score });
     }
   }
   return [...rows.values()].sort((a, b) => b.cost - a.cost || b.count - a.count);
@@ -664,7 +666,7 @@ function SummaryLine({ items, dark }: { items: readonly LiveItem[]; dark?: boole
     <span className="flex min-w-0 items-baseline gap-2">
       <span className={`font-mono text-[1.05rem] font-semibold ${dark ? "text-white" : "text-fog"}`}>
         ≈{fmtMoney(cost)}
-        <span className={`text-[0.72rem] font-normal ${dark ? "text-white/60" : "text-dim"}`}>/yr</span>
+        <span className={`text-[0.72rem] font-normal ${dark ? "text-white/60" : "text-dim"}`}>/yr if left on</span>
       </span>
       <span className={`truncate text-[0.78rem] ${dark ? "text-white/70" : "text-mist"}`}>
         {n ? `${n} powered thing${n > 1 ? "s" : ""} in view` : "point at screens, lights, appliances"}
@@ -692,6 +694,7 @@ function LiveRead({
 }) {
   const rows = group(items);
   const cost = items.reduce((s, i) => s + i.costPerYear, 0);
+  const typical = items.reduce((s, i) => s + i.typicalCostPerYear, 0);
   const watts = items.reduce((s, i) => s + i.watts, 0);
   const people = peopleIn(items);
   const t = dark
@@ -710,10 +713,10 @@ function LiveRead({
       <div className={dark ? "" : "mt-3"}>
         <div className={`font-mono text-[2rem] font-bold leading-none ${t.fog}`}>
           ≈{fmtMoney(cost)}
-          <span className={`ml-1 text-sm font-normal ${t.dim}`}>/yr</span>
+          <span className={`ml-1 text-sm font-normal ${t.dim}`}>/yr if left on</span>
         </div>
         <p className={`mt-1.5 text-[0.78rem] ${t.mist}`}>
-          {fmtWatts(watts)} drawing in view · rough, until you take a photo
+          <span className={`font-mono font-semibold ${t.fog}`}>≈{fmtMoney(typical)}/yr</span> at typical use · {fmtWatts(watts)} drawing
         </p>
       </div>
 
@@ -739,7 +742,12 @@ function LiveRead({
                 {r.kind === "person" ? "room in use" : `${fmtWatts(r.watts)} · ${Math.round(r.score * 100)}% sure`}
               </span>
             </span>
-            {r.kind !== "person" && <span className={`font-mono text-[0.8rem] font-semibold ${t.fog}`}>{fmtMoney(r.cost)}</span>}
+            {r.kind !== "person" && (
+              <span className="text-right">
+                <span className={`block font-mono text-[0.8rem] font-semibold ${t.fog}`}>{fmtMoney(r.cost)}</span>
+                <span className={`block font-mono text-[0.64rem] ${t.dim}`}>{fmtMoney(r.typical)} typ</span>
+              </span>
+            )}
           </li>
         ))}
       </ul>
@@ -857,7 +865,8 @@ function bracket(ctx: CanvasRenderingContext2D, x: number, y: number, w: number,
 function label(it: LiveItem): string {
   if (it.kind === "person") return "person · room in use";
   const state = it.why === "screen dark" ? " · dark" : it.why === "screen lit" ? " · lit" : "";
-  return `${it.label}${state} · ${fmtWatts(it.watts)} · ${fmtMoney(it.costPerYear)}/yr`;
+  // Typical use on the picture: the honest everyday figure. The panel adds the left-on one.
+  return `${it.label}${state} · ${fmtWatts(it.watts)} · ${fmtMoney(it.typicalCostPerYear)}/yr typ`;
 }
 
 /**

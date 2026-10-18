@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { lookupRate, lookupUtility } from "@/lib/providers";
-import { REGION_BY_CODE, regionOrDefault } from "@/lib/grid";
+import { REGION_BY_CODE, RATE_TABLE_SOURCE, regionOrDefault, regionRate } from "@/lib/grid";
+import { lookupTariff, type Sector } from "@/lib/tariff";
 import { RULES, checkLimits, clientIp } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
@@ -8,24 +8,30 @@ export const runtime = "nodejs";
 /**
  * Where a photo was taken, in the terms the money depends on.
  *
- * ?lat=..&lon=..  ->  { place, state, ratePerKwh, rateSource, rateQuality, co2PerKwh }
+ * ?lat=..&lon=..&sector=residential|commercial
+ *   -> { place, state, ratePerKwh, rateSource, rateQuality, co2PerKwh, tariff? }
  *
  * The coordinates come from the photo's own EXIF or the phone's location. The
- * place name is from OpenStreetMap; the price is the serving utility's when NREL
- * knows it, the state average otherwise; the carbon is the state grid's. Every
- * step degrades rather than fails: with no network at all this still answers
- * with the US average, and says so.
+ * place name is from OpenStreetMap. The price is the serving utility's current
+ * published tariff (OpenEI URDB) at the marginal rate a typical customer pays,
+ * for the right sector - a home is not on a commercial rate - and the state's
+ * 2026 average for that sector when no tariff is found. Carbon is the state
+ * grid's. Every step degrades rather than fails.
  */
 export interface LocateResult {
   place: string | null;
   state: string | null;
   country: string | null;
+  sector: Sector;
   ratePerKwh: number;
   rateSource: string;
   /** How specific the price is: the serving utility, the state, or the national average. */
   rateQuality: "utility" | "state" | "national";
   co2PerKwh: number;
   utilityName?: string;
+  tariff?: { name: string; since: number | null; fixedMonthly: number | null };
+  /** The state average for the same sector, for comparison. */
+  stateRatePerKwh: number;
 }
 
 const cache = new Map<string, LocateResult>();
@@ -34,48 +40,49 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const lat = Number(url.searchParams.get("lat"));
   const lon = Number(url.searchParams.get("lon"));
+  const sector: Sector = url.searchParams.get("sector") === "commercial" ? "commercial" : "residential";
   if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
     return NextResponse.json({ error: "Pass lat and lon." }, { status: 400 });
   }
 
   // ~1 km: the same building, and the same utility, whichever corner it was shot from.
-  const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
+  const key = `${lat.toFixed(2)},${lon.toFixed(2)},${sector}`;
   const hit = cache.get(key);
   if (hit) return NextResponse.json(hit);
 
   const verdict = await checkLimits([{ key: "locate:" + clientIp(req), rule: RULES.locateIp, scope: "ip" }]);
   if (!verdict.ok) return NextResponse.json({ error: "Too many lookups; try again shortly." }, { status: 429 });
 
-  const geo = await reverseGeocode(lat, lon);
+  const [geo, tariff] = await Promise.all([reverseGeocode(lat, lon), lookupTariff(lat, lon, sector)]);
   const state = geo.state && REGION_BY_CODE[geo.state] ? geo.state : null;
   const region = regionOrDefault(state ?? undefined);
+  const stateRate = regionRate(region, sector);
 
-  let result: LocateResult = {
-    place: geo.place,
-    state,
-    country: geo.country,
-    ratePerKwh: region.ratePerKwh,
-    rateSource: state ? `State average for ${region.name}` : "US average",
-    rateQuality: state ? "state" : "national",
-    co2PerKwh: region.co2PerKwh,
-  };
-
-  // The serving utility only exists for US addresses; elsewhere NREL has nothing.
-  if (geo.country === "US" || state) {
-    const utility = await lookupUtility(lat, lon);
-    if (utility.status === "live" && utility.ratePerKwh > 0) {
-      result = {
-        ...result,
-        ratePerKwh: utility.ratePerKwh,
-        rateSource: utility.source,
+  const result: LocateResult = tariff
+    ? {
+        place: geo.place,
+        state,
+        country: geo.country ?? "US",
+        sector,
+        ratePerKwh: tariff.ratePerKwh,
+        rateSource: `${tariff.utility} · ${tariff.name}${tariff.since ? ` (${tariff.since})` : ""} · OpenEI URDB`,
         rateQuality: "utility",
-        utilityName: utility.utilityName,
+        co2PerKwh: region.co2PerKwh,
+        utilityName: tariff.utility,
+        tariff: { name: tariff.name, since: tariff.since, fixedMonthly: tariff.fixedMonthly },
+        stateRatePerKwh: stateRate,
+      }
+    : {
+        place: geo.place,
+        state,
+        country: geo.country,
+        sector,
+        ratePerKwh: stateRate,
+        rateSource: state ? `${region.name} ${sector} average · ${RATE_TABLE_SOURCE}` : `US ${sector} average · ${RATE_TABLE_SOURCE}`,
+        rateQuality: state ? "state" : "national",
+        co2PerKwh: region.co2PerKwh,
+        stateRatePerKwh: stateRate,
       };
-    } else if (state) {
-      const avg = await lookupRate(state);
-      result = { ...result, ratePerKwh: avg.ratePerKwh, rateSource: avg.source };
-    }
-  }
 
   if (cache.size > 2000) cache.clear();
   cache.set(key, result);

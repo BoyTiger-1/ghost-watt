@@ -4,6 +4,7 @@
 
 import { CATALOG_BY_ID } from "./devices";
 import { estimateUnitWatts } from "./estimate";
+import { typicalUse } from "./usage";
 import type {
   AuditSettings,
   DeviceCategory,
@@ -100,6 +101,21 @@ export function scoreObservation(
   const paybackMonths =
     fixCost > 0 && annualSavings > 0 ? (fixCost / annualSavings) * 12 : null;
 
+  // Typical use, for contrast with "left on": hours in use where it is, standby
+  // the rest. The user's own hours win when given.
+  const active = estimateUnitWatts(cat, "on", { aiWatts: obs.wattsHint, userWatts: obs.state === "on" ? obs.userWatts : undefined }).mid;
+  const typical = typicalUse(
+    cat,
+    active,
+    settings.usageContext ?? "school",
+    settings.occupiedHoursPerYear ?? Math.max(0, 8760 - settings.unoccupiedHoursPerYear),
+  );
+  const typicalHoursPerDay = hoursKnown && !cat.thermostatic ? hours / 365 : typical.hoursPerDay;
+  const typicalKwhPerUnit = hoursKnown && !cat.thermostatic
+    ? (hours * active + (8760 - hours) * cat.wattsStandby) / 1000
+    : typical.kwhPerYear;
+  const typicalKwhPerYear = typicalKwhPerUnit * count;
+
   return {
     id: `${source}-${cat.id}-${index}`,
     categoryId: cat.id,
@@ -124,6 +140,12 @@ export function scoreObservation(
     basis: unit.basis,
     hoursPerYear: hours,
     hoursKnown,
+    activeWattsPerUnit: active,
+    typicalHoursPerDay,
+    typicalKwhPerYear,
+    typicalCostPerYear: typicalKwhPerYear * settings.ratePerKwh,
+    usageBasis: hoursKnown && !cat.thermostatic ? "Your hours" : typical.basis,
+    ...(obs.tech ? { tech: obs.tech } : {}),
     ...(obs.evidence ? { evidence: obs.evidence } : {}),
     ...(obs.boxes?.length ? { boxes: obs.boxes } : {}),
   };
@@ -152,6 +174,8 @@ export function rankObservations(
       existing.costLowPerYear += o.costLowPerYear;
       existing.costHighPerYear += o.costHighPerYear;
       existing.annualSavings += o.annualSavings;
+      existing.typicalKwhPerYear = (existing.typicalKwhPerYear ?? 0) + (o.typicalKwhPerYear ?? 0);
+      existing.typicalCostPerYear = (existing.typicalCostPerYear ?? 0) + (o.typicalCostPerYear ?? 0);
       if (o.boxes?.length) existing.boxes = [...(existing.boxes ?? []), ...o.boxes];
       existing.paybackMonths =
         existing.fixCost > 0 && existing.annualSavings > 0

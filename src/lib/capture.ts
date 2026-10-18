@@ -22,6 +22,10 @@ export interface GeoContext {
   rateQuality: "utility" | "state" | "national";
   co2PerKwh: number;
   utilityName?: string;
+  /** Residential or commercial: a house and a school a street apart pay different prices. */
+  sector?: "residential" | "commercial";
+  stateRatePerKwh?: number;
+  tariff?: { name: string; since: number | null; fixedMonthly: number | null };
 }
 
 /** What the person scanning told us. Every field optional. */

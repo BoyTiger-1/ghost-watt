@@ -24,8 +24,10 @@ import { analysisSquare } from "@/lib/image";
 import { ROOM_TYPE_BY_ID, type CategorizedObservation } from "@/lib/parse";
 import { aggregate, fmtCo2, fmtKwh, fmtMoney, fmtMoneyFull } from "@/lib/energy";
 import { costRange, RATE_SIGMA, type RateQuality } from "@/lib/estimate";
-import { regionOrDefault } from "@/lib/grid";
-import { unoccupiedHours, SCHEDULE_PRESETS } from "@/lib/schedule";
+import { regionOrDefault, regionRate } from "@/lib/grid";
+import { occupiedHours, unoccupiedHours, SCHEDULE_BY_ID, SCHEDULE_PRESETS } from "@/lib/schedule";
+import { contextForBuildingType, type UsageContext } from "@/lib/usage";
+import { EfficiencyPanel } from "./EfficiencyPanel";
 import { nowLocal } from "@/lib/exif";
 import { detectStill } from "@/lib/detector";
 import { readScene } from "@/lib/scene";
@@ -63,14 +65,16 @@ const PLACEHOLDER_BUILDING: Building = {
   createdAt: new Date(0).toISOString(),
 };
 
-// ~1 km cache: every capture from one building shares one lookup.
+type Sector = "residential" | "commercial";
+
+// ~1 km cache: every capture from one building shares one lookup per sector.
 const geoCache = new Map<string, Promise<GeoContext | null>>();
-function locate(lat: number, lon: number): Promise<GeoContext | null> {
-  const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
+function locate(lat: number, lon: number, sector: Sector): Promise<GeoContext | null> {
+  const key = `${lat.toFixed(2)},${lon.toFixed(2)},${sector}`;
   if (!geoCache.has(key)) {
     geoCache.set(
       key,
-      fetch(`/api/locate?lat=${lat}&lon=${lon}`)
+      fetch(`/api/locate?lat=${lat}&lon=${lon}&sector=${sector}`)
         .then((r) => (r.ok ? (r.json() as Promise<GeoContext>) : null))
         .catch(() => null),
     );
@@ -113,8 +117,35 @@ export function Scanner() {
   const [hovered, setHovered] = useState<string | null>(null);
   const [deviceGeo, setDeviceGeo] = useState<{ lat: number; lon: number; geo: GeoContext | null } | null>(null);
   const [geoBusy, setGeoBusy] = useState(false);
+  const deviceGeoRef = useRef(deviceGeo);
+  useEffect(() => {
+    deviceGeoRef.current = deviceGeo;
+  }, [deviceGeo]);
   const [toast, setToast] = useState<string | null>(null);
   const [override, setOverride] = useState<Partial<AuditSettings>>({});
+  /** Where the scan is: null until chosen, then remembered on this device. */
+  const [placeChoice, setPlaceChoice] = useState<UsageContext | null>(null);
+  useEffect(() => {
+    // Deferred so the first render matches the prerendered page.
+    const t = setTimeout(() => {
+      try {
+        const saved = localStorage.getItem("gw-place");
+        if (saved === "home" || saved === "school" || saved === "office") setPlaceChoice(saved);
+      } catch {
+        // Storage blocked: the building's own type decides.
+      }
+    }, 0);
+    return () => clearTimeout(t);
+  }, []);
+  const choosePlace = (p: UsageContext) => {
+    setPlaceChoice(p);
+    setSavedAuditId(null);
+    try {
+      localStorage.setItem("gw-place", p);
+    } catch {
+      // Not remembered, still applied.
+    }
+  };
 
   const capturesRef = useRef(captures);
   useEffect(() => {
@@ -136,18 +167,31 @@ export function Scanner() {
   // The building is the source of truth for the assumptions; the override layer
   // sits on top so a user can still say "no, our rate is actually this".
   const region = regionOrDefault(building.regionCode);
+  // Home, school or office decides three things: how many hours each device is
+  // typically in use, which hours count as empty, and which price applies - a
+  // house pays the residential rate, which can be twice the commercial one.
+  const place: UsageContext = placeChoice ?? contextForBuildingType(building.typeId);
+  const sector: Sector = place === "home" ? "residential" : "commercial";
+  const schedule =
+    place === contextForBuildingType(building.typeId) ? building.schedule : SCHEDULE_BY_ID[place].schedule;
   const settings: AuditSettings = useMemo(
     () => ({
-      ratePerKwh: override.ratePerKwh ?? liveRate?.ratePerKwh ?? region.ratePerKwh,
+      ratePerKwh: override.ratePerKwh ?? liveRate?.ratePerKwh ?? regionRate(region, sector),
       co2PerKwh: override.co2PerKwh ?? region.co2PerKwh,
-      unoccupiedHoursPerYear: override.unoccupiedHoursPerYear ?? unoccupiedHours(building.schedule),
+      unoccupiedHoursPerYear: override.unoccupiedHoursPerYear ?? unoccupiedHours(schedule),
+      occupiedHoursPerYear: occupiedHours(schedule),
+      usageContext: place,
       regionCode: building.regionCode,
       buildingTypeId: building.typeId,
       floorAreaSqFt: building.floorAreaSqFt,
       demandChargePerKw: override.demandChargePerKw,
     }),
-    [override, liveRate, region, building],
+    [override, liveRate, region, building, place, sector, schedule],
   );
+  const sectorRef = useRef(sector);
+  useEffect(() => {
+    sectorRef.current = sector;
+  }, [sector]);
   const settingsRef = useRef(settings);
   useEffect(() => {
     settingsRef.current = settings;
@@ -180,7 +224,7 @@ export function Scanner() {
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const { latitude: lat, longitude: lon } = pos.coords;
-        const geo = await locate(lat, lon);
+        const geo = await locate(lat, lon, sectorRef.current);
         setDeviceGeo({ lat, lon, geo });
         setGeoBusy(false);
       },
@@ -199,6 +243,27 @@ export function Scanner() {
       .then((p) => p.state === "granted" && requestLocation())
       .catch(() => {});
   }, [requestLocation]);
+
+  // Switching home / school / office changes the price sector: re-price every
+  // located capture, and the phone's own location, for the new one.
+  useEffect(() => {
+    let alive = true;
+    for (const c of capturesRef.current) {
+      if (c.meta.lat === undefined || c.meta.lon === undefined || (c.geo && c.geo.sector === sector)) continue;
+      locate(c.meta.lat, c.meta.lon, sector).then((geo) => {
+        if (alive && geo) setCaptures((prev) => prev.map((x) => (x.id === c.id ? { ...x, geo } : x)));
+      });
+    }
+    const d = deviceGeoRef.current;
+    if (d && d.geo?.sector !== sector) {
+      locate(d.lat, d.lon, sector).then((geo) => {
+        if (alive) setDeviceGeo({ lat: d.lat, lon: d.lon, geo });
+      });
+    }
+    return () => {
+      alive = false;
+    };
+  }, [sector]);
 
   // ---- captures ---------------------------------------------------------
 
@@ -356,7 +421,7 @@ export function Scanner() {
         let geo = c.geo;
         if (geo === undefined && meta.lat !== undefined && meta.lon !== undefined) {
           patch(id, { stage: "Finding the local utility" });
-          geo = await locate(meta.lat, meta.lon);
+          geo = await locate(meta.lat, meta.lon, sectorRef.current);
           patch(id, { geo });
         }
 
@@ -444,10 +509,12 @@ export function Scanner() {
   const priced = useMemo(
     () =>
       captures.map((c) => {
-        const { settings: s, rateQuality } = captureSettings(settings, c, rateOverridden);
+        // A location looked up for the other sector is not this capture's price.
+        const geo = c.geo && (c.geo.sector ?? sector) === sector ? c.geo : null;
+        const { settings: s, rateQuality } = captureSettings(settings, { geo }, rateOverridden);
         return { c, offenders: costCapture(c, s), rateQuality };
       }),
-    [captures, settings, rateOverridden],
+    [captures, settings, rateOverridden, sector],
   );
 
   const ranked = useMemo(() => {
@@ -534,7 +601,10 @@ export function Scanner() {
           .
         </PageHeader>
         <h1 className="sr-only">Scanner</h1>
-        <ModeSwitch mode={mode} onChange={setMode} />
+        <div className="flex flex-col gap-2 md:items-end">
+          <ModeSwitch mode={mode} onChange={setMode} />
+          <PlacePicker place={place} onChange={choosePlace} />
+        </div>
       </div>
 
       {mode === "camera" ? (
@@ -608,6 +678,8 @@ export function Scanner() {
                 captures={done.length}
                 basisMix={basisMix}
                 working={working}
+                typical={offenders.reduce((t, o) => t + (o.typicalCostPerYear ?? 0), 0)}
+                place={place}
               />
 
               <ExportBar offenders={offenders} settings={settings} buildingName={building.name} onSave={ready ? saveAudit : undefined} saved={savedAuditId !== null} />
@@ -618,6 +690,7 @@ export function Scanner() {
 
               {tab === "offenders" && (
                 <div className="space-y-4">
+                  {offenders.length > 0 && <EfficiencyPanel offenders={offenders} settings={settings} />}
                   {detectionPhotos.length > 0 && <DetectionView photos={detectionPhotos} hovered={hovered} onHover={setHovered} />}
                   {ranked.length === 0 && (
                     <div className="panel p-6 text-center text-[0.9rem] text-mist">
@@ -754,6 +827,35 @@ export function Scanner() {
 
 // ---- subcomponents -----------------------------------------------------
 
+/** Where the scan is. Sets typical hours, empty hours and the price sector. */
+function PlacePicker({ place, onChange }: { place: UsageContext; onChange: (p: UsageContext) => void }) {
+  const opts: { id: UsageContext; label: string }[] = [
+    { id: "home", label: "Home" },
+    { id: "school", label: "School" },
+    { id: "office", label: "Office" },
+  ];
+  return (
+    <div className="flex items-center justify-between gap-3 md:justify-end">
+      <span className="text-[0.78rem] text-dim">Scanning a</span>
+      <div className="flex rounded-full bg-fog/[0.06] p-0.5" role="radiogroup" aria-label="Where you are scanning">
+        {opts.map((o) => (
+          <button
+            key={o.id}
+            role="radio"
+            aria-checked={place === o.id}
+            onClick={() => onChange(o.id)}
+            className={`rounded-full px-3.5 py-1.5 text-[0.82rem] font-medium transition-colors ${
+              place === o.id ? "bg-surface text-fog shadow-[0_1px_2px_rgba(28,27,24,0.1)]" : "text-dim hover:text-mist"
+            }`}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ModeSwitch({ mode, onChange }: { mode: Mode; onChange: (m: Mode) => void }) {
   const opts: { id: Mode; label: string; icon: "camera" | "upload" }[] = [
     { id: "camera", label: "Camera", icon: "camera" },
@@ -839,6 +941,8 @@ function TotalsHeader({
   captures,
   basisMix,
   working,
+  typical,
+  place,
 }: {
   cost: number;
   range: ReturnType<typeof costRange>;
@@ -850,6 +954,8 @@ function TotalsHeader({
   captures: number;
   basisMix: { measured: number; ai: number; catalog: number };
   working: boolean;
+  typical: number;
+  place: UsageContext;
 }) {
   const lines = basisMix.measured + basisMix.ai + basisMix.catalog;
   // Precision: how tight the 80% band is, as a share of the headline.
@@ -869,7 +975,7 @@ function TotalsHeader({
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
-        <BigStat label="wasted / year" accent value={<CountUp value={cost} format={fmtMoneyFull} />} />
+        <BigStat label="/ yr if left on" accent value={<CountUp value={cost} format={fmtMoneyFull} />} />
         <BigStat label="CO₂ / year" value={<CountUp value={co2} format={fmtCo2} />} />
         <BigStat label="energy / year" value={<CountUp value={kwh} format={fmtKwh} />} />
         <BigStat label="recoverable / yr" value={<CountUp value={recoverable} format={fmtMoneyFull} />} />
@@ -901,6 +1007,21 @@ function TotalsHeader({
             )}
             priced at {RATE_WORDS[rateQuality]}. {precision < 0.75 ? "Add measured watts or a bill rate to narrow it." : ""}
           </p>
+        </div>
+      )}
+
+      {cost > 0 && (
+        <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-surface2/60 p-3 text-[0.8rem]">
+          <div>
+            <div className="font-mono text-lg font-semibold text-fog">{fmtMoneyFull(cost)}</div>
+            <div className="leading-snug text-mist">
+              if left on whenever the {place === "home" ? "house is empty or asleep" : "building is empty"}
+            </div>
+          </div>
+          <div>
+            <div className="font-mono text-lg font-semibold text-fog">{fmtMoneyFull(typical)}</div>
+            <div className="leading-snug text-mist">at typical use: hours actually in use, standby otherwise</div>
+          </div>
         </div>
       )}
 

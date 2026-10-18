@@ -10,6 +10,7 @@ import { COCO_MAP } from "./live";
 import { estimateUnitWatts } from "./estimate";
 import { classifyScreen, regionSaturation, regionStats, ringStats, type LightBlob } from "./scene";
 import { iou } from "./boxes";
+import { typicalUse } from "./usage";
 import type { CategorizedObservation } from "./parse";
 import type { AuditSettings, Box, DeviceState } from "./types";
 
@@ -33,7 +34,10 @@ export interface LiveItem {
   /** Why the state was judged so, e.g. "screen lit". */
   why?: string;
   watts: number;
+  /** If left on through every empty hour. */
   costPerYear: number;
+  /** At typical use where it is. */
+  typicalCostPerYear: number;
 }
 
 /** Screens are what brightness can judge; everything else is assumed on. */
@@ -79,6 +83,12 @@ export function readItems(
   const items: LiveItem[] = [];
   const hours = settings.unoccupiedHoursPerYear;
   const cost = (w: number) => (w / 1000) * hours * settings.ratePerKwh;
+  const ctx = settings.usageContext ?? "school";
+  const occupied = settings.occupiedHoursPerYear ?? Math.max(0, 8760 - hours);
+  const typical = (categoryId: string | null) => {
+    const cat = categoryId ? CATALOG_BY_ID[categoryId] : undefined;
+    return cat ? typicalUse(cat, estimateUnitWatts(cat, "on").mid, ctx, occupied).kwhPerYear * settings.ratePerKwh : 0;
+  };
 
   for (const [i, d] of dets.entries()) {
     const c = COCO_MAP[d.cls];
@@ -112,6 +122,7 @@ export function readItems(
       why,
       watts,
       costPerYear: cost(watts),
+      typicalCostPerYear: typical(c.categoryId),
     });
   }
 
@@ -130,6 +141,7 @@ export function readItems(
       why: "fixture lit",
       watts,
       costPerYear: cost(watts),
+      typicalCostPerYear: typical(categoryId),
     });
   }
   return items;

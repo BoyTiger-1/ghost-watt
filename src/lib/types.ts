@@ -28,6 +28,8 @@ export interface DeviceObservation {
   hoursPerYear?: number;
   /** One short phrase on why the engine judged it this way, e.g. "screen lit, login page". */
   evidence?: string;
+  /** Technology as read by the vision model, e.g. "LED", "T8 fluorescent", "CRT". */
+  tech?: string;
 }
 
 /** How a given offender was produced. Surfaced to the user as a badge. */
@@ -110,6 +112,10 @@ export interface AuditSettings {
   floorAreaSqFt?: number;
   /** Utility demand charge, $/kW-month. Applies to loads that raise peak demand. */
   demandChargePerKw?: number;
+  /** Where the scan is: sets the typical hours each device is in use. */
+  usageContext?: "home" | "school" | "office";
+  /** Hours a year the space is occupied, for school and office usage profiles. */
+  occupiedHoursPerYear?: number;
 }
 
 /** A single ranked offender after the energy math is applied. */
@@ -150,6 +156,15 @@ export interface Offender {
   /** True when the hours came from the user rather than the building schedule. */
   hoursKnown?: boolean;
   evidence?: string;
+  tech?: string;
+  /** One unit's draw while in use, W (the on-state figure, whatever state it was seen in). */
+  activeWattsPerUnit?: number;
+  /** Typical use where it is - hours a day in use, standby the rest - for every unit. */
+  typicalHoursPerDay?: number;
+  typicalKwhPerYear?: number;
+  typicalCostPerYear?: number;
+  /** Where the typical hours come from. */
+  usageBasis?: string;
 }
 
 export interface AnalysisResult {
