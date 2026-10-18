@@ -211,7 +211,7 @@ function StartScreen({
       <div className="grid gap-5 @3xl:grid-cols-2">
         {/* host */}
         <section className="panel ticked p-5 sm:p-6">
-          <div className="mono-label text-lime">start a session</div>
+          <div className="mono-label text-lime">Start a session</div>
           <h2 className="mt-2 text-xl font-bold text-fog">Map {buildingName} together</h2>
           <p className="mt-2 text-sm leading-relaxed text-mist">
             You get a six-character code. Everyone in the room types it in, scans one corridor
@@ -221,18 +221,18 @@ function StartScreen({
           <button
             onClick={onCreate}
             disabled={busy}
-            className="mt-4 w-full border border-lime bg-lime/10 px-4 py-2.5 font-mono text-sm tracking-wider text-lime transition-colors hover:bg-lime/20 disabled:opacity-50"
+            className="mt-4 w-full rounded-full bg-fog px-4 py-3 text-sm font-medium text-ink transition-colors hover:bg-fog/85 disabled:opacity-50"
           >
-            {busy ? "opening…" : "open a session"}
+            {busy ? "Opening…" : "Open a session"}
           </button>
         </section>
 
         {/* join */}
         <section className="panel p-5 sm:p-6">
-          <div className="mono-label text-cyan">join one</div>
+          <div className="mono-label text-cyan">Join one</div>
           <h2 className="mt-2 text-xl font-bold text-fog">Somebody gave you a code</h2>
           <p className="mt-2 text-sm leading-relaxed text-mist">
-            Type it below. Then scan your area as usual and press <em>send to session</em> on the
+            Type it below. Then scan your area as usual and press <em>send to session</em>{" "}on the
             results — your rows join everyone else&rsquo;s.
           </p>
           <div className="mt-4 flex gap-2">
@@ -243,13 +243,13 @@ function StartScreen({
               placeholder="ABC234"
               maxLength={CODE_LENGTH}
               aria-label="Session code"
-              className="min-w-0 flex-1 border border-line bg-surface2 px-3 py-2.5 text-center font-mono text-lg tracking-[0.35em] text-fog uppercase outline-none focus:border-cyan"
+              className="min-w-0 flex-1 border border-line bg-surface px-3 py-2.5 text-center font-mono text-lg tracking-[0.35em] text-fog uppercase outline-none focus:border-cyan rounded-xl"
             />
             <button
               onClick={onJoin}
-              className="shrink-0 border border-cyan bg-cyan/10 px-4 py-2.5 font-mono text-sm tracking-wider text-cyan transition-colors hover:bg-cyan/20"
+              className="shrink-0 px-4 py-2.5 text-sm transition-colors rounded-full bg-fog text-ink font-medium hover:bg-fog/85"
             >
-              join
+              Join
             </button>
           </div>
         </section>
@@ -337,7 +337,7 @@ function LiveMap({
         <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-5 sm:px-6">
           <div className="min-w-0">
             <div className="mono-label text-lime">session code</div>
-            <div className="mt-1 font-mono text-4xl font-bold tracking-[0.28em] text-fog sm:text-5xl">
+            <div className="mt-1 font-mono text-4xl font-bold text-fog sm:text-5xl">
               {code}
             </div>
             <p className="mt-1.5 text-sm text-mist">
@@ -348,19 +348,19 @@ function LiveMap({
           <div className="flex shrink-0 flex-wrap gap-2">
             <button
               onClick={copy}
-              className="border border-line px-3 py-1.5 font-mono text-[0.72rem] tracking-wider text-mist transition-colors hover:border-cyan hover:text-cyan"
+              className="border border-line px-3 py-1.5 text-[0.8rem] text-mist transition-colors hover:border-fog/40 hover:text-fog rounded-full"
             >
-              {copied ? "copied" : "copy code"}
+              {copied ? "Copied" : "Copy code"}
             </button>
             <button
               onClick={onRefresh}
-              className="border border-line px-3 py-1.5 font-mono text-[0.72rem] tracking-wider text-mist transition-colors hover:border-lime hover:text-lime"
+              className="rounded-full border border-line px-3 py-1.5 text-[0.8rem] text-mist transition-colors hover:border-fog/40 hover:text-fog"
             >
               refresh
             </button>
             <button
               onClick={onLeave}
-              className="border border-line px-3 py-1.5 font-mono text-[0.72rem] tracking-wider text-dim transition-colors hover:border-ember hover:text-ember"
+              className="border border-line px-3 py-1.5 font-mono text-[0.72rem] text-dim transition-colors hover:border-ember hover:text-ember"
             >
               leave
             </button>

@@ -150,7 +150,7 @@ export function BillCalibration({
                 }}
               />
             </div>
-            <div className="mt-1 flex justify-between font-mono text-[0.62rem] uppercase tracking-wider text-dim">
+            <div className="mt-1 flex justify-between text-[0.72rem] text-dim">
               <span>0</span>
               <span>median {type.label.toLowerCase()}</span>
               <span>2×</span>

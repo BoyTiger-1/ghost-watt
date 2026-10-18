@@ -36,9 +36,9 @@ export function SampleData({ compact = false }: { compact?: boolean }) {
       <button
         onClick={toggle}
         disabled={busy}
-        className="font-mono text-[0.72rem] tracking-wider text-dim underline-offset-4 transition-colors hover:text-cyan hover:underline disabled:opacity-50"
+        className="text-[0.85rem] text-mist underline decoration-mist/30 underline-offset-4 transition-colors hover:text-fog hover:decoration-fog disabled:opacity-50"
       >
-        {loaded ? "remove the example" : "load a worked example"}
+        {loaded ? "Remove the example" : "Load a worked example"}
       </button>
     );
   }
@@ -69,10 +69,10 @@ export function SampleData({ compact = false }: { compact?: boolean }) {
         <button
           onClick={toggle}
           disabled={busy}
-          className={`shrink-0 border px-4 py-2 font-mono text-[0.75rem] tracking-wider transition-colors disabled:opacity-50 ${
+          className={`shrink-0 border px-4 py-2 font-mono text-[0.75rem] transition-colors disabled:opacity-50 ${
             loaded
               ? "border-line text-dim hover:border-ember/60 hover:text-ember"
-              : "border-cyan bg-cyan/10 text-cyan hover:bg-cyan/20"
+              : "border-fog bg-fog text-ink hover:bg-fog/85"
           }`}
         >
           {busy ? "…" : loaded ? "remove example" : "load example"}

@@ -117,7 +117,7 @@ export function DetectionView({
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
         <div className="flex min-w-0 items-center gap-2">
           <span className="mono-label text-cyan">detections</span>
-          <span className="truncate font-mono text-[0.68rem] tracking-wider text-dim">
+          <span className="truncate font-mono text-[0.68rem] text-dim">
             {photo.name} · {photo.engine}
           </span>
         </div>
@@ -128,7 +128,7 @@ export function DetectionView({
           <button
             onClick={() => downloadAnnotated(photo, visible, showLabels)}
             disabled={!located}
-            className="border border-line px-2.5 py-1 font-mono text-[0.66rem] tracking-wider uppercase text-mist transition-colors enabled:hover:border-cyan enabled:hover:text-cyan disabled:opacity-40"
+            className="border border-line px-2.5 py-1 text-[0.75rem] text-mist transition-colors enabled:hover:border-cyan enabled:hover:text-cyan disabled:opacity-40"
           >
             save png
           </button>
@@ -153,7 +153,7 @@ export function DetectionView({
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={p.dataUrl} alt="" className="h-7 w-10 object-cover" />
-                <span className={`font-mono text-[0.66rem] tracking-wider ${active ? "text-fog" : "text-dim"}`}>
+                <span className={`font-mono text-[0.66rem] ${active ? "text-fog" : "text-dim"}`}>
                   {p.name} · {n}
                 </span>
               </button>
@@ -221,7 +221,7 @@ export function DetectionView({
                 <Corners color={color} thick={isHot} />
                 {showLabels && (p.n === 0 || isHot) && (
                   <span
-                    className={`pointer-events-none absolute left-[-1px] whitespace-nowrap px-1.5 py-0.5 font-mono text-[0.6rem] font-bold tracking-wider text-black sm:text-[0.66rem] ${
+                    className={`pointer-events-none absolute left-[-1px] whitespace-nowrap px-1.5 py-0.5 font-mono text-[0.6rem] font-bold text-black sm:text-[0.66rem] ${
                       labelBelow ? "top-full mt-px" : "bottom-full mb-px"
                     }`}
                     style={{ background: color }}
@@ -237,7 +237,7 @@ export function DetectionView({
 
         {!located && (
           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent px-4 pb-3 pt-10">
-            <p className="font-mono text-[0.7rem] leading-relaxed tracking-wide text-mist">
+            <p className="font-mono text-[0.7rem] leading-relaxed text-mist">
               {isLive
                 ? "This engine counted the devices but did not say where they are, so nothing is marked. A hosted model (Groq, Claude, OpenAI) reports locations."
                 : "No live reading for this photo - the counts are a room-profile estimate, so there is nothing to mark on it."}
@@ -260,7 +260,7 @@ export function DetectionView({
         </div>
         {located > 0 && (
           <span
-            className="font-mono text-[0.66rem] tracking-wider text-dim"
+            className="font-mono text-[0.66rem] text-dim"
             title="The model marks the units it can see clearly. Costs always use the full count."
           >
             {located} of {counted} units located · costs use the full count
@@ -301,7 +301,7 @@ function ToggleChip({
       type="button"
       onClick={onClick}
       aria-pressed={on}
-      className={`flex items-center gap-1.5 border px-2.5 py-1 font-mono text-[0.66rem] tracking-wider uppercase transition-colors ${
+      className={`flex items-center gap-1.5 border px-2.5 py-1 text-[0.75rem] transition-colors ${
         on ? "border-line2 text-fog" : "border-line text-dim line-through"
       }`}
     >

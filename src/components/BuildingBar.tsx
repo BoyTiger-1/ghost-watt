@@ -77,7 +77,7 @@ export function BuildingBar({
                   <select
                     value={building.id}
                     onChange={(e) => setActiveBuilding(e.target.value)}
-                    className="min-w-0 flex-1 border border-line bg-surface2 px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan"
+                    className="min-w-0 flex-1 border border-line bg-surface px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan rounded-xl"
                   >
                     {buildings.map((b) => (
                       <option key={b.id} value={b.id} className="bg-surface">
@@ -87,7 +87,7 @@ export function BuildingBar({
                   </select>
                   <button
                     onClick={() => addBuilding(newBuilding(`Building ${buildings.length + 1}`))}
-                    className="shrink-0 border border-line px-3 py-2 font-mono text-xs text-dim transition-colors hover:border-cyan hover:text-cyan"
+                    className="shrink-0 border border-line px-3 py-2 text-xs text-dim transition-colors hover:border-fog/40 hover:text-fog rounded-full"
                   >
                     + new
                   </button>
@@ -96,17 +96,17 @@ export function BuildingBar({
                   value={building.name}
                   onChange={(e) => updateBuilding(building.id, { name: e.target.value })}
                   placeholder="Building name"
-                  className="mt-2 w-full border border-line bg-surface2 px-3 py-2 text-sm text-fog outline-none focus:border-cyan"
+                  className="mt-2 w-full border border-line bg-surface px-3 py-2 text-sm text-fog outline-none focus:border-cyan rounded-xl"
                 />
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block">
-                  <span className="mono-label">state / region</span>
+                  <span className="mono-label">State / region</span>
                   <select
                     value={building.regionCode}
                     onChange={(e) => updateBuilding(building.id, { regionCode: e.target.value })}
-                    className="mt-1.5 w-full border border-line bg-surface2 px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan"
+                    className="mt-1.5 w-full border border-line bg-surface px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan rounded-xl"
                   >
                     <option value="US" className="bg-surface">
                       United States (average)
@@ -124,11 +124,11 @@ export function BuildingBar({
                 </label>
 
                 <label className="block">
-                  <span className="mono-label">building type</span>
+                  <span className="mono-label">Building type</span>
                   <select
                     value={building.typeId}
                     onChange={(e) => updateBuilding(building.id, { typeId: e.target.value })}
-                    className="mt-1.5 w-full border border-line bg-surface2 px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan"
+                    className="mt-1.5 w-full border border-line bg-surface px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan rounded-xl"
                   >
                     {BUILDING_TYPES.map((t) => (
                       <option key={t.id} value={t.id} className="bg-surface">
@@ -142,7 +142,7 @@ export function BuildingBar({
                 </label>
 
                 <label className="block">
-                  <span className="mono-label">floor area (sq ft)</span>
+                  <span className="mono-label">Floor area (sq ft)</span>
                   <input
                     type="number"
                     min={0}
@@ -154,7 +154,7 @@ export function BuildingBar({
                         floorAreaSqFt: parseFloat(e.target.value) || 0,
                       })
                     }
-                    className="mt-1.5 w-full border border-line bg-surface2 px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan"
+                    className="mt-1.5 w-full border border-line bg-surface px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan rounded-xl"
                   />
                 </label>
 
@@ -163,7 +163,7 @@ export function BuildingBar({
                     <span className="mono-label">live rate lookup</span>
                     <button
                       onClick={onFetchRate}
-                      className="mt-1.5 w-full border border-line bg-surface2 px-3 py-2 text-left font-mono text-sm text-mist transition-colors hover:border-cyan hover:text-cyan"
+                      className="mt-1.5 w-full border border-line bg-surface2 px-3 py-2 text-left text-sm text-mist transition-colors hover:border-fog/40 hover:text-fog rounded-full"
                     >
                       {liveRate
                         ? `${liveRate.ratePerKwh.toFixed(3)} $/kWh`
@@ -229,7 +229,7 @@ export function ScheduleEditor({
             key={p.id}
             onClick={() => onChange(p.schedule)}
             title={p.description}
-            className="border border-line px-2 py-1 font-mono text-[0.66rem] text-dim transition-colors hover:border-cyan hover:text-cyan"
+            className="border border-line px-2 py-1 text-[0.75rem] text-dim transition-colors hover:border-fog/40 hover:text-fog rounded-full"
           >
             {p.label}
           </button>
@@ -271,7 +271,7 @@ export function ScheduleEditor({
 
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <label className="block">
-          <span className="mono-label">operating weeks / yr</span>
+          <span className="mono-label">Operating weeks / yr</span>
           <input
             type="number"
             min={1}
@@ -283,11 +283,11 @@ export function ScheduleEditor({
                 operatingWeeks: Math.max(1, Math.min(52, Number(e.target.value) || 1)),
               })
             }
-            className="mt-1.5 w-full border border-line bg-surface2 px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan"
+            className="mt-1.5 w-full border border-line bg-surface px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan rounded-xl"
           />
         </label>
         <label className="block">
-          <span className="mono-label">extra closed days</span>
+          <span className="mono-label">Extra closed days</span>
           <input
             type="number"
             min={0}
@@ -296,7 +296,7 @@ export function ScheduleEditor({
             onChange={(e) =>
               onChange({ ...schedule, closedDays: Math.max(0, Number(e.target.value) || 0) })
             }
-            className="mt-1.5 w-full border border-line bg-surface2 px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan"
+            className="mt-1.5 w-full border border-line bg-surface px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan rounded-xl"
           />
         </label>
       </div>

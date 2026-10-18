@@ -19,15 +19,15 @@ interface VisionStatus {
 }
 
 const TINT: Record<VisionStatus["active"], string> = {
-  local: "var(--color-cyan)",
-  hosted: "var(--color-lime)",
-  none: "var(--color-amber)",
+  local: "var(--color-lime)",
+  hosted: "var(--color-cyan)",
+  none: "var(--color-sodium)",
 };
 
 const LABEL: Record<VisionStatus["active"], string> = {
-  local: "live · local",
-  hosted: "live · hosted",
-  none: "estimated",
+  local: "Live · on this machine",
+  hosted: "Live · hosted model",
+  none: "Estimate mode",
 };
 
 export function StatusPill({ compact = false }: { compact?: boolean }) {
@@ -57,18 +57,18 @@ export function StatusPill({ compact = false }: { compact?: boolean }) {
 
   const active = status?.active ?? "none";
   const color = loading ? "var(--color-dim)" : TINT[active];
-  const label = loading ? "checking" : LABEL[active];
+  const label = loading ? "Checking…" : LABEL[active];
 
   return (
     <div
-      className="flex items-center gap-2 border border-line bg-surface/70 px-2.5 py-1.5 font-mono text-[0.68rem] tracking-wider"
+      className={`flex h-9 items-center gap-2 rounded-full border border-line bg-surface text-[0.8rem] text-mist ${compact ? "w-9 justify-center" : "px-3"}`}
       title={title(status, loading)}
     >
       <span
-        className={`inline-block h-2 w-2 ${status?.ready ? "pulse-dot" : ""}`}
+        className={`inline-block h-2 w-2 rounded-full ${status?.ready ? "pulse-dot" : ""}`}
         style={{ background: color }}
       />
-      {!compact && <span style={{ color }}>{label}</span>}
+      {!compact && <span>{label}</span>}
     </div>
   );
 }

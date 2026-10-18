@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Hero } from "@/components/Hero";
 import { Reveal } from "@/components/Reveal";
+import { PageHeader } from "@/components/PageHeader";
 
 export const metadata: Metadata = {
   title: "About - Ghost Watt",
@@ -11,159 +11,119 @@ export const metadata: Metadata = {
 
 const STEPS = [
   {
-    n: "01",
-    title: "Photo-walk after hours",
-    body: "Students sweep the building at 4pm or after close and snap anything still drawing power - lit labs, idling projectors, the humming vending machine.",
+    title: "Walk the building after hours",
+    body: "At 4pm or after close, students sweep the building and point a phone at anything still drawing power: a lit lab, an idling projector, the humming vending machine.",
   },
   {
-    n: "02",
-    title: "A local model sees the devices",
-    body: "An on-device vision model identifies each device and whether it's on or in standby. Nothing is uploaded - inference runs on your own machine.",
+    title: "A vision model names the devices",
+    body: "It identifies each device and whether it is on, in standby or off. That is all it does. With Ollama running, it happens on your own machine.",
   },
   {
-    n: "03",
-    title: "Deterministic energy math ranks them",
-    body: "Known device wattages × realistic empty-hours give a defensible dollar and CO₂ figure per device - sorted worst-first, each with a costed fix.",
+    title: "Plain arithmetic ranks them",
+    body: "Published wattages times realistic empty hours give a dollar and CO₂ figure per device, sorted worst first, each with a costed fix and its payback.",
+  },
+];
+
+const NOTES = [
+  {
+    q: "Why hasn't this been done?",
+    a: "Commercial energy audits cost money and happen once a decade. Carbon calculators ask you to type in guesses. Nobody had put a vision model, a wattage table and a ranked to-do list in the hands of the people who actually walk the halls.",
+  },
+  {
+    q: "What does it look like in practice?",
+    a: "Point a phone at a lit, empty computer lab and it says: about $340 a year and 1.2 tonnes of CO₂ here; fix it with smart power strips, about $60, paid back in two months. That is an action, not a guilt trip.",
+  },
+  {
+    q: "What does a school get at the end?",
+    a: "A prioritised list facilities can act on Monday (timers, occupancy sensors, power strips, a shutdown policy) and a one-page brief for whoever signs the purchase order.",
   },
 ];
 
 export default function AboutPage() {
   return (
-    <>
-      <Hero />
+    <div className="mx-auto max-w-6xl px-5 pb-12 pt-24 sm:px-6 sm:pt-32">
+      <Reveal>
+        <PageHeader eyebrow="About" title="The biggest easy energy win" accent="is the one nobody measures.">
+          Everyone measures a building&apos;s daytime footprint. Almost no one measures what a school
+          burns while it&apos;s empty: labs left on overnight, projectors in standby, hallway lights
+          all weekend, the vending machine chilling soda at 2am. Most schools have no idea what that
+          number is. Ghost Watt is how you find out.
+        </PageHeader>
+      </Reveal>
 
       {/* how it works */}
-      <section id="how" className="relative z-10 mx-auto max-w-6xl scroll-mt-20 px-4 py-16 sm:px-6">
+      <section className="mt-20 sm:mt-28">
         <Reveal>
-          <div className="mono-label text-cyan">how it works</div>
-          <h2 className="mt-2 max-w-2xl text-3xl font-bold tracking-tight text-fog sm:text-4xl">
-            A commercial energy audit costs money and happens once a decade. This costs a walk.
+          <h2 className="font-editorial max-w-2xl text-[2rem] leading-[1.08] text-fog sm:text-[2.6rem]">
+            A professional audit costs money and happens once a decade.{" "}
+            <span className="italic text-cyan">This costs a walk.</span>
           </h2>
         </Reveal>
-
-        <div className="mt-10 grid gap-px overflow-hidden border border-line bg-line sm:grid-cols-3">
+        <ol className="mt-12 grid gap-10 sm:grid-cols-3 sm:gap-8">
           {STEPS.map((s, i) => (
-            <Reveal key={s.n} delay={i * 0.1}>
-              <div className="h-full bg-surface p-6">
-                <div className="font-mono text-3xl font-bold text-line2">{s.n}</div>
-                <h3 className="mt-4 text-lg font-semibold text-fog">{s.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-mist">{s.body}</p>
-              </div>
+            <Reveal key={s.title} delay={i * 0.08}>
+              <li>
+                <span className="font-editorial text-[3rem] leading-none text-cyan">{i + 1}</span>
+                <h3 className="mt-3 text-[1.08rem] font-semibold text-fog">{s.title}</h3>
+                <p className="mt-2 text-[0.95rem] leading-relaxed text-mist">{s.body}</p>
+              </li>
             </Reveal>
           ))}
-        </div>
-
-        <Reveal delay={0.15}>
-          <p className="mt-6 max-w-3xl text-sm leading-relaxed text-dim">
-            <span className="text-mist">Honest about precision:</span> wattage-from-a-photo is an
-            estimate, so we don&apos;t oversell the absolute numbers. But the{" "}
-            <span className="text-cyan">ranking</span> of worst offenders is robust even when the
-            watts are fuzzy - and the ranking is what drives action.
-          </p>
-        </Reveal>
+        </ol>
       </section>
 
-      {/* the story */}
-      <div className="mx-auto max-w-4xl px-4 pb-12 sm:px-6">
+      {/* notes */}
+      <section className="mt-20 grid gap-12 border-t border-line pt-14 sm:mt-28 lg:grid-cols-[1fr_1.4fr] lg:gap-20">
         <Reveal>
-          <div className="mono-label text-cyan">about</div>
-          <h2 className="mt-2 text-3xl font-bold tracking-tight text-fog sm:text-4xl">
-            The single biggest easy energy win is the one nobody measures.
+          <h2 className="font-editorial text-[2rem] leading-[1.08] text-fog sm:text-[2.6rem]">
+            A few honest answers.
           </h2>
-          <p className="mt-5 max-w-2xl text-lg leading-relaxed text-mist">
-            Everyone measures a building&apos;s daytime footprint. Almost no one measures what a
-            school burns when it&apos;s empty - computer labs left on overnight, projectors in
-            standby, hallway lights all weekend, the vending machine chilling soda at 2am. That
-            phantom load is often the biggest easy win in a building, and most schools have no idea
-            what their number is.
-          </p>
         </Reveal>
-
-        <div className="mt-12 space-y-px overflow-hidden border border-line bg-line">
-          <Block
-            k="The niche"
-            v="A tool where students crowdsource a photo-audit and a model turns it into a ranked map of what's bleeding money while the building sleeps. Not a generic carbon calculator you type guesses into - a concrete, room-by-room offender list."
-            delay={0}
-          />
-          <Block
-            k="Why it hasn't really been done"
-            v="Commercial energy audits cost money and happen once a decade. Generic carbon apps ask you to type in estimates. Nobody put a vision model, a wattage table, and a clean ranked output in the hands of the students who actually walk the halls."
-            delay={0.05}
-          />
-          <Block
-            k="The demo moment"
-            v="Point a phone at a lit, empty computer lab → “~$340/yr and 1.2 tons CO₂ wasted here. Fix: smart power strips, ~$60, pays back in 2 months.” That lands in a pitch - and it's an action, not a guilt trip."
-            delay={0.1}
-          />
-          <Block
-            k="Real impact"
-            v="You hand facilities a prioritized action list they can act on Monday: timers, occupancy sensors, power strips, a shutdown policy. A tangible, defensible outcome - the kind judges and principals both like."
-            delay={0.15}
-          />
-        </div>
-
-        {/* privacy / local */}
-        <Reveal delay={0.1}>
-          <div className="mt-12 panel ticked p-6">
-            <div className="mono-label text-cyan">runs entirely on your machine</div>
-            <p className="mt-3 text-sm leading-relaxed text-mist">
-              Ghost Watt uses a <span className="text-fog">local</span> vision model through Ollama -
-              no external paid APIs, no accounts, no early-access list. Photos are downscaled in your
-              browser and sent only to the model running on your own computer. If that model
-              isn&apos;t available, the app falls back to a transparent room-profile estimate and{" "}
-              <span className="text-fog">labels every result</span> as either{" "}
-              <span className="text-cyan">live model</span> or{" "}
-              <span className="text-amber">estimated</span>, so you always know what you&apos;re
-              looking at.
+        <div className="space-y-10">
+          {NOTES.map((n, i) => (
+            <Reveal key={n.q} delay={i * 0.06}>
+              <h3 className="text-[1.08rem] font-semibold text-fog">{n.q}</h3>
+              <p className="mt-2 text-[1rem] leading-relaxed text-mist">{n.a}</p>
+            </Reveal>
+          ))}
+          <Reveal>
+            <h3 className="text-[1.08rem] font-semibold text-fog">Where do the photos go?</h3>
+            <p className="mt-2 text-[1rem] leading-relaxed text-mist">
+              With Ollama running, nowhere: the model reads them on your own computer. Without it,
+              a deployment with a vision key can send a photo to that provider for the scan, and the
+              badge in the header always says which engine is about to run before you upload
+              anything. Every result is labelled <span className="text-fog">live model</span> or{" "}
+              <span className="text-fog">estimated</span>, so you always know what you&apos;re looking at.
             </p>
-          </div>
-        </Reveal>
-
-        {/* honesty */}
-        <Reveal delay={0.1}>
-          <div className="mt-8">
-            <h2 className="text-xl font-bold text-fog">Honest about the numbers</h2>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-mist">
-              Wattage-from-a-photo is an estimate, and we don&apos;t pretend otherwise. But the
-              ranking of worst offenders is robust even when the absolute watts are fuzzy - and the
-              ranking is what drives action. Lean into that and the tool reads as rigorous, not
-              hand-wavy. The{" "}
-              <Link href="/methodology" className="text-cyan underline-offset-4 hover:underline">
+          </Reveal>
+          <Reveal>
+            <h3 className="text-[1.08rem] font-semibold text-fog">How accurate is it?</h3>
+            <p className="mt-2 text-[1rem] leading-relaxed text-mist">
+              Wattage from a photo is an estimate, and Ghost Watt never pretends otherwise. But the
+              ranking of the worst offenders holds even when individual watts are fuzzy, and the
+              ranking is what drives action. The{" "}
+              <Link href="/methodology" className="text-cyan underline decoration-cyan/30 underline-offset-4 hover:decoration-cyan">
                 methodology
               </Link>{" "}
               shows every figure and formula.
             </p>
-          </div>
-        </Reveal>
+          </Reveal>
+        </div>
+      </section>
 
-        <Reveal delay={0.1}>
-          <div className="mt-12 flex flex-wrap items-center gap-3">
-            <Link
-              href="/scan"
-              className="border border-cyan bg-cyan/10 px-6 py-3 font-mono text-sm font-bold tracking-[0.16em] uppercase text-cyan transition-colors hover:bg-cyan/20"
-            >
-              Run an audit →
-            </Link>
-            <Link
-              href="/methodology"
-              className="px-2 font-mono text-sm tracking-[0.12em] uppercase text-mist transition-colors hover:text-fog"
-            >
-              Read the methodology
-            </Link>
-          </div>
-        </Reveal>
-      </div>
-    </>
-  );
-}
-
-function Block({ k, v, delay }: { k: string; v: string; delay: number }) {
-  return (
-    <Reveal delay={delay}>
-      <div className="grid gap-2 bg-surface p-6 sm:grid-cols-[200px_1fr] sm:gap-6">
-        <div className="mono-label pt-1 text-cyan">{k}</div>
-        <p className="text-sm leading-relaxed text-mist">{v}</p>
-      </div>
-    </Reveal>
+      <Reveal>
+        <div className="mt-20 flex flex-wrap items-center gap-x-6 gap-y-4 border-t border-line pt-10 sm:mt-28">
+          <Link
+            href="/scan"
+            className="rounded-full bg-fog px-6 py-3 text-[0.95rem] font-medium text-ink transition-transform hover:scale-[1.03] active:scale-[0.98]"
+          >
+            Start a scan
+          </Link>
+          <Link href="/methodology" className="text-[0.95rem] text-mist underline decoration-mist/30 underline-offset-[6px] hover:text-fog">
+            Read the methodology
+          </Link>
+        </div>
+      </Reveal>
+    </div>
   );
 }

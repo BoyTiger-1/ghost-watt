@@ -1,251 +1,260 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Reveal } from "@/components/Reveal";
 import { CatalogTable } from "@/components/CatalogTable";
+import { CodeWindow, DEVICES_TS, ENERGY_TS, ENERGY_TS_SHORT } from "@/components/CodeWindow";
+import { PageHeader } from "@/components/PageHeader";
 import { DEFAULT_SETTINGS } from "@/lib/types";
 
 export const metadata: Metadata = {
   title: "Methodology - Ghost Watt",
   description:
-    "Exactly how Ghost Watt turns a photo into a dollar and CO₂ figure: a local vision model for perception, a deterministic wattage table for the energy math.",
+    "Exactly how Ghost Watt turns a photo into a dollar and CO₂ figure: a vision model for perception, a deterministic wattage table for the energy math.",
 };
+
+const TOC = [
+  { id: "split", label: "Two jobs, kept apart" },
+  { id: "formula", label: "The formula" },
+  { id: "defaults", label: "The defaults" },
+  { id: "table", label: "The wattage table" },
+  { id: "engines", label: "Which engine read the photo" },
+  { id: "carbon", label: "Where the carbon comes from" },
+  { id: "totals", label: "What the totals count" },
+];
 
 export default function MethodologyPage() {
   return (
-    <div className="mx-auto max-w-4xl px-4 pb-12 pt-28 sm:px-6">
+    <div className="mx-auto max-w-6xl px-5 pb-12 pt-24 sm:px-6 sm:pt-32">
       <Reveal>
-        <div className="mono-label text-cyan">methodology</div>
-        <h1 className="mt-2 text-4xl font-bold tracking-tight text-fog sm:text-5xl">
-          How a photo becomes a number you can defend.
-        </h1>
-        <p className="mt-4 max-w-2xl text-lg leading-relaxed text-mist">
-          Ghost Watt splits the problem cleanly: the model only does{" "}
-          <span className="text-fog">perception</span>, and deterministic code does all the{" "}
-          <span className="text-fog">energy reasoning</span>. That&apos;s what makes the output
-          defensible - the ranking never depends on the model being right about watts, only about
-          what&apos;s in the room.
-        </p>
+        <PageHeader eyebrow="Methodology" title="How a photo becomes" accent="a number you can defend.">
+          The model only does <span className="text-fog">perception</span>; plain, deterministic code
+          does all of the <span className="text-fog">energy reasoning</span>. The ranking never
+          depends on the model being right about watts, only about what is in the room.
+        </PageHeader>
       </Reveal>
 
-      {/* the split */}
-      <Reveal delay={0.05}>
-        <div className="mt-12 grid gap-px overflow-hidden border border-line bg-line sm:grid-cols-2">
-          <div className="bg-surface p-6">
-            <div className="mono-label text-cyan">step 1 · perception (local model)</div>
-            <p className="mt-3 text-sm leading-relaxed text-mist">
-              A local vision model (via Ollama, default <span className="font-mono text-fog">moondream</span>)
-              looks at each photo and returns a list of devices with a count and a state - on,
-              standby, or off. It is asked for nothing about energy. We parse its JSON; if it
-              answers in prose, we still scan it clause-by-clause against the device lexicon.
+      <div className="mt-16 grid gap-12 lg:grid-cols-[13rem_1fr] lg:gap-16">
+        <nav aria-label="On this page" className="hidden lg:block">
+          <div className="sticky top-28">
+            <p className="text-[0.8rem] font-medium text-dim">On this page</p>
+            <ul className="mt-3 space-y-1 border-l border-line">
+              {TOC.map((t) => (
+                <li key={t.id}>
+                  <a href={`#${t.id}`} className="-ml-px block border-l border-transparent py-1 pl-4 text-[0.88rem] text-mist transition-colors hover:border-fog hover:text-fog">
+                    {t.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </nav>
+
+        <div className="min-w-0 max-w-3xl space-y-20">
+          {/* the split */}
+          <Section id="split" title="Two jobs, kept apart">
+            <div className="mt-8 grid gap-10 sm:grid-cols-2">
+              <Step n="1" title="Seeing" tag="the model">
+                A vision model looks at each photo and returns a list of devices, each with a count
+                and a state: on, standby or off. It is asked for nothing about energy. If it
+                answers in prose instead of JSON, the parser still reads it clause by clause.
+              </Step>
+              <Step n="2" title="Counting" tag="plain code">
+                Each device is matched to one entry in the wattage table, then run through the same
+                formula every time. No model judgement enters the arithmetic, so two identical photos
+                always produce identical numbers.
+              </Step>
+            </div>
+          </Section>
+
+          {/* the formula */}
+          <Section id="formula" title="The formula">
+            <p className="mt-3 text-[1rem] leading-relaxed text-mist">
+              This is the code that runs, quoted from the source with its real line numbers. A test
+              fails if it ever drifts from what is shown here.
             </p>
-          </div>
-          <div className="bg-surface p-6">
-            <div className="mono-label text-lime">step 2 · energy math (deterministic)</div>
-            <p className="mt-3 text-sm leading-relaxed text-mist">
-              Each identified device is matched to one category in the wattage table below, then run
-              through the same formula every time. No model judgement enters the arithmetic, so two
-              identical photos always produce identical numbers.
+            <div className="mt-6 hidden sm:block">
+              <CodeWindow files={[ENERGY_TS, DEVICES_TS]} />
+            </div>
+            <div className="mt-6 sm:hidden">
+              <CodeWindow files={[ENERGY_TS_SHORT]} compact />
+            </div>
+            <ul className="mt-6 space-y-2 text-[0.95rem] leading-relaxed text-mist">
+              <li>
+                <span className="text-fog">Effective watts</span> are the draw in the observed state
+                times the count. Thermostatic gear (fridges, AC, vending) uses a duty-cycle average.
+              </li>
+              <li>
+                <span className="text-fog">Savings</span>{" "}are the waste times the fix&apos;s
+                effectiveness; <span className="text-fog">payback</span>{" "}is the fix&apos;s cost over
+                the savings.
+              </li>
+              <li>
+                Waste only counts during the hours the building is empty, so every figure scales with
+                one assumption you can see and change: <span className="text-fog">empty hours per year</span>.
+              </li>
+            </ul>
+          </Section>
+
+          {/* defaults */}
+          <Section id="defaults" title="The defaults">
+            <dl className="mt-6 grid grid-cols-3 divide-x divide-line border-y border-line">
+              <Default label="Electricity" value={`$${DEFAULT_SETTINGS.ratePerKwh.toFixed(2)}`} unit="per kWh" />
+              <Default label="Grid carbon" value={DEFAULT_SETTINGS.co2PerKwh.toFixed(3)} unit="kg CO₂ per kWh" />
+              <Default label="Empty hours" value={DEFAULT_SETTINGS.unoccupiedHoursPerYear.toLocaleString()} unit="per year" />
+            </dl>
+            <p className="mt-4 text-[0.9rem] leading-relaxed text-dim">
+              US-average commercial electricity price and grid carbon intensity, and a building used
+              about 1,900 hours a year (≈ 10 hours × 190 school days), which leaves about 6,800 dark.
+              All three are editable in <Link href="/settings" className="text-cyan underline-offset-4 hover:underline">settings</Link>.
             </p>
-          </div>
-        </div>
-      </Reveal>
+          </Section>
 
-      {/* the formula */}
-      <Reveal delay={0.1}>
-        <div className="mt-10">
-          <h2 className="text-xl font-bold text-fog">The formula</h2>
-          <div className="mt-4 panel ticked p-5 font-mono text-sm leading-loose text-mist">
-            <div><span className="text-cyan">waste_kWh/yr</span> = (effective_watts ÷ 1000) × empty_hours_per_year</div>
-            <div><span className="text-amber">cost_$/yr</span> = waste_kWh/yr × electricity_rate</div>
-            <div><span className="text-lime">co2_kg/yr</span> = waste_kWh/yr × grid_carbon_intensity</div>
-            <div className="mt-3 text-dim">{"// effective_watts = watts in the observed state × count"}</div>
-            <div className="text-dim">{"// thermostatic gear (fridges, AC, vending) uses a duty-cycle average"}</div>
-            <div className="text-dim">{"// savings = waste × fix_effectiveness; payback = fix_cost ÷ savings"}</div>
-          </div>
-          <p className="mt-4 text-sm leading-relaxed text-mist">
-            Phantom load is only &quot;wasted&quot; during the hours the building is empty, so every
-            number scales with one transparent assumption: <span className="text-fog">empty hours
-            per year</span>. You can change it - and the electricity rate and carbon intensity - live
-            in the scanner.
-          </p>
-        </div>
-      </Reveal>
+          {/* table */}
+          <Section id="table" title="The wattage table">
+            <p className="mt-3 text-[1rem] leading-relaxed text-mist">
+              Representative figures, not nameplate maxima. Fuzzy on any single device, but stable
+              enough that the <span className="text-fog">ranking</span> holds.
+            </p>
+            <CatalogTable />
+          </Section>
 
-      {/* defaults */}
-      <Reveal delay={0.1}>
-        <div className="mt-10 grid grid-cols-3 gap-px overflow-hidden border border-line bg-line">
-          <Default label="electricity rate" value={`$${DEFAULT_SETTINGS.ratePerKwh.toFixed(2)}`} unit="per kWh" />
-          <Default label="grid carbon" value={DEFAULT_SETTINGS.co2PerKwh.toFixed(3)} unit="kg CO₂ / kWh" />
-          <Default label="empty hours" value={DEFAULT_SETTINGS.unoccupiedHoursPerYear.toLocaleString()} unit="hours / year" />
-        </div>
-        <p className="mt-3 font-mono text-[0.7rem] leading-relaxed text-dim">
-          Defaults reflect US-average commercial electricity price, US grid carbon intensity, and a
-          building occupied ~1,900 h/yr (≈10 h × 190 school days) - leaving ~6,800 h dark.
-        </p>
-      </Reveal>
+          {/* engines */}
+          <Section id="engines" title="Which engine read the photo">
+            <p className="mt-3 text-[1rem] leading-relaxed text-mist">
+              Perception is a chain, tried in order, stopping at the first that answers. Whichever
+              one ran, it contributes the same single thing: a list of devices and their states.
+            </p>
+            <ol className="mt-8 space-y-7">
+              <Engine tone="bg-lime" title="A model on your own machine" badge="live model">
+                Ollama, running locally. The photo never leaves the device.
+              </Engine>
+              <Engine tone="bg-cyan" title="A hosted model" badge="live model">
+                If nothing local is running and the deployment holds a vision key, that provider
+                reads the photo instead, so a visitor with nothing installed still gets a real
+                reading. The photo is sent for the scan and is not stored.
+              </Engine>
+              <Engine tone="bg-sodium" title="A room-profile estimate" badge="estimated">
+                No engine, no devices recognised, or no photo at all: Ghost Watt uses a typical
+                fixture set for the room type, so a scan never comes back empty, and labels it so the
+                two are never confused.
+              </Engine>
+            </ol>
+          </Section>
 
-      {/* wattage table */}
-      <Reveal delay={0.1}>
-        <div className="mt-12">
-          <h2 className="text-xl font-bold text-fog">The wattage lookup table</h2>
-          <p className="mt-2 text-sm leading-relaxed text-mist">
-            Representative figures, not nameplate maxima. Fuzzy on any single device, but stable
-            enough that the <span className="text-cyan">ranking</span> holds.
-          </p>
-          <CatalogTable />
-        </div>
-      </Reveal>
-
-      {/* modes */}
-      <Reveal delay={0.1}>
-        <div className="mt-12">
-          <h2 className="text-xl font-bold text-fog">Which engine read the photo</h2>
-          <p className="mt-2 text-sm leading-relaxed text-mist">
-            Perception is a chain, tried in order, stopping at the first that answers. Whichever
-            one ran, it contributed the same single thing: a list of devices and their states.
-            Every number after that point is identical.
-          </p>
-          <div className="mt-4 grid gap-4 sm:grid-cols-3">
-            <div className="panel border-l-2 border-cyan p-5">
-              <div className="mono-label text-cyan">local model</div>
-              <p className="mt-2 text-sm leading-relaxed text-mist">
-                Ollama on your own machine. The photo never leaves the device. Cards read from it
-                carry a <span className="text-cyan">live model</span> badge.
+          {/* carbon */}
+          <Section id="carbon" title="Where the carbon comes from">
+            <p className="mt-3 text-[1rem] leading-relaxed text-mist">
+              A kilowatt-hour does not have a fixed carbon cost; it depends on what was burning to
+              make it, which changes hour by hour. Ghost Watt has two answers and says which it used.
+            </p>
+            <div className="mt-8 grid gap-10 sm:grid-cols-2">
+              <Step n="A" title="Without a key" tag="eGRID annual average">
+                A stored per-state figure from EPA eGRID subregion generation intensity. Right for a
+                yearly report, blunt for a decision made on a Tuesday afternoon.
+              </Step>
+              <Step n="B" title="With an EIA key" tag="computed hourly">
+                EIA-930 publishes generation by fuel for each grid operator. Ghost Watt fetches the
+                last 72 hours for the operator serving your state and computes the intensity itself.
+              </Step>
+            </div>
+            <div className="mt-8 rounded-2xl bg-surface2 px-5 py-4 font-mono text-[0.85rem] leading-relaxed text-mist">
+              <p className="text-fog">
+                gCO₂e/kWh = Σ(MWh<sub>fuel</sub> × kg/MWh<sub>fuel</sub>) ÷ Σ MWh<sub>fuel</sub>
               </p>
+              <p className="mt-2 text-dim">coal 1000 · oil 970 · gas 430 · other 550 · geothermal 40</p>
+              <p className="text-dim">nuclear, hydro, wind, solar, storage = 0</p>
             </div>
-            <div className="panel border-l-2 border-lime p-5">
-              <div className="mono-label text-lime">hosted model</div>
-              <p className="mt-2 text-sm leading-relaxed text-mist">
-                If no local model is running and the deployment holds a vision key, the photo is
-                read by that provider instead - so a visitor with nothing installed still gets a
-                real reading. The photo is sent for the scan and is not stored.
-              </p>
-            </div>
-            <div className="panel border-l-2 border-amber p-5">
-              <div className="mono-label text-amber">estimated (fallback)</div>
-              <p className="mt-2 text-sm leading-relaxed text-mist">
-                No engine available, no devices recognised, or no photo at all: Ghost Watt uses a
-                typical fixture set for the room type, so a demo never blanks. These cards carry an{" "}
-                <span className="text-amber">estimated</span> badge so the two are never confused.
-              </p>
-            </div>
-          </div>
-        </div>
-      </Reveal>
+            <p className="mt-5 text-[0.95rem] leading-relaxed text-mist">
+              Factors are EPA generation-side values, the same convention eGRID uses, so the live
+              figure stays comparable with the stored one. Storage is zero because charging a battery
+              from a coal plant already shows up as coal; counting the discharge would count it twice.
+            </p>
+            <p className="mt-3 text-[0.95rem] leading-relaxed text-dim">
+              Two caveats. The feed lags by several hours, so the app stamps the latest published hour
+              instead of calling it &ldquo;now&rdquo;. And where a state is split across operators,
+              Ghost Watt uses the one carrying most of its load: right for a school-scale estimate,
+              not a substitute for a meter.
+            </p>
+          </Section>
 
-      {/* carbon intensity */}
-      <Reveal delay={0.1}>
-        <div className="mt-12">
-          <h2 className="text-xl font-bold text-fog">Where the carbon number comes from</h2>
-          <p className="mt-2 text-sm leading-relaxed text-mist">
-            A kilowatt-hour does not have a fixed carbon cost. It depends entirely on what was
-            burning to produce it, which changes hour by hour. Ghost Watt has two answers and tells
-            you which one it used.
-          </p>
+          {/* totals */}
+          <Section id="totals" title="What the totals count">
+            <p className="mt-3 text-[1rem] leading-relaxed text-mist">
+              Adding up rows sounds assumption-free. It is not, and these are the two places the
+              arithmetic makes a choice on your behalf.
+            </p>
+            <div className="mt-8 grid gap-10 sm:grid-cols-2">
+              <Step n="1" title="Fix cost is a ceiling" tag="capital">
+                Each row carries the cost of its own fix, and the total sums them: two rooms of
+                monitors bill two power strips. Right when the rooms are separate, too high when one
+                policy would cover both. Savings have no such problem.
+              </Step>
+              <Step n="2" title="Devices merge, areas don't" tag="counting">
+                Within one photo, two &ldquo;monitor&rdquo; lines become one row of five. Across
+                photos and phones nothing is de-duplicated, so photograph the same lab twice and it is
+                counted twice. Scan each area once.
+              </Step>
+            </div>
+            <p className="mt-8 text-[0.9rem] text-dim">Both behaviours are pinned by tests.</p>
+          </Section>
 
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <div className="panel p-5">
-              <div className="mono-label">without a key - eGRID annual average</div>
-              <p className="mt-2 text-sm leading-relaxed text-mist">
-                A stored per-state figure derived from EPA eGRID subregion generation intensity.
-                Right for a yearly report, blunt for a decision made on a Tuesday afternoon.
-              </p>
-            </div>
-            <div className="panel border-l-2 border-lime p-5">
-              <div className="mono-label text-lime">with an EIA key - computed hourly</div>
-              <p className="mt-2 text-sm leading-relaxed text-mist">
-                EIA-930, the hourly grid monitor, publishes generation by fuel type for each
-                balancing authority. Ghost Watt fetches the last 72 hours for the operator serving
-                your state and computes intensity itself.
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-4 overflow-x-auto border border-line bg-ink px-4 py-3 font-mono text-[0.78rem] leading-relaxed text-mist">
-            <div>
-              <span className="text-lime">gCO₂e/kWh</span> = Σ(MWh_fuel × kg_per_MWh_fuel) ÷ Σ(MWh_fuel)
-            </div>
-            <div className="mt-1 text-dim">
-              coal 1000 · oil 970 · natural gas 430 · other 550 · geothermal 40
-            </div>
-            <div className="text-dim">
-              nuclear, hydro, wind, solar, storage discharge = 0
-            </div>
-          </div>
-
-          <p className="mt-3 text-sm leading-relaxed text-mist">
-            Factors are EPA generation-side values, the same convention eGRID uses, so the live
-            figure stays comparable with the stored one. Storage is zero because those emissions
-            were already counted when the energy was generated - charging a battery from a coal
-            plant shows up as coal, and counting the discharge again would double-count it.
-          </p>
-          <p className="mt-2 text-sm leading-relaxed text-dim">
-            Two honest caveats. The feed lags real time by several hours and the lag differs per
-            operator, so the app shows the most recent published hour and stamps it rather than
-            calling it &ldquo;now&rdquo;. And several states are split across operators; Ghost Watt
-            uses the one carrying most of the state&rsquo;s load, which is right for a
-            school-scale estimate and not a substitute for a meter.
+          <p className="font-editorial border-t border-line pt-10 text-[1.7rem] leading-[1.25] text-fog sm:text-[2rem]">
+            Treat the dollars as well-grounded estimates, not meter readings.{" "}
+            <span className="italic text-cyan">The deliverable is the order you fix things in, and that order is robust.</span>
           </p>
         </div>
-      </Reveal>
-
-      {/* what the totals do and do not mean */}
-      <Reveal delay={0.1}>
-        <div className="mt-12">
-          <h2 className="text-xl font-bold text-fog">What the totals are counting</h2>
-          <p className="mt-2 text-sm leading-relaxed text-mist">
-            Adding up rows sounds like the part with no assumptions in it. It is not, and these are
-            the two places where the arithmetic makes a choice on your behalf.
-          </p>
-
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <div className="panel border-l-2 border-amber p-5">
-              <div className="mono-label text-amber">fix cost is an upper bound</div>
-              <p className="mt-2 text-sm leading-relaxed text-mist">
-                Every offender row carries the cost of its own fix, and the total sums them. Two
-                rooms of monitors therefore bill{" "}
-                <span className="text-fog">two smart power strips</span>. That is right when the
-                rooms are genuinely separate, and too high when one strip or one policy change would
-                cover both - a district-wide sleep policy costs nothing per room, but this page
-                still prices a strip for each. Read the capital figure as a ceiling. The savings
-                figure has no such problem: a monitor left on overnight in Room 214 is not the same
-                monitor as the one in Room 220.
-              </p>
-            </div>
-            <div className="panel border-l-2 border-cyan p-5">
-              <div className="mono-label text-cyan">devices are merged, areas are not</div>
-              <p className="mt-2 text-sm leading-relaxed text-mist">
-                Within one photo, two &ldquo;monitor&rdquo; lines from the model collapse into one
-                row of five, because facilities wants a count to act on and not two lines to
-                reconcile. Across photos - and across phones in a class session - nothing is
-                de-duplicated. Photograph the same lab twice and it is counted twice, so scan each
-                area once.
-              </p>
-            </div>
-          </div>
-
-          <p className="mt-4 text-sm leading-relaxed text-dim">
-            Both behaviours are pinned by tests, so they cannot drift underneath this paragraph.
-          </p>
-        </div>
-      </Reveal>
-
-      <Reveal delay={0.1}>
-        <p className="mt-12 border-t border-line pt-6 text-sm leading-relaxed text-dim">
-          Bottom line: treat the dollar figures as well-grounded estimates, not meter readings. The
-          deliverable is the prioritized list - the order in which facilities should fix things - and
-          that order is robust.
-        </p>
-      </Reveal>
+      </div>
     </div>
+  );
+}
+
+function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
+  return (
+    <Reveal>
+      <section id={id} className="scroll-mt-28">
+        <h2 className="text-[1.45rem] font-semibold tracking-[-0.02em] text-fog sm:text-[1.6rem]">{title}</h2>
+        {children}
+      </section>
+    </Reveal>
+  );
+}
+
+function Step({ n, title, tag, children }: { n: string; title: string; tag: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="flex items-baseline gap-3">
+        <span className="font-editorial text-[2.4rem] leading-none text-cyan">{n}</span>
+        <div>
+          <h3 className="text-[1.05rem] font-semibold text-fog">{title}</h3>
+          <p className="text-[0.82rem] text-dim">{tag}</p>
+        </div>
+      </div>
+      <p className="mt-3 text-[0.95rem] leading-relaxed text-mist">{children}</p>
+    </div>
+  );
+}
+
+function Engine({ tone, title, badge, children }: { tone: string; title: string; badge: string; children: React.ReactNode }) {
+  return (
+    <li className="flex gap-4">
+      <span className={`mt-2 h-2.5 w-2.5 shrink-0 rounded-full ${tone}`} />
+      <div>
+        <h3 className="flex flex-wrap items-center gap-2 text-[1.05rem] font-semibold text-fog">
+          {title}
+          <span className="rounded-full bg-surface2 px-2 py-0.5 text-[0.72rem] font-medium text-mist">{badge}</span>
+        </h3>
+        <p className="mt-1.5 text-[0.95rem] leading-relaxed text-mist">{children}</p>
+      </div>
+    </li>
   );
 }
 
 function Default({ label, value, unit }: { label: string; value: string; unit: string }) {
   return (
-    <div className="bg-surface p-4 text-center">
-      <div className="font-mono text-2xl font-bold text-fog">{value}</div>
-      <div className="mono-label mt-1">{label}</div>
-      <div className="font-mono text-[0.62rem] text-dim">{unit}</div>
+    <div className="px-3 py-5 text-center first:pl-0 last:pr-0 sm:px-6">
+      <dt className="text-[0.8rem] text-dim">{label}</dt>
+      <dd className="font-editorial mt-1 text-[2rem] leading-none text-fog sm:text-[2.6rem]">{value}</dd>
+      <dd className="mt-1 text-[0.75rem] text-dim">{unit}</dd>
     </div>
   );
 }

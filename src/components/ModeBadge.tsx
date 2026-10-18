@@ -4,11 +4,11 @@ export function ModeBadge({ mode, engine }: { mode: AnalysisMode; engine?: strin
   const live = mode === "live";
   return (
     <span
-      className="inline-flex items-center gap-1.5 border px-2 py-0.5 font-mono text-[0.62rem] tracking-[0.14em] uppercase"
+      className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[0.74rem] font-medium"
       style={{
         borderColor: live ? "var(--color-cyan)" : "var(--color-amber)",
         color: live ? "var(--color-cyan)" : "var(--color-amber)",
-        background: live ? "rgba(47,230,207,0.08)" : "rgba(255,178,77,0.08)",
+        background: live ? "rgba(58,69,102,0.08)" : "rgba(239,157,46,0.12)",
       }}
       title={
         live
@@ -17,7 +17,7 @@ export function ModeBadge({ mode, engine }: { mode: AnalysisMode; engine?: strin
       }
     >
       <span
-        className="h-1.5 w-1.5"
+        className="h-1.5 w-1.5 rounded-full"
         style={{ background: live ? "var(--color-cyan)" : "var(--color-amber)" }}
       />
       {live ? "live model" : "estimated"}

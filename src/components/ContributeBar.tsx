@@ -95,15 +95,15 @@ export function ContributeBar({
         aria-expanded={open}
       >
         <span className="min-w-0">
-          <span className="mono-label text-cyan">class mode</span>
+          <span className="mono-label text-cyan">Class mode</span>
           <span className="mt-0.5 block truncate text-sm text-mist">
             {phase === "sent"
               ? `Sent to session ${code} as "${area}"`
               : "Send these rows to a shared building map"}
           </span>
         </span>
-        <span className="shrink-0 font-mono text-[0.7rem] tracking-wider text-dim">
-          {open ? "hide" : "open"}
+        <span className="shrink-0 font-mono text-[0.7rem] text-dim">
+          {open ? "Hide" : "Open"}
         </span>
       </button>
 
@@ -127,7 +127,7 @@ export function ContributeBar({
                     }}
                     placeholder="ABC234"
                     maxLength={CODE_LENGTH}
-                    className="w-full border border-line bg-surface2 px-3 py-2 font-mono text-sm tracking-[0.25em] text-fog uppercase outline-none focus:border-cyan"
+                    className="w-full border border-line bg-surface px-3 py-2 font-mono text-sm tracking-[0.25em] text-fog uppercase outline-none focus:border-cyan rounded-xl"
                   />
                 </Field>
                 <Field label="your name">
@@ -136,7 +136,7 @@ export function ContributeBar({
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Sam R."
                     maxLength={40}
-                    className="w-full border border-line bg-surface2 px-3 py-2 text-sm text-fog outline-none focus:border-cyan"
+                    className="w-full border border-line bg-surface px-3 py-2 text-sm text-fog outline-none focus:border-cyan rounded-xl"
                   />
                 </Field>
                 <Field label="area you covered">
@@ -145,7 +145,7 @@ export function ContributeBar({
                     onChange={(e) => setArea(e.target.value)}
                     placeholder="Room 214"
                     maxLength={40}
-                    className="w-full border border-line bg-surface2 px-3 py-2 text-sm text-fog outline-none focus:border-cyan"
+                    className="w-full border border-line bg-surface px-3 py-2 text-sm text-fog outline-none focus:border-cyan rounded-xl"
                   />
                 </Field>
               </div>
@@ -154,17 +154,17 @@ export function ContributeBar({
                 <button
                   onClick={send}
                   disabled={phase === "sending" || offenders.length === 0}
-                  className="border border-cyan bg-cyan/10 px-4 py-2 font-mono text-[0.75rem] tracking-wider text-cyan transition-colors hover:bg-cyan/20 disabled:opacity-40"
+                  className="px-4 py-2 text-[0.75rem] transition-colors disabled:opacity-40 rounded-full bg-fog text-ink font-medium hover:bg-fog/85"
                 >
                   {phase === "sending"
-                    ? "sending…"
+                    ? "Sending…"
                     : phase === "sent"
                       ? "send again"
                       : `send ${offenders.length} rows`}
                 </button>
                 <Link
                   href="/class"
-                  className="font-mono text-[0.72rem] tracking-wider text-dim underline-offset-4 transition-colors hover:text-cyan hover:underline"
+                  className="font-mono text-[0.72rem] text-dim underline-offset-4 transition-colors hover:text-cyan hover:underline"
                 >
                   open the shared map →
                 </Link>

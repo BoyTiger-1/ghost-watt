@@ -90,9 +90,9 @@ export function BudgetPlanner({ offenders }: { offenders: Offender[] }) {
                 <button
                   key={b}
                   onClick={() => setBudget(b)}
-                  className={`border px-2.5 py-1 font-mono text-[0.7rem] transition-colors ${
+                  className={`rounded-full border px-3 py-1 font-mono text-[0.78rem] transition-colors ${
                     budget === b
-                      ? "border-cyan/60 bg-cyan/10 text-cyan"
+                      ? "border-fog bg-fog text-ink"
                       : "border-line text-dim hover:border-line2 hover:text-mist"
                   }`}
                 >
@@ -163,7 +163,7 @@ export function BudgetPlanner({ offenders }: { offenders: Offender[] }) {
 
           {skipped.length > 0 && (
             <details className="mt-5 border border-line bg-surface2/30">
-              <summary className="cursor-pointer px-4 py-2.5 font-mono text-[0.72rem] tracking-wider text-dim uppercase hover:text-mist">
+              <summary className="cursor-pointer px-4 py-2.5 text-[0.8rem] text-dim hover:text-mist">
                 {skipped.length} fix{skipped.length === 1 ? "" : "es"} left on the table
               </summary>
               <ul className="border-t border-line px-4 py-3 text-sm">
@@ -251,8 +251,8 @@ function PlanRow({
       </span>
       <DeviceGlyph icon={o.icon} className="h-4 w-4 shrink-0 text-cyan" />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-fog">{o.action.label}</p>
-        <p className="truncate font-mono text-[0.68rem] text-dim">
+        <p className="text-sm font-medium leading-snug text-fog sm:truncate">{o.action.label}</p>
+        <p className="mt-0.5 truncate text-[0.76rem] text-dim">
           {o.label} · {o.source}
         </p>
       </div>

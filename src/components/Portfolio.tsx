@@ -10,6 +10,7 @@
 // Everything here lives in this browser. No account, nothing uploaded.
 
 import { useMemo, useState } from "react";
+import { PageHeader } from "./PageHeader";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkline, CompareBars } from "./Charts";
@@ -84,21 +85,13 @@ export function Portfolio() {
   }
 
   return (
-    <section className="relative z-10 mx-auto max-w-6xl px-4 pb-20 pt-24 sm:px-6">
-      <header className="mb-8">
-        <div className="flex items-center gap-2">
-          <span className="h-1.5 w-1.5 grad-energy-bg" />
-          <span className="mono-label text-cyan">portfolio</span>
-        </div>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-fog sm:text-4xl">
-          Did it actually go away?
-        </h1>
-        <p className="mt-3 max-w-2xl text-mist">
-          Every audit you save lands here. Log the fixes you install, re-scan the same
-          rooms later, and this page will tell you - device by device - whether the load
-          is really gone or whether it quietly came back.
-        </p>
-      </header>
+    <section className="relative z-10 mx-auto max-w-6xl px-5 pb-20 pt-24 sm:px-6 sm:pt-32">
+      <PageHeader eyebrow="Portfolio" title="Did it actually" accent="go away?" className="mb-10">
+        Log the fixes you install and re-scan later.{" "}
+        <span className="hidden sm:inline">
+          This page tells you, device by device, whether the load is really gone or quietly came back.
+        </span>
+      </PageHeader>
 
       {store.buildings.length === 0 ? (
         <div className="space-y-6">
@@ -114,9 +107,9 @@ export function Portfolio() {
                 <button
                   key={b.id}
                   onClick={() => setActiveBuilding(b.id)}
-                  className={`border px-3 py-1.5 font-mono text-xs tracking-wider transition-colors ${
+                  className={`rounded-full border px-3.5 py-1.5 text-[0.85rem] transition-colors ${
                     on
-                      ? "border-cyan/60 bg-cyan/10 text-cyan"
+                      ? "border-fog bg-fog text-ink"
                       : "border-line text-dim hover:border-line2 hover:text-mist"
                   }`}
                 >
@@ -126,9 +119,9 @@ export function Portfolio() {
             })}
             <button
               onClick={() => addBuilding(newBuilding(`Building ${store.buildings.length + 1}`))}
-              className="border border-dashed border-line2 px-3 py-1.5 font-mono text-xs text-dim transition-colors hover:border-cyan hover:text-cyan"
+              className="border border-dashed border-line2 px-3 py-1.5 text-xs text-dim transition-colors hover:border-fog/40 hover:text-fog rounded-full"
             >
-              + building
+              + Building
             </button>
 
             {/* The full panel above only renders on an empty portfolio, so without
@@ -153,12 +146,12 @@ export function Portfolio() {
         <span className="mono-label mr-auto">this data lives only in this browser</span>
         <button
           onClick={doExport}
-          className="border border-line px-3 py-1.5 font-mono text-[0.72rem] tracking-wider text-mist transition-colors hover:border-cyan hover:text-cyan"
+          className="border border-line px-3 py-1.5 text-[0.8rem] text-mist transition-colors hover:border-fog/40 hover:text-fog rounded-full"
         >
-          export backup
+          Export backup
         </button>
-        <label className="cursor-pointer border border-line px-3 py-1.5 font-mono text-[0.72rem] tracking-wider text-mist transition-colors hover:border-cyan hover:text-cyan">
-          import backup
+        <label className="cursor-pointer border border-line px-3 py-1.5 text-[0.8rem] text-mist transition-colors hover:border-fog/40 hover:text-fog rounded-full">
+          Import backup
           <input
             type="file"
             accept="application/json"
@@ -208,13 +201,13 @@ function BuildingDetail({ buildingId }: { buildingId: string }) {
           className="absolute inset-0 -z-10 opacity-60"
           style={{
             background:
-              "radial-gradient(60% 120% at 100% 0%, rgba(47,230,207,0.1), transparent 60%)",
+              "radial-gradient(60% 120% at 100% 0%, rgba(239,157,46,0.1), transparent 60%)",
           }}
         />
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h2 className="text-xl font-semibold text-fog">{building.name}</h2>
-            <p className="mt-0.5 font-mono text-[0.7rem] tracking-wider text-dim">
+            <p className="mt-1 text-[0.85rem] text-dim">
               {type?.label ?? building.typeId} · {region.name} ·{" "}
               {building.floorAreaSqFt
                 ? `${building.floorAreaSqFt.toLocaleString()} sq ft`
@@ -293,22 +286,29 @@ function BuildingDetail({ buildingId }: { buildingId: string }) {
                   className="flex items-center gap-3 px-3.5 py-2.5"
                 >
                   <span
-                    className="h-1.5 w-1.5 shrink-0"
+                    className="h-2 w-2 shrink-0 rounded-full"
                     style={{ background: STATUS_TINT[d.status] }}
                   />
-                  <span className="min-w-0 flex-1 truncate text-sm text-fog">{d.label}</span>
-                  <span className="shrink-0 font-mono text-[0.68rem] tabular-nums text-dim">
+                  {/* On a phone: the name gets the full width, and the before/after
+                      and verdict drop to a second line under it. */}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm text-fog">{d.label}</span>
+                    <span className="block font-mono text-[0.74rem] tabular-nums text-dim sm:hidden">
+                      {fmtMoney(d.beforeCost)} → {fmtMoney(d.afterCost)} · {STATUS_WORD[d.status]}
+                    </span>
+                  </span>
+                  <span className="hidden shrink-0 font-mono text-[0.74rem] tabular-nums text-dim sm:inline">
                     {fmtMoney(d.beforeCost)} → {fmtMoney(d.afterCost)}
                   </span>
                   <span
-                    className="w-20 shrink-0 text-right font-mono text-xs font-semibold tabular-nums"
+                    className="shrink-0 text-right font-mono text-sm font-semibold tabular-nums sm:w-20"
                     style={{ color: STATUS_TINT[d.status] }}
                   >
                     {d.change < 0 ? "−" : d.change > 0 ? "+" : ""}
                     {fmtMoney(Math.abs(d.change))}
                   </span>
                   <span
-                    className="w-16 shrink-0 text-right font-mono text-[0.62rem] uppercase tracking-wider"
+                    className="hidden w-16 shrink-0 text-right text-[0.78rem] sm:inline"
                     style={{ color: STATUS_TINT[d.status] }}
                   >
                     {STATUS_WORD[d.status]}
@@ -343,7 +343,7 @@ function BuildingDetail({ buildingId }: { buildingId: string }) {
                   {new Date(a.at).toLocaleDateString()}
                 </span>
                 <span
-                  className={`font-mono text-[0.62rem] uppercase tracking-wider ${
+                  className={`text-[0.72rem] ${
                     a.mode === "live" ? "text-cyan" : a.mode === "mixed" ? "text-amber" : "text-dim"
                   }`}
                 >
@@ -375,9 +375,9 @@ function BuildingDetail({ buildingId }: { buildingId: string }) {
               removeBuilding(building.id);
             }
           }}
-          className="font-mono text-[0.7rem] tracking-wider text-dim transition-colors hover:text-ember"
+          className="text-[0.7rem] text-dim transition-colors hover:text-ember"
         >
-          delete this building
+          Delete this building
         </button>
       </div>
     </div>
@@ -409,9 +409,9 @@ function FixLedger({
         <button
           onClick={() => setPicking((p) => !p)}
           disabled={!candidates.length}
-          className="border border-line px-3 py-1.5 font-mono text-[0.7rem] tracking-wider text-mist transition-colors enabled:hover:border-cyan enabled:hover:text-cyan disabled:text-dim"
+          className="rounded-full border border-line px-3.5 py-1.5 text-[0.82rem] text-mist transition-colors enabled:hover:border-fog/40 enabled:hover:text-fog disabled:text-dim"
         >
-          {picking ? "cancel" : "+ log a fix"}
+          {picking ? "Cancel" : "+ Log a fix"}
         </button>
       </div>
 
@@ -494,7 +494,7 @@ function FixLedger({
                 ) : (
                   <button
                     onClick={() => verifyFix(f.id, f.expectedAnnualSavings)}
-                    className="shrink-0 border border-line px-2 py-1 font-mono text-[0.64rem] tracking-wider text-dim transition-colors hover:border-cyan hover:text-cyan"
+                    className="shrink-0 border border-line px-2 py-1 text-[0.74rem] text-dim transition-colors hover:border-fog/40 hover:text-fog rounded-full"
                     title="Mark as confirmed by a later scan"
                   >
                     verify
@@ -591,7 +591,7 @@ function AuditSelect({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1.5 w-full border border-line bg-surface2 px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan"
+        className="mt-1.5 w-full border border-line bg-surface px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan rounded-xl"
       >
         {audits.map((a) => (
           <option key={a.id} value={a.id} className="bg-surface">
@@ -636,13 +636,13 @@ function EmptyPortfolio() {
         </div>
         <h3 className="text-lg font-semibold text-fog">Nothing saved yet</h3>
         <p className="mt-2 text-sm leading-relaxed text-mist">
-          Run an audit and press <span className="font-mono text-cyan">save audit</span>. It
+          Run an audit and press <span className="font-mono text-cyan">Save audit</span>. It
           gets stored in this browser and shows up here, ready to be compared against the next
           one.
         </p>
         <Link
           href="/scan"
-          className="mt-5 inline-block border border-cyan bg-cyan/10 px-4 py-2.5 font-mono text-xs tracking-[0.16em] uppercase text-cyan transition-colors hover:bg-cyan/20"
+          className="mt-5 inline-block px-4 py-2.5 text-xs transition-colors rounded-full bg-fog text-ink font-medium hover:bg-fog/85"
         >
           run a scan
         </Link>

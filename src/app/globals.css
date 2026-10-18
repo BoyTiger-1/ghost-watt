@@ -1,65 +1,105 @@
 @import "tailwindcss";
 
-/* ---- Ghost Watt design system ----------------------------------------- */
+/* ---- Ghost Watt design system ------------------------------------------
+ *
+ * One light theme for the whole app: warm paper, graphite ink, a dusk blue for
+ * anything you can act on, and sodium-lamp amber for energy nobody switched off.
+ *
+ * The app's components were written against a set of semantic tokens (ink, fog,
+ * cyan, lime...) back when it was dark. Those names are kept, and remapped here,
+ * so every screen moved over in one place instead of eight thousand lines.
+ */
 @theme {
-  --color-void: #04050a;
-  --color-ink: #06080d;
-  --color-surface: #0b0e16;
-  --color-surface2: #11151f;
-  --color-line: #1c2230;
-  --color-line2: #2a3346;
+  /* surfaces */
+  --color-void: #ece7dc;
+  --color-ink: #f5f2eb;
+  --color-surface: #fbf9f5;
+  --color-surface2: #f1ede5;
+  --color-line: #e3ddd1;
+  --color-line2: #cfc8ba;
 
-  --color-fog: #eef2f8; /* primary text - high contrast */
-  --color-mist: #aab6c8; /* secondary text - readable on dark */
-  /* Tertiary text. #6c7689 looked right and measured 4.4:1 against the ink
-     background, which fails WCAG AA - and this token carries the captions,
-     units and source notes, i.e. exactly the text a skeptical reader goes
-     looking for. Lightened until it clears 5:1 on both --color-ink and
-     --color-surface2. */
-  --color-dim: #7d8799;
+  /* text. dim clears 4.9:1 on paper and 4.6:1 on surface2. */
+  --color-fog: #1c1b18;
+  --color-mist: #57534b;
+  --color-dim: #6c675d;
 
-  --color-cyan: #2fe6cf;
-  --color-cyan-deep: #14b8a6;
-  --color-lime: #c8ff4d;
-  --color-amber: #ffb24d;
-  --color-ember: #ff6a5c;
+  /* meaning: cyan = act / live, lime = recovered, amber = estimate, ember = waste */
+  --color-cyan: #3a4566;
+  --color-cyan-deep: #283252;
+  --color-lime: #2e6b4f;
+  --color-amber: #a8610c;
+  --color-ember: #c4461f;
 
-  --font-display: var(--font-display), "Segoe UI", system-ui, sans-serif;
-  --font-mono: var(--font-mono), ui-monospace, "Cascadia Code", monospace;
+  --font-display: var(--font-geist), "Helvetica Neue", Arial, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", monospace;
+
+  /* the homepage's names for the same palette */
+  --color-paper: #f5f2eb;
+  --color-paper2: #ece7dc;
+  --color-cream: #fbf9f5;
+  --color-graphite: #1c1b18;
+  --color-stone: #57534b;
+  --color-pebble: #6f6a60;
+  --color-hair: #dfd9cd;
+  --color-sodium: #ef9d2e;
+  --color-sodium-deep: #a8610c;
+  --color-flare: #d9512c;
+  --color-moss: #2e5b45;
+  --color-dusk: #3a4566;
+  --color-haze: #dfe4ef;
 }
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
-* {
-  border-color: var(--color-line);
+/* Default border colour and a soft radius on anything drawn with a plain
+   border. Base layer, so any rounded-* or border-* utility still wins. */
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+  .home,
+  .home * {
+    border-color: var(--color-hair);
+  }
+  [class~="border"]:not(.home, .home *) {
+    border-radius: 0.875rem;
+  }
+  /* Hairline grids (a 1px gap over a line-coloured ground) clip their cells
+     to the new rounded corners. */
+  [class~="border"][class~="gap-px"] {
+    overflow: hidden;
+  }
 }
 
-/* Keyboard focus.
-   The browser default is a thin ring that all but disappears against a dark
-   surface next to a 1px border, so it is replaced rather than removed. :focus-visible
-   means a mouse user never sees it and a keyboard user always does. */
+/* Room under the phone tab bar, on every page but the landing page. */
+@media (max-width: 767px) {
+  body:not(:has(.home)) main {
+    padding-bottom: calc(4.75rem + env(safe-area-inset-bottom));
+  }
+}
+
+/* Keyboard focus: visible for keyboard users, never for mouse users. */
 :focus-visible {
   outline: 2px solid var(--color-cyan);
   outline-offset: 2px;
-  border-radius: 1px;
+  border-radius: 4px;
 }
 
-/* Skip link: the nav is short, but the scanner page puts an upload control and a
-   settings panel between the top of the document and the results a returning
-   keyboard user actually wants. */
+/* Skip link: the scanner page puts an upload control and a settings panel
+   between the top of the document and the results a returning keyboard user
+   actually wants. */
 .skip-link {
   position: absolute;
   left: 0.75rem;
   top: -4rem;
   z-index: 100;
   padding: 0.6rem 1rem;
-  background: var(--color-surface2);
-  border: 1px solid var(--color-cyan);
-  color: var(--color-fog);
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
+  border-radius: 999px;
+  background: var(--color-fog);
+  color: var(--color-ink);
+  font-size: 0.85rem;
   transition: top 0.15s ease;
 }
 
@@ -76,40 +116,17 @@ body {
   background-color: var(--color-ink);
   color: var(--color-fog);
   font-family: var(--font-display);
-  font-feature-settings: "ss01", "cv01";
+  font-feature-settings: "ss01", "cv11";
+  letter-spacing: -0.006em;
   -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
   text-rendering: optimizeLegibility;
   overflow-x: hidden;
 }
 
-/* Ambient backdrop: faint grid + radial energy glows behind everything */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -2;
-  background-image:
-    linear-gradient(var(--color-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--color-line) 1px, transparent 1px);
-  background-size: 64px 64px;
-  -webkit-mask-image: radial-gradient(circle at 50% 0%, #000 0%, transparent 72%);
-  mask-image: radial-gradient(circle at 50% 0%, #000 0%, transparent 72%);
-  opacity: 0.35;
-}
-
-body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -3;
-  background:
-    radial-gradient(60vw 60vw at 80% -10%, rgba(47, 230, 207, 0.1), transparent 60%),
-    radial-gradient(55vw 55vw at 0% 30%, rgba(200, 255, 77, 0.06), transparent 60%);
-}
-
 ::selection {
-  background: var(--color-cyan);
-  color: #00120f;
+  background: var(--color-sodium);
+  color: var(--color-graphite);
 }
 
 ::-webkit-scrollbar {
@@ -117,19 +134,19 @@ body::after {
   height: 10px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--color-void);
+  background: var(--color-ink);
 }
 ::-webkit-scrollbar-thumb {
   background: var(--color-line2);
-  border: 2px solid var(--color-void);
+  border: 2px solid var(--color-ink);
+  border-radius: 999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-cyan-deep);
+  background: var(--color-dim);
 }
 
-/* ---- utilities --------------------------------------------------------- */
-/* A strip that scrolls horizontally without showing a scrollbar over the top of
-   its own content. Used by the header nav, which has to fit six tabs on a phone. */
+/* ---- primitives ---------------------------------------------------------- */
+
 .no-scrollbar {
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -140,21 +157,52 @@ body::after {
 
 .font-mono {
   font-family: var(--font-mono);
+  font-feature-settings: "tnum", "zero";
+  letter-spacing: -0.01em;
 }
 
+/* Headline figures. A bold monospace spreads "$2,535" into "$2 , 535"; the
+   grotesk's tabular figures keep columns aligned and read as one number. */
+.font-mono:is(.font-bold, .font-semibold) {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  font-feature-settings: "tnum";
+}
+
+/* Eyebrow labels. Once mono capitals; now a quiet sentence-case caption. */
 .mono-label {
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--color-dim);
+}
+:where(span).mono-label {
+  display: inline-block;
+}
+.mono-label::first-letter {
+  text-transform: uppercase;
+}
+
+/* The page headline voice: the editorial serif, as on the homepage. */
+.font-editorial {
+  font-family: var(--font-instrument), "Iowan Old Style", Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.012em;
+}
+.font-grotesk { font-family: var(--font-geist), "Helvetica Neue", Arial, sans-serif; }
+.font-numeric {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-feature-settings: "tnum", "zero";
 }
 
 .panel {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.018), transparent 40%),
-    var(--color-surface);
+  background: var(--color-surface);
   border: 1px solid var(--color-line);
+  border-radius: 1.25rem;
+  box-shadow: 0 1px 2px rgba(28, 27, 24, 0.03), 0 18px 40px -32px rgba(58, 69, 102, 0.35);
 }
 
 .panel-hover {
@@ -165,55 +213,38 @@ body::after {
 }
 .panel-hover:hover {
   border-color: var(--color-line2);
-  box-shadow: 0 0 0 1px rgba(47, 230, 207, 0.12), 0 18px 60px -30px rgba(47, 230, 207, 0.45);
+  box-shadow: 0 1px 2px rgba(28, 27, 24, 0.04), 0 24px 50px -30px rgba(58, 69, 102, 0.45);
 }
 
 .text-glow {
-  text-shadow: 0 0 26px rgba(47, 230, 207, 0.55);
+  text-shadow: none;
 }
 
-.grad-energy {
-  background: linear-gradient(100deg, var(--color-cyan) 0%, var(--color-lime) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+/* Accent words in headings: set in the serif's italic rather than painted in a
+   gradient. Reads as emphasis, the way it would in print. */
+.grad-energy,
+.grad-energy-live {
+  font-family: var(--font-instrument), Georgia, serif;
+  font-style: italic;
+  font-weight: 400 !important;
+  letter-spacing: -0.01em;
+  color: var(--color-cyan);
 }
 
 .grad-energy-bg {
-  background: linear-gradient(135deg, var(--color-cyan) 0%, var(--color-lime) 100%);
-  box-shadow: 0 0 12px rgba(47, 230, 207, 0.7);
+  background: linear-gradient(135deg, var(--color-sodium) 0%, var(--color-flare) 100%);
+  border-radius: 999px;
 }
 
-/* corner ticks for the sharp/technical look */
+/* The old corner-tick ornament is retired. */
 .ticked {
   position: relative;
 }
-.ticked::before,
-.ticked::after {
-  content: "";
-  position: absolute;
-  width: 8px;
-  height: 8px;
-  border-color: var(--color-cyan);
-  opacity: 0.6;
-}
-.ticked::before {
-  top: -1px;
-  left: -1px;
-  border-top: 1px solid;
-  border-left: 1px solid;
-}
-.ticked::after {
-  bottom: -1px;
-  right: -1px;
-  border-bottom: 1px solid;
-  border-right: 1px solid;
-}
 
 @keyframes pulse-ring {
-  0% { box-shadow: 0 0 0 0 rgba(47, 230, 207, 0.5); }
-  70% { box-shadow: 0 0 0 10px rgba(47, 230, 207, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(47, 230, 207, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(58, 69, 102, 0.35); }
+  70% { box-shadow: 0 0 0 8px rgba(58, 69, 102, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(58, 69, 102, 0); }
 }
 .pulse-dot {
   animation: pulse-ring 2.2s infinite;
@@ -232,7 +263,7 @@ body::after {
   100% { background-position: 200% 0; }
 }
 .shimmer {
-  background: linear-gradient(90deg, var(--color-surface2) 25%, var(--color-line2) 37%, var(--color-surface2) 63%);
+  background: linear-gradient(90deg, var(--color-surface2) 25%, var(--color-line) 37%, var(--color-surface2) 63%);
   background-size: 200% 100%;
   animation: shimmer 1.4s ease-in-out infinite;
 }
@@ -286,7 +317,7 @@ body::after {
   top: 0;
   bottom: 0;
   width: 34%;
-  background: linear-gradient(90deg, transparent, rgba(47, 230, 207, 0.14), transparent);
+  background: linear-gradient(90deg, transparent, rgba(239, 157, 46, 0.12), transparent);
   transform: translateX(-120%) skewX(-18deg);
   pointer-events: none;
 }
@@ -334,12 +365,6 @@ body::after {
   animation-delay: calc(var(--i, 0) * 45ms);
 }
 
-/* Slow drift on the ambient grid, so the page is never quite static. */
-@keyframes grid-drift {
-  from { background-position: 0 0, 0 0; }
-  to { background-position: 64px 64px, 64px 64px; }
-}
-body::before { animation: grid-drift 40s linear infinite; }
 
 /* A soft breathing glow behind hero numbers. */
 @keyframes breathe {
@@ -362,19 +387,6 @@ body::before { animation: grid-drift 40s linear infinite; }
 }
 .caret { animation: caret 1s steps(1) infinite; }
 
-/* Animated gradient on headline text. */
-@keyframes hue-drift {
-  0%, 100% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-}
-.grad-energy-live {
-  background: linear-gradient(100deg, var(--color-cyan), var(--color-lime), var(--color-cyan));
-  background-size: 220% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: hue-drift 7s ease-in-out infinite;
-}
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
@@ -390,8 +402,7 @@ body::before { animation: grid-drift 40s linear infinite; }
   .rise-in,
   .breathe,
   .caret,
-  .grad-energy-live,
-  body::before {
+  .grad-energy-live {
     animation: none;
   }
   .sweep-host:hover::after { animation: none; }
@@ -497,5 +508,110 @@ body::before { animation: grid-drift 40s linear infinite; }
 
   a[href]::after {
     content: "";
+  }
+}
+
+/* ---- homepage ------------------------------------------------------------
+ *
+ * The landing page is light while the app stays dark, so it takes over the
+ * body's background and switches off the ambient grid while it is mounted.
+ * :has() keeps that switch in CSS: no flash of the dark ground on load.
+ */
+body:has(.home) {
+  background-color: var(--color-paper);
+  color: var(--color-graphite);
+  color-scheme: light;
+}
+body:has(.home)::before,
+body:has(.home)::after {
+  display: none;
+}
+body:has(.home) ::selection {
+  background: var(--color-sodium);
+  color: var(--color-graphite);
+}
+body:has(.home) ::-webkit-scrollbar-track { background: var(--color-paper); }
+body:has(.home) ::-webkit-scrollbar-thumb { background: #cfc8ba; border-color: var(--color-paper); }
+body:has(.home) ::-webkit-scrollbar-thumb:hover { background: var(--color-pebble); }
+
+.home {
+  font-family: var(--font-geist), "Helvetica Neue", Arial, sans-serif;
+  font-feature-settings: "ss01", "cv11";
+  letter-spacing: -0.006em;
+}
+.home :focus-visible {
+  outline-color: var(--color-graphite);
+}
+
+.font-editorial {
+  font-family: var(--font-instrument), "Iowan Old Style", Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.012em;
+}
+.font-grotesk { font-family: var(--font-geist), "Helvetica Neue", Arial, sans-serif; }
+.font-numeric {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-feature-settings: "tnum", "zero";
+}
+
+/* The soft, layered shadow real hardware casts on a table. */
+.device-shadow {
+  box-shadow:
+    0 1px 1px rgba(28, 27, 24, 0.06),
+    0 6px 12px -4px rgba(28, 27, 24, 0.12),
+    0 30px 60px -18px rgba(28, 27, 24, 0.28),
+    0 60px 120px -40px rgba(58, 69, 102, 0.3);
+}
+
+/* A detection box holding onto its object while the camera drifts. */
+@keyframes track-jitter {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  20% { transform: translate(0.6px, -0.4px) scale(1.006); }
+  45% { transform: translate(-0.5px, 0.5px) scale(0.996); }
+  70% { transform: translate(0.4px, 0.6px) scale(1.004); }
+}
+.track-jitter { animation: track-jitter 2.6s ease-in-out infinite; }
+
+/* The camera itself, panning slowly across the room. */
+@keyframes feed-pan {
+  0%, 100% { transform: scale(1.08) translate(1.5%, 0.5%); }
+  50% { transform: scale(1.12) translate(-1.8%, -0.8%); }
+}
+.feed-pan { animation: feed-pan 16s ease-in-out infinite; transform-origin: 50% 40%; }
+
+@keyframes soft-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.soft-pulse { animation: soft-pulse 1.6s ease-in-out infinite; }
+
+/* Fluorescent tube deciding whether to stay lit (homepage version, slower). */
+@keyframes tube {
+  0%, 38%, 41%, 100% { opacity: 1; }
+  39% { opacity: 0.25; }
+  40% { opacity: 0.8; }
+}
+.tube { animation: tube 7s linear infinite; }
+
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.marquee { animation: marquee 42s linear infinite; }
+
+@keyframes label-in {
+  from { opacity: 0; translate: 0 8px; filter: blur(4px); }
+  to { opacity: 1; translate: 0 0; filter: blur(0); }
+}
+.label-in { animation: label-in 0.8s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .track-jitter,
+  .feed-pan,
+  .soft-pulse,
+  .tube,
+  .marquee,
+  .label-in {
+    animation: none;
   }
 }

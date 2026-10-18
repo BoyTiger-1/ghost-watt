@@ -8,9 +8,9 @@ import { fmtCo2, fmtKwh, fmtMoneyFull, fmtPayback } from "@/lib/energy";
 import type { AnalysisMode, Offender } from "@/lib/types";
 
 const STATE_LABEL: Record<Offender["state"], string> = {
-  on: "powered on",
-  standby: "standby",
-  off: "off",
+  on: "Powered on",
+  standby: "Standby",
+  off: "Off",
 };
 
 const FIX_TINT: Record<string, string> = {
@@ -59,7 +59,7 @@ export function OffenderCard({
       }`}
     >
       {/* rank watermark */}
-      <span className="pointer-events-none absolute -right-2 -top-5 font-mono text-7xl font-bold text-line2/40 select-none">
+      <span className="pointer-events-none absolute -right-2 -top-5 hidden select-none">
         {String(rank).padStart(2, "0")}
       </span>
 
@@ -79,19 +79,19 @@ export function OffenderCard({
             )}
             {o.boxes?.length ? (
               <span
-                className="border border-line2 px-1.5 py-px font-mono text-[0.6rem] tracking-wider uppercase text-mist"
+                className="border border-line2 px-1.5 py-px text-[0.72rem] text-mist"
                 title="Marked on the detection photo above. Hover to highlight."
               >
                 {o.boxes.length} on photo
               </span>
             ) : null}
           </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[0.68rem] tracking-wider text-dim">
-            <span className="uppercase">{STATE_LABEL[o.state]}</span>
-            <span className="text-line2">/</span>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.8rem] text-dim">
+            <span>{STATE_LABEL[o.state]}</span>
+            <span className="text-line2">·</span>
             <span>{Math.round(o.totalWatts).toLocaleString()} W draw</span>
-            <span className="text-line2">/</span>
-            <span className="uppercase">{o.source}</span>
+            <span className="hidden text-line2 sm:inline">/</span>
+            <span className="hidden sm:inline">{o.source}</span>
           </div>
         </div>
 
