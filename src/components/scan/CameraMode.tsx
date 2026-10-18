@@ -19,7 +19,7 @@ import {
 } from "@/lib/live";
 import { classifyRegion, getClassifier, getDetector, padBox, toPixelDetections } from "@/lib/detector";
 import { CENTER_ROI, CenterLamp, Verifier, judge, lampScore, withLamps } from "@/lib/verify";
-import { observationsToItems, readItems, peopleIn, type LiveItem } from "@/lib/ondevice";
+import { observationsToItems, readItems, type LiveItem } from "@/lib/ondevice";
 import { analysisSquare } from "@/lib/image";
 import { LightTracker, readScene, regionSaturation, type SceneRead } from "@/lib/scene";
 import { FrameReader, KeyframeCollector, PixelReader, itemColor, recorderMime, toJpeg, type Keyframe } from "@/lib/media";
@@ -441,10 +441,9 @@ export function CameraMode({
         box: [t.box.x / sw, t.box.y / sh, (t.box.x + t.box.w) / sw, (t.box.y + t.box.h) / sh] as [number, number, number, number],
       }));
       const onDevice = readItems(dets, sceneRef.current?.lights ?? [], settingsRef.current, luma ?? undefined);
-      // On an audited view, the AI's answer replaces the on-device guesses; people
-      // still come from the detector, since they move.
+      // On an audited view, the AI's answer replaces the on-device guesses.
       const aiView = aiRef.current.enabled ? view : null;
-      itemsRef.current = aiView ? [...aiView.items, ...onDevice.filter((i) => i.kind === "person")] : onDevice;
+      itemsRef.current = aiView ? aiView.items : onDevice;
       drawOverlay(canvas, sw, sh, itemsRef.current, now, mirroredRef.current, aiRef.current.inFlight);
 
       const dt = now - lastFrame;
@@ -919,7 +918,6 @@ function LiveRead({
   const cost = items.reduce((s, i) => s + i.costPerYear, 0);
   const typical = items.reduce((s, i) => s + i.typicalCostPerYear, 0);
   const watts = items.reduce((s, i) => s + i.watts, 0);
-  const people = peopleIn(items);
   const t = dark
     ? { fog: "text-white", mist: "text-white/75", dim: "text-white/55", line: "border-white/10", chip: "bg-white/10" }
     : { fog: "text-fog", mist: "text-mist", dim: "text-dim", line: "border-line", chip: "bg-surface2" };
@@ -1018,11 +1016,6 @@ function LiveRead({
             </button>
           )}
         </ContextRow>
-        {people > 0 && (
-          <ContextRow icon="person" dark={dark}>
-            <span className="text-amber">Someone&apos;s here, so this room is in use and its load isn&apos;t phantom yet.</span>
-          </ContextRow>
-        )}
       </div>
 
       {!dark && (

@@ -117,6 +117,8 @@ describe("on-device items", () => {
       DEFAULT_SETTINGS,
       { data: luma, w: W, h: H },
     );
+    // People are not tracked: a person detection draws nothing.
+    expect(items.some((i) => i.kind === "person")).toBe(false);
     const screens = items.filter((i) => i.categoryId === "monitor");
     expect(screens.map((s) => s.state)).toEqual(["on", "standby"]);
     expect(screens[0].costPerYear).toBeGreaterThan(screens[1].costPerYear);
