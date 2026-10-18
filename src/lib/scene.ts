@@ -372,9 +372,10 @@ export function findLightSources(luma: Uint8Array, w: number, h: number, opts: L
     const fill = c.count / (bw * bh);
     if (live) {
       // Pointed at a light, it can be anywhere and fill a good part of the frame.
-      if (area > 0.25) { drop("too big"); continue; }
       // A big solid rectangle running off the edge of the frame is a window.
       const touches = c.x1 === 0 || c.y1 === 0 || c.x2 === w - 1 || c.y2 === h - 1;
+      // Held right up to a lamp, the lamp can fill half the frame - but stays clear of its edges.
+      if (area > (touches ? 0.25 : 0.45)) { drop("too big"); continue; }
       if (touches && area > 0.02 && fill > 0.8) { drop("window: solid rectangle off the frame edge"); continue; }
       // Anything bright with sky around it is outside, or a reflection of outside.
       const px = Math.max(3, Math.round(bw * 0.5));

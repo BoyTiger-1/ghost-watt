@@ -11,6 +11,7 @@
 // Everything here is plain logic so it can be tested without a camera.
 
 import { scoreObservation } from "./energy";
+import { NEEDS_CONFIRM } from "./verify";
 import type { AuditSettings } from "./types";
 
 /** What a COCO class means to this app. */
@@ -73,6 +74,8 @@ export interface Track {
   hits: number;
   /** Consecutive frames it has gone unmatched. */
   missed: number;
+  /** Score-weighted votes per class; `cls` is the leader. */
+  votes?: Record<string, number>;
 }
 
 function iouPx(a: PxBox, b: PxBox): number {
@@ -102,55 +105,91 @@ export class Tracker {
   ) {}
 
   update(dets: Detection[]): Track[] {
-    const { minIou, smoothing, maxMissed } = this.opts;
+    const { minIou, maxMissed } = this.opts;
     const unmatched = new Set(dets.map((_, i) => i));
+    const matched = new Set<Track>();
 
     // Greedy: best overlaps first, so two adjacent screens do not swap ids.
-    const pairs: { t: Track; i: number; iou: number }[] = [];
-    for (const t of this.tracks) {
-      dets.forEach((d, i) => {
-        if (d.cls !== t.cls) return;
-        const v = iouPx(t.box, d.box);
-        if (v >= minIou) pairs.push({ t, i, iou: v });
-      });
-    }
-    pairs.sort((a, b) => b.iou - a.iou);
-    const matched = new Set<Track>();
-    for (const p of pairs) {
-      if (matched.has(p.t) || !unmatched.has(p.i)) continue;
-      const d = dets[p.i];
-      const k = smoothing;
-      p.t.box = {
-        x: p.t.box.x + (d.box.x - p.t.box.x) * k,
-        y: p.t.box.y + (d.box.y - p.t.box.y) * k,
-        w: p.t.box.w + (d.box.w - p.t.box.w) * k,
-        h: p.t.box.h + (d.box.h - p.t.box.h) * k,
-      };
-      p.t.score = p.t.score * 0.6 + d.score * 0.4;
-      p.t.hits++;
-      p.t.missed = 0;
-      matched.add(p.t);
-      unmatched.delete(p.i);
-    }
+    const pass = (sameClass: boolean, min: number) => {
+      const pairs: { t: Track; i: number; iou: number }[] = [];
+      for (const t of this.tracks) {
+        if (matched.has(t)) continue;
+        for (const i of unmatched) {
+          const d = dets[i];
+          if (sameClass ? d.cls !== t.cls : !relabelable(t.cls, d.cls)) continue;
+          const v = iouPx(t.box, d.box);
+          if (v >= min) pairs.push({ t, i, iou: v });
+        }
+      }
+      pairs.sort((a, b) => b.iou - a.iou);
+      for (const p of pairs) {
+        if (matched.has(p.t) || !unmatched.has(p.i)) continue;
+        this.absorb(p.t, dets[p.i]);
+        matched.add(p.t);
+        unmatched.delete(p.i);
+      }
+    };
+    pass(true, minIou);
+    // The detector often changes its mind about one object from frame to frame -
+    // fridge, oven, tv, fridge. The same box under another label is the same
+    // thing, so it keeps its id (and its classifier votes) and the label is voted.
+    pass(false, Math.max(minIou, 0.5));
 
     for (const t of this.tracks) if (!matched.has(t)) t.missed++;
     this.tracks = this.tracks.filter((t) => t.missed <= maxMissed);
 
     for (const i of unmatched) {
       const d = dets[i];
-      this.tracks.push({ id: this.nextId++, cls: d.cls, score: d.score, box: { ...d.box }, hits: 1, missed: 0 });
+      this.tracks.push({
+        id: this.nextId++,
+        cls: d.cls,
+        score: d.score,
+        box: { ...d.box },
+        hits: 1,
+        missed: 0,
+        votes: { [d.cls]: d.score },
+      });
     }
     return this.visible();
   }
 
+  private absorb(t: Track, d: Detection) {
+    const k = this.opts.smoothing;
+    t.box = {
+      x: t.box.x + (d.box.x - t.box.x) * k,
+      y: t.box.y + (d.box.y - t.box.y) * k,
+      w: t.box.w + (d.box.w - t.box.w) * k,
+      h: t.box.h + (d.box.h - t.box.h) * k,
+    };
+    const votes = (t.votes ??= { [t.cls]: t.score });
+    for (const c in votes) votes[c] *= 0.85;
+    votes[d.cls] = (votes[d.cls] ?? 0) + d.score;
+    const leader = Object.entries(votes).sort((a, b) => b[1] - a[1])[0][0];
+    if (leader !== t.cls) t.cls = leader;
+    t.score = d.cls === t.cls ? t.score * 0.6 + d.score * 0.4 : t.score * 0.9;
+    t.hits++;
+    t.missed = 0;
+  }
+
   /** Tracks seen often enough to be real, rather than a one-frame flicker. */
   visible(): Track[] {
-    return this.tracks.filter((t) => t.hits >= this.opts.minHits);
+    // Appliances the detector invents from doors and cupboards need a few more frames.
+    return this.tracks.filter((t) => t.hits >= (NEEDS_CONFIRM.has(t.cls) ? Math.max(3, this.opts.minHits) : this.opts.minHits));
+  }
+
+  /** Ids of every track still held, shown or not. */
+  ids(): number[] {
+    return this.tracks.map((t) => t.id);
   }
 
   reset() {
     this.tracks = [];
   }
+}
+
+/** Powered things can be relabelled into one another; a person or a car is never a fridge. */
+function relabelable(a: string, b: string): boolean {
+  return COCO_MAP[a]?.kind === "device" && COCO_MAP[b]?.kind === "device";
 }
 
 export interface LiveTally {
