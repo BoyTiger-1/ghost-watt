@@ -7,7 +7,7 @@ import { SIG_H, SIG_W, frameSignature, sigDiff } from "./live";
 import { readExif, type PhotoMeta } from "./exif";
 import { SCENE_DIFF, sampleTimes, selectKeyframes, type FrameSample } from "./keyframes";
 import { sharpness, toLuma } from "./scene";
-import type { LiveItem } from "./ondevice";
+import type { FramePixels, LiveItem } from "./ondevice";
 
 type Drawable = HTMLVideoElement | HTMLImageElement | HTMLCanvasElement;
 
@@ -52,6 +52,26 @@ export class PixelReader {
   luma(el: Drawable): { data: Uint8Array; w: number; h: number } | null {
     const px = this.rgba(el);
     return px ? { data: toLuma(px, this.w, this.h), w: this.w, h: this.h } : null;
+  }
+}
+
+/**
+ * The frame at analysis size, greyscale and colour, keeping its aspect ratio.
+ * Lights and screens are judged on this; 160 pixels across turned a downlight
+ * into two pixels, which is why the longest side is now a parameter.
+ */
+export class FrameReader {
+  private reader: PixelReader | null = null;
+  constructor(private readonly longSide: number) {}
+  read(el: Drawable): FramePixels | null {
+    const { w, h } = sizeOf(el);
+    if (!w || !h) return null;
+    const s = this.longSide / Math.max(w, h);
+    const rw = Math.max(1, Math.round(w * s));
+    const rh = Math.max(1, Math.round(h * s));
+    if (!this.reader || this.reader.w !== rw || this.reader.h !== rh) this.reader = new PixelReader(rw, rh);
+    const rgba = this.reader.rgba(el);
+    return rgba ? { data: toLuma(rgba, rw, rh), w: rw, h: rh, rgba } : null;
   }
 }
 

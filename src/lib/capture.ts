@@ -175,11 +175,12 @@ export function readTime(takenAt: string | undefined, schedule: WeeklySchedule |
 export function promptContext(c: Capture, schedule: WeeklySchedule | undefined) {
   const time = readTime(c.meta.takenAt, schedule);
   const hints: string[] = [];
-  const lights = c.onDevice?.filter((o) => o.categoryId === "ceiling_light").reduce((s, o) => s + o.count, 0) ?? 0;
+  const isLight = (id: string) => id === "ceiling_light" || id === "downlight";
+  const lights = c.onDevice?.filter((o) => isLight(o.categoryId)).reduce((s, o) => s + o.count, 0) ?? 0;
   if (lights) hints.push(`${lights} bright light fixture${lights > 1 ? "s" : ""} appear lit`);
   if (c.meta.lighting === "off") hints.push("the room looks dark");
   for (const o of c.onDevice ?? []) {
-    if (o.categoryId === "ceiling_light") continue;
+    if (isLight(o.categoryId)) continue;
     hints.push(`${o.count} ${o.device}${o.count > 1 ? "s" : ""} (${o.state === "standby" ? "screen dark" : "on"})`);
   }
   if (c.meta.people) hints.push(`${c.meta.people} person in frame`);

@@ -142,6 +142,41 @@ export const EXTRA_DEVICES: DeviceCategory[] = [
 
   // ---- lighting ---------------------------------------------------------
   {
+    // Single-lamp fixtures. Costing these as "overhead lighting" (a bank of
+    // troffers at 120 W) priced a ceiling of 10 W downlights at ten times the truth.
+    id: "downlight",
+    label: "Downlights / pendant lamps",
+    keywords: [
+      "recessed downlight",
+      "recessed light",
+      "downlight",
+      "down light",
+      "can light",
+      "pot light",
+      "pendant light",
+      "pendant lamp",
+      "globe light",
+      "track light",
+      "light bulb",
+      "bulb",
+    ],
+    wattsOn: 12,
+    wattsStandby: 0,
+    wattsLow: 6,
+    wattsHigh: 40,
+    dutyCycle: 1,
+    group: "lighting",
+    source: "One LED downlight or pendant lamp is 6-15 W; halogen and incandescent units reach 40-60 W.",
+    icon: "light",
+    action: {
+      label: "Occupancy sensor or scheduled switching",
+      type: "occupancy",
+      cost: 50,
+      savingsFraction: 0.85,
+      note: "Small one by one, but a ceiling of downlights left on all night adds up. One sensor covers the room.",
+    },
+  },
+  {
     id: "exterior_light",
     label: "Exterior / parking-lot lighting",
     keywords: ["parking lot light", "exterior light", "flood light", "floodlight", "pole light", "security light", "outdoor light"],

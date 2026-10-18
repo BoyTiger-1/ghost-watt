@@ -8,7 +8,7 @@ const TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS ?? 120000);
 import { FULL_FRAME, SQUARE, type Frame } from "./boxes";
 
 const DEVICE_NAMES =
-  "computer monitor, desktop computer, laptop, projector, smartboard, TV, overhead lights, vending machine, refrigerator, water cooler, printer, copier, server rack, window AC unit, space heater, coffee maker, microwave";
+  "computer monitor, all-in-one computer, desktop computer, laptop, projector, smartboard, TV, overhead lights (troffers and tube fixtures), recessed downlight, pendant light, vending machine, refrigerator, water cooler, printer, copier, server rack, window AC unit, space heater, coffee maker, microwave";
 
 /** What the client knows about a capture, passed to the model as context. */
 export interface PromptContext {
@@ -27,7 +27,7 @@ export interface PromptContext {
 }
 
 const WATT_GUIDE =
-  "24-inch LED monitor ~20, 27-inch ~30, old CCFL monitor ~45, CRT ~80, desktop tower idle ~60, laptop charging ~30, lamp projector ~280, laser projector ~160, 75-inch interactive panel ~200, LED troffer ~35, 4-lamp T8 fluorescent troffer ~110, CFL/LED bulb ~10, vending machine ~400, mini fridge ~70";
+  "24-inch LED monitor ~20, 27-inch ~30, old CCFL monitor ~45, CRT ~80, desktop tower idle ~60, laptop charging ~30, lamp projector ~280, laser projector ~160, 75-inch interactive panel ~200, LED troffer ~35, 4-lamp T8 fluorescent troffer ~110, LED recessed downlight ~10, LED pendant ~15, CFL/LED bulb ~10, 27-inch all-in-one computer ~70, vending machine ~400, mini fridge ~70";
 
 /**
  * The perception prompt, told exactly how much of the square is photo.
@@ -83,6 +83,12 @@ List every electrical device or appliance you can see. For each give:
 - "state": ON (lit, running, display showing something), STANDBY (dark but with an indicator light or clock), or OFF.
 - "watts": your best estimate of ONE unit's power draw in watts while running, judged from its visible size, age and technology. Reference points: ${WATT_GUIDE}.
 - "evidence": a few words on what you saw that decided the state and wattage.
+
+Counting rules - these are where audits go wrong:
+- Count every light fixture individually, including small recessed downlights far down a corridor. Report each kind of light as its own entry (troffers, downlights, pendants), never lumped together.
+- Daylight through a window, a reflection in glass or a glossy floor, and a white wall or grille are NOT lights. Only count a fixture you can see.
+- Count computers and monitors even when seen from behind or at an angle; an all-in-one (like an iMac) is one device, not a monitor plus a computer. If you cannot see the screen, use STANDBY.
+- Look across the whole image, edges and background included, before answering.
 ${boxRules}
 Respond ONLY with a JSON array, no other text. Example:
 ${example}`;

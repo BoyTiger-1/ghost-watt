@@ -40,8 +40,11 @@ describe("classifyScreen", () => {
 describe("findLightSources", () => {
   it("finds lit fixtures near the ceiling and ignores windows and low glare", () => {
     const { luma, paint } = room(100);
-    paint([0.1, 0.05, 0.2, 0.09], 252); // fixture
-    paint([0.5, 0.05, 0.6, 0.09], 250); // fixture
+    // Fixtures glow: a clipped core with light bleeding into the ceiling around it.
+    for (const [x, peak] of [[0.1, 252], [0.5, 250]]) {
+      [[0.04, 150], [0.025, 185], [0.012, 215]].forEach(([pad, v]) => paint([x - pad, 0.05 - pad, x + 0.1 + pad, 0.09 + pad], v));
+      paint([x, 0.05, x + 0.1, 0.09], peak);
+    }
     paint([0.7, 0.1, 1.0, 0.55], 255); // window: too big
     paint([0.4, 0.8, 0.45, 0.85], 255); // low: a screen or a lamp
     const lights = findLightSources(luma, W, H);
@@ -110,7 +113,7 @@ describe("on-device items", () => {
         { cls: "tv", score: 0.8, box: dark },
         { cls: "person", score: 0.9, box: [0.4, 0.2, 0.5, 0.9] },
       ],
-      [{ box: [0.1, 0.05, 0.2, 0.08], area: 0.003, peak: 252 }],
+      [{ box: [0.1, 0.05, 0.2, 0.08], area: 0.003, peak: 252, kind: "panel", confidence: 0.8 }],
       DEFAULT_SETTINGS,
       { data: luma, w: W, h: H },
     );
