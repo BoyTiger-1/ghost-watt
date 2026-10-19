@@ -12,6 +12,8 @@ import { GridPulse } from "./GridPulse";
 import { SolarOffset } from "./SolarOffset";
 import { ActionPlan } from "./ActionPlan";
 import { useT } from "@/lib/i18n";
+import { usePrefs } from "@/lib/prefs";
+import { beep, say } from "@/lib/cues";
 import { BillCalibration } from "./BillCalibration";
 import { ContributeBar } from "./ContributeBar";
 import { WeatherContext } from "./WeatherContext";
@@ -126,6 +128,11 @@ function mergeObservations(lists: CategorizedObservation[][]): CategorizedObserv
 
 export function Scanner() {
   const t = useT();
+  const prefs = usePrefs();
+  const prefsRef = useRef(prefs);
+  useEffect(() => {
+    prefsRef.current = prefs;
+  }, [prefs]);
   const [mode, setMode] = useState<Mode>("camera");
   const [captures, setCaptures] = useState<Capture[]>([]);
   const [showSettings, setShowSettings] = useState(false);
@@ -402,14 +409,31 @@ export function Scanner() {
       patch(id, { status: "working", stage: "Reading on device", progress: 0.4, error: undefined });
       try {
         const s = settingsRef.current;
+        const cloud = engineRef.current.mode === "enhanced";
         // 1. What the detector and the pixels say, unless the camera already said it.
         let onDevice = c.onDevice;
         let meta = c.meta;
         let keyframes = c.keyframes;
+        // In Enhanced mode the cloud call starts at once and the on-device read
+        // runs beside it; the two are compared when both are back. Waiting for
+        // the detector first used to add its whole run time to every photo.
+        let cloudCall: Promise<Response> | null = null;
+        if (cloud && c.kind === "photo" && c.dataUrl) {
+          patch(id, { stage: "Cloud model reading the photo · detector checking it", progress: 0.5 });
+          const context = promptContext({ ...c, meta }, building.schedule);
+          const square = await analysisSquare(c.dataUrl, 0.8);
+          cloudCall = fetch("/api/analyze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image: square?.dataUrl, frame: square?.frame, source: c.name, settings: s, context }),
+          });
+          // A rejection here is handled where the call is awaited.
+          cloudCall.catch(() => undefined);
+        }
         if (!onDevice && c.kind === "photo" && c.dataUrl) {
-          const { items, scene } = await readStill(c.dataUrl, s);
+          const { items, scene, timing } = await readStill(c.dataUrl, s);
           onDevice = itemsToObservations(items);
-          meta = { ...meta, brightness: scene?.brightness, lighting: scene?.lighting, people: peopleIn(items) };
+          meta = { ...meta, brightness: scene?.brightness, lighting: scene?.lighting, people: peopleIn(items), onDeviceMs: Math.round(timing.total) };
         } else if (!onDevice && c.kind === "video" && keyframes?.length) {
           const reads: StillRead[] = [];
           for (const k of keyframes) reads.push(await readStill(k.dataUrl, s));
@@ -439,22 +463,26 @@ export function Scanner() {
           patch(id, { status: "done", result: onDeviceResult({ name: c.name, onDevice }), errorCode: undefined, stage: undefined, progress: undefined });
           return;
         }
-        patch(id, { stage: c.kind === "video" ? `Cloud model reading ${keyframes?.length ?? 0} frames` : "Cloud model reading the photo", progress: 0.65 });
-        const context = promptContext({ ...c, onDevice, meta, geo }, building.schedule);
-        let body: Record<string, unknown>;
-        if (c.kind === "video") {
-          body = { images: (keyframes ?? []).map((k) => k.dataUrl) };
-        } else {
-          const square = c.dataUrl ? await analysisSquare(c.dataUrl, 0.8) : null;
-          body = { image: square?.dataUrl, frame: square?.frame };
-        }
+        patch(id, { stage: c.kind === "video" ? `Cloud model reading ${keyframes?.length ?? 0} frames` : "Waiting for the cloud model", progress: 0.65 });
         let res: Response;
         try {
-          res = await fetch("/api/analyze", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ...body, source: c.name, settings: s, context }),
-          });
+          if (cloudCall) {
+            res = await cloudCall;
+          } else {
+            const context = promptContext({ ...c, onDevice, meta, geo }, building.schedule);
+            let body: Record<string, unknown>;
+            if (c.kind === "video") {
+              body = { images: (keyframes ?? []).map((k) => k.dataUrl) };
+            } else {
+              const square = c.dataUrl ? await analysisSquare(c.dataUrl, 0.8) : null;
+              body = { image: square?.dataUrl, frame: square?.frame };
+            }
+            res = await fetch("/api/analyze", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ ...body, source: c.name, settings: s, context }),
+            });
+          }
         } catch {
           throw Object.assign(new Error(navigator.onLine ? "The server could not be reached." : "You are offline, so the cloud model cannot read this picture."), {
             code: "engine-failed",
@@ -500,10 +528,14 @@ export function Scanner() {
     const next = [...captures].reverse().find((c) => c.status === "pending");
     if (!next) return;
     busyRef.current = true;
-    analyze(next.id).finally(() => {
-      busyRef.current = false;
-      // Wake the effect for whatever is queued behind it.
-      setCaptures((prev) => [...prev]);
+    // Off the effect's own tick: analysis sets state as it goes, and the queue
+    // only needs to start, not to run synchronously inside the effect.
+    queueMicrotask(() => {
+      analyze(next.id).finally(() => {
+        busyRef.current = false;
+        // Wake the effect for whatever is queued behind it.
+        setCaptures((prev) => [...prev]);
+      });
     });
   }, [captures, analyze]);
 
@@ -660,6 +692,21 @@ export function Scanner() {
     };
   }, [priced, ready, settings, rateQualityBase]);
 
+  // A finished capture gets a tone and, if asked, a spoken summary.
+  const announcedRef = useRef(new Set<string>());
+  useEffect(() => {
+    for (const p of priced) {
+      if (p.c.status !== "done" || !p.c.result || announcedRef.current.has(p.c.id)) continue;
+      announcedRef.current.add(p.c.id);
+      const pr = prefsRef.current;
+      beep(pr, "done");
+      const os = counted(p.offenders);
+      const devices = os.reduce((n, o) => n + o.count, 0);
+      const cost = Math.round(os.reduce((n, o) => n + o.costPerYear, 0));
+      say(pr, devices ? `${p.c.name}: ${devices} ${t("speak.result")} ${cost} ${t("speak.year")}.` : `${p.c.name}: ${t("speak.nothing")}`);
+    }
+  }, [priced, t]);
+
   const basisMix = useMemo(() => {
     const m = { measured: 0, ai: 0, catalog: 0 };
     for (const o of countedOffenders) m[o.basis ?? "catalog"]++;
@@ -677,7 +724,7 @@ export function Scanner() {
           .
         </PageHeader>
         <h1 className="sr-only">{t("nav.scanner")}</h1>
-        <div className="flex flex-col gap-2 md:items-end">
+        <div className="flex items-center justify-between gap-2 md:flex-col md:items-end">
           <ModeSwitch mode={mode} onChange={setMode} />
           <PlacePicker place={place} onChange={choosePlace} />
         </div>
@@ -776,8 +823,14 @@ export function Scanner() {
                       const key = parseOffenderKey(r.offender.id);
                       const cap = key ? captures.find((c) => c.id === key.captureId) : undefined;
                       return (
-                        <OffenderCard
+                        <motion.div
                           key={r.offender.id}
+                          layout
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.35, delay: Math.min(i, 8) * 0.04, ease: [0.22, 1, 0.36, 1] }}
+                        >
+                        <OffenderCard
                           offender={r.offender}
                           rank={i + 1}
                           maxCost={maxCost}
@@ -788,6 +841,7 @@ export function Scanner() {
                           adjust={key ? cap?.adjust[key.categoryId] : undefined}
                           onAdjust={(a) => setAdjust(r.offender.id, a)}
                         />
+                        </motion.div>
                       );
                     })}
                   </AnimatePresence>
@@ -916,8 +970,8 @@ function PlacePicker({ place, onChange }: { place: UsageContext; onChange: (p: U
     { id: "office", label: t("scan.office") },
   ];
   return (
-    <div className="flex items-center justify-between gap-3 md:justify-end">
-      <span className="text-[0.78rem] text-dim">{t("scan.scanning")}</span>
+    <div className="flex shrink-0 items-center justify-end gap-3">
+      <span className="hidden text-[0.78rem] text-dim sm:inline">{t("scan.scanning")}</span>
       <div className="flex rounded-full bg-fog/[0.06] p-0.5" role="radiogroup" aria-label="Where you are scanning">
         {opts.map((o) => (
           <button
@@ -925,7 +979,7 @@ function PlacePicker({ place, onChange }: { place: UsageContext; onChange: (p: U
             role="radio"
             aria-checked={place === o.id}
             onClick={() => onChange(o.id)}
-            className={`rounded-full px-3.5 py-1.5 text-[0.82rem] font-medium transition-colors ${
+            className={`rounded-full px-2.5 py-1.5 text-[0.78rem] font-medium transition-colors sm:px-3.5 sm:text-[0.82rem] ${
               place === o.id ? "bg-surface text-fog shadow-[0_1px_2px_rgba(28,27,24,0.1)]" : "text-dim hover:text-mist"
             }`}
           >
@@ -944,14 +998,14 @@ function ModeSwitch({ mode, onChange }: { mode: Mode; onChange: (m: Mode) => voi
     { id: "upload", label: t("scan.upload"), icon: "upload" },
   ];
   return (
-    <div className="grid grid-cols-2 rounded-full bg-fog/[0.06] p-1 md:w-[260px]" role="tablist" aria-label="Scan mode">
+    <div className="grid min-w-0 grid-cols-2 rounded-full bg-fog/[0.06] p-1 md:w-[260px]" role="tablist" aria-label="Scan mode">
       {opts.map((o) => (
         <button
           key={o.id}
           role="tab"
           aria-selected={mode === o.id}
           onClick={() => onChange(o.id)}
-          className={`relative flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-[0.9rem] font-medium transition-colors ${
+          className={`relative flex items-center justify-center gap-1.5 rounded-full px-2.5 py-2 text-[0.82rem] font-medium transition-colors md:px-4 md:py-2.5 md:text-[0.9rem] ${
             mode === o.id ? "text-fog" : "text-dim hover:text-mist"
           }`}
         >

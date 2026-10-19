@@ -161,7 +161,7 @@ export function SettingsPanel() {
         {/* Hosted options. Only one is ever needed. */}
         <div className="mt-5 border-t border-line pt-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <span className="mono-label">hosted options - set any one</span>
+            <span className="mono-label">hosted options - set one or more; each is a fallback</span>
             <span className="text-[0.72rem] text-dim">
               {engine
                 ? `${engine.hosted.filter((h) => h.configured).length} of ${engine.hosted.length} set`
@@ -271,13 +271,13 @@ export function SettingsPanel() {
         <div className="mt-5 border-t border-line pt-4">
           <span className="mono-label">to switch one on</span>
           <pre className="mt-2 overflow-x-auto border border-line bg-ink px-3 py-2 font-mono text-[0.72rem] leading-relaxed text-mist">
-            <code>{`# .env.local\nEIA_API_KEY=…            # prices + live grid mix\nOPENWEATHER_API_KEY=…    # degree days\nNREL_API_KEY=…           # optional, DEMO_KEY works\n\n# any one of these, so visitors need no key:\nANTHROPIC_API_KEY=…\n\n# only if a whole class will scan at once:\nUPSTASH_REDIS_REST_URL=…\nUPSTASH_REDIS_REST_TOKEN=…`}</code>
+            <code>{`# .env.local (or Vercel → Settings → Environment Variables)\nEIA_API_KEY=…            # prices + live grid mix (free)\nOPENWEATHER_API_KEY=…    # degree days (free)\nNREL_API_KEY=…           # utility rates, free at api.data.gov\n\n# vision: one is enough, each extra one is a fallback (all have free tiers):\nGEMINI_API_KEY=…         # aistudio.google.com - best free option\nGROQ_API_KEY=…           # fastest\nMISTRAL_API_KEY=…\nOPENROUTER_API_KEY=…     # ':free' models as a last resort\nANTHROPIC_API_KEY=…      # best recognition, paid\n\n# only if a whole class will scan at once (free tier):\nUPSTASH_REDIS_REST_URL=…\nUPSTASH_REDIS_REST_TOKEN=…`}</code>
           </pre>
           <p className="mt-2 text-[0.78rem] leading-relaxed text-dim">
-            All of these are free and none is required. Without them Ghost Watt uses EIA state
-            averages and eGRID subregion carbon intensity from stored tables, and says so in the
-            methodology. The EIA key is the one worth having - it covers both current prices and
-            the hourly grid mix that live carbon intensity is computed from.
+            None is required. Without a vision key the scanner runs on the device; with one it
+            reads far more, and with two or more a rate limit or a retired model on one falls
+            through to the next. Without the data keys Ghost Watt uses EIA state averages and eGRID
+            carbon intensity from stored tables, and says so in the methodology.
           </p>
         </div>
       </div>

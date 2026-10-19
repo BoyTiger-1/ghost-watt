@@ -41,8 +41,32 @@ export function getDetector(mode: "VIDEO" | "IMAGE"): Promise<LoadedDetector> {
           scoreThreshold: 0.3,
           maxResults: 40,
         });
+      // A forced delegate, for measuring one against the other on a given device
+      // (Settings → Display shows the active one; the bench page sets this).
+      let forced: "GPU" | "CPU" | null = null;
       try {
-        return { detector: await make("GPU", MODEL.url), delegate: "GPU" as const, model: MODEL.name };
+        const v = localStorage.getItem("gw-delegate");
+        forced = v === "CPU" || v === "GPU" ? v : null;
+      } catch {
+        // Storage blocked: pick as usual.
+      }
+      if (forced === "CPU") return { detector: await make("CPU", MODEL.url), delegate: "CPU" as const, model: MODEL.name };
+      try {
+        const gpu = await make("GPU", MODEL.url);
+        // Some machines expose WebGL only through a software renderer, where the
+        // GPU delegate is many times slower than plain CPU (measured here: 0.9 s
+        // against 0.12 s a pass). One warm-up pass tells; a slow one switches to
+        // CPU and remembers the choice for next time.
+        if (mode === "IMAGE" && (await warmupMs(gpu)) > 600) {
+          gpu.close();
+          try {
+            localStorage.setItem("gw-delegate", "CPU");
+          } catch {
+            // Not remembered; still switched for this session.
+          }
+          return { detector: await make("CPU", MODEL.url), delegate: "CPU" as const, model: MODEL.name };
+        }
+        return { detector: gpu, delegate: "GPU" as const, model: MODEL.name };
       } catch {
         // No WebGL2 (older phones, some locked-down school laptops): CPU still
         // manages several frames a second with the small model.
@@ -54,6 +78,18 @@ export function getDetector(mode: "VIDEO" | "IMAGE"): Promise<LoadedDetector> {
     });
   }
   return cache[mode]!;
+}
+
+/** Time one detector pass on a small blank canvas, after a first pass that pays the one-off setup. */
+async function warmupMs(det: ObjectDetector): Promise<number> {
+  const c = document.createElement("canvas");
+  c.width = 320;
+  c.height = 320;
+  c.getContext("2d")?.fillRect(0, 0, 320, 320);
+  det.detect(c);
+  const t0 = performance.now();
+  det.detect(c);
+  return performance.now() - t0;
 }
 
 type Raw = { categories: { categoryName?: string; score?: number }[]; boundingBox?: { originX: number; originY: number; width: number; height: number } };
@@ -166,6 +202,15 @@ export async function verifyStill(
  * zoomed overlapping tiles of it, merged. Five passes instead of one, which a
  * photo can afford and live video cannot - and what finds the far monitors.
  */
+/**
+ * The detector's own input is 320 px, so feeding it a 4000 px photo only pays
+ * for the resize. Each pass gets a canvas no larger than this on its long side,
+ * which is still above the model's input and keeps a tile of a phone photo
+ * sharp. Measured on this build machine's CPU: 4.6 s a photo at full size, under
+ * 1.5 s at this cap, with the same boxes.
+ */
+const PASS_MAX = 640;
+
 export async function detectStill(el: HTMLCanvasElement | HTMLImageElement): Promise<FracDetection[]> {
   const { detector } = await getDetector("IMAGE");
   const W = el instanceof HTMLImageElement ? el.naturalWidth : el.width;
@@ -174,17 +219,18 @@ export async function detectStill(el: HTMLCanvasElement | HTMLImageElement): Pro
   const lists: FracDetection[][] = [];
   const crop = document.createElement("canvas");
   const ctx = crop.getContext("2d");
-  for (const [tx1, ty1, tx2, ty2] of tileGrid()) {
+  // A small picture has nothing a zoomed tile would find that the whole frame does not.
+  const tiles = Math.max(W, H) < 700 ? tileGrid().slice(0, 1) : tileGrid();
+  for (const [tx1, ty1, tx2, ty2] of tiles) {
     const sx = tx1 * W, sy = ty1 * H, sw = (tx2 - tx1) * W, sh = (ty2 - ty1) * H;
-    let src: HTMLCanvasElement | HTMLImageElement = el;
-    if (tx2 - tx1 < 1 && ctx) {
-      crop.width = Math.round(sw);
-      crop.height = Math.round(sh);
-      ctx.drawImage(el, sx, sy, sw, sh, 0, 0, crop.width, crop.height);
-      src = crop;
-    }
-    const cw = src === el ? W : crop.width;
-    const ch = src === el ? H : crop.height;
+    if (!ctx) break;
+    const scale = Math.min(1, PASS_MAX / Math.max(sw, sh));
+    crop.width = Math.max(1, Math.round(sw * scale));
+    crop.height = Math.max(1, Math.round(sh * scale));
+    ctx.drawImage(el, sx, sy, sw, sh, 0, 0, crop.width, crop.height);
+    const src: HTMLCanvasElement = crop;
+    const cw = crop.width;
+    const ch = crop.height;
     const res = detector.detect(src);
     lists.push(
       toPixelDetections(res.detections as Raw[])
@@ -192,7 +238,7 @@ export async function detectStill(el: HTMLCanvasElement | HTMLImageElement): Pro
         // Only interior tile edges cut objects; the photo's own border does not.
         .filter(
           (d) =>
-            src === el ||
+            tx2 - tx1 >= 1 ||
             ((tx1 === 0 || d.box.x > 2) &&
               (ty1 === 0 || d.box.y > 2) &&
               (tx2 >= 1 || d.box.x + d.box.w < cw - 2) &&

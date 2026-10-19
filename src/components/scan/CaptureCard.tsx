@@ -40,7 +40,7 @@ export function CaptureCard({
   const noteChanged = (c.details.note ?? "") !== sentNote && c.status === "done";
 
   return (
-    <motion.article layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="panel overflow-hidden">
+    <motion.article layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="panel relative overflow-hidden">
       <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center gap-3 p-2.5 text-left">
         <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-surface2">
           {thumb ? (
@@ -76,7 +76,10 @@ export function CaptureCard({
             {c.status === "error" ? (
               <span className="text-ember">{c.error}</span>
             ) : working ? (
-              <span>{c.stage ?? "Queued"}…</span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-sodium pulse-dot" aria-hidden="true" />
+                {c.stage ?? "Queued"}…
+              </span>
             ) : (
               <>
                 <span className="font-mono font-semibold text-fog">{fmtMoney(cost)}/yr</span>
@@ -100,9 +103,21 @@ export function CaptureCard({
 
       {working && c.progress !== undefined && (
         <div className="mx-2.5 mb-2.5 h-1 overflow-hidden rounded-full bg-surface2">
-          <motion.div className="h-full bg-sodium" animate={{ width: `${Math.round(c.progress * 100)}%` }} />
+          <motion.div className="h-full bg-sodium shimmer" animate={{ width: `${Math.round(c.progress * 100)}%` }} transition={{ ease: "easeOut", duration: 0.5 }} />
         </div>
       )}
+      <AnimatePresence>
+        {c.status === "done" && c.result && (
+          <motion.div
+            key="done"
+            initial={{ opacity: 0.9 }}
+            animate={{ opacity: 0 }}
+            transition={{ duration: 1.1, ease: "easeOut" }}
+            className="pointer-events-none absolute inset-0 rounded-2xl bg-lime/15"
+            aria-hidden="true"
+          />
+        )}
+      </AnimatePresence>
 
       <AnimatePresence initial={false}>
         {open && (
