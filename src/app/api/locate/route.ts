@@ -38,8 +38,10 @@ const cache = new Map<string, LocateResult>();
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
-  const lat = Number(url.searchParams.get("lat"));
-  const lon = Number(url.searchParams.get("lon"));
+  // Rounded to two decimals (about 1 km) before anything leaves this server:
+  // enough to find the utility and the town, not the house.
+  const lat = Math.round(Number(url.searchParams.get("lat")) * 100) / 100;
+  const lon = Math.round(Number(url.searchParams.get("lon")) * 100) / 100;
   const sector: Sector = url.searchParams.get("sector") === "commercial" ? "commercial" : "residential";
   if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
     return NextResponse.json({ error: "Pass lat and lon." }, { status: 400 });

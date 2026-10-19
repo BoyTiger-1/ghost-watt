@@ -1,69 +1,183 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { PageHeader } from "@/components/PageHeader";
+import { LegalPage, type LegalSection } from "@/components/Legal";
 
 export const metadata: Metadata = {
-  title: "Terms - Ghost Watt",
-  description: "What Ghost Watt's numbers are, what they are not, and the terms of using it.",
+  title: "Terms of Service - Ghost Watt",
+  description: "The terms for using Ghost Watt: what the Service provides, acceptable use, the nature of its estimates, and the limits of liability.",
 };
+
+const EFFECTIVE = "October 19, 2026";
+const ISSUES = "https://github.com/BoyTiger-1/ghost-watt/issues";
+const LICENSE = "https://github.com/BoyTiger-1/ghost-watt/blob/main/LICENSE";
+
+const sections: LegalSection[] = [
+  {
+    id: "acceptance",
+    title: "Acceptance of these terms",
+    body: (
+      <>
+        <p>
+          These Terms of Service (&ldquo;Terms&rdquo;) govern your use of the Ghost Watt website and application (the &ldquo;Service&rdquo;). By using the Service
+          you agree to these Terms and to the{" "}
+          <Link href="/privacy" className="text-cyan underline-offset-4 hover:underline">
+            Privacy Policy
+          </Link>
+          . If you do not agree, do not use the Service.
+        </p>
+        <p>If you are under 18, use the Service with the permission and supervision of a parent, guardian or teacher.</p>
+      </>
+    ),
+  },
+  {
+    id: "service",
+    title: "What the Service provides",
+    body: (
+      <p>
+        The Service identifies electrical devices in photographs and camera views, estimates their electricity use, cost and carbon emissions from published
+        reference data and the rates you provide or that it looks up, and suggests ways to reduce that use. It is provided free of charge. We may change,
+        suspend or discontinue any part of it at any time.
+      </p>
+    ),
+  },
+  {
+    id: "estimates",
+    title: "Estimates, not measurements",
+    body: (
+      <>
+        <p>
+          All figures produced by the Service are estimates. Device identification is performed by machine-learning models that can miss devices, miscount
+          them or misidentify them. Wattage, hours of use, electricity rates and emission factors are representative values that may differ from your actual
+          equipment, behaviour and tariff. Figures are shown as ranges to reflect this uncertainty.
+        </p>
+        <p>
+          The Service is not an energy audit, an engineering assessment, a utility bill, or financial advice, and it does not guarantee any saving. Verify
+          important figures, for example with a plug-in power meter or your utility bill, before making purchasing or operational decisions. Decisions to buy,
+          replace, or switch off equipment are yours, or your organisation&apos;s, alone.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "use",
+    title: "Acceptable use",
+    body: (
+      <>
+        <p>You agree not to:</p>
+        <ul className="list-disc space-y-1.5 pl-5">
+          <li>photograph places you do not have permission to photograph, or capture identifiable people without their consent;</li>
+          <li>upload content that is unlawful, infringes another person&apos;s rights, or contains personal information about others;</li>
+          <li>attempt to overload, disrupt, probe or circumvent the Service&apos;s rate limits or security;</li>
+          <li>use automated means to send requests to the Service&apos;s server routes other than through the Service&apos;s own interface;</li>
+          <li>use the Service in a way that violates the terms of any third-party provider it relies on.</li>
+        </ul>
+        <p>We may limit or block access that we reasonably believe breaches these Terms.</p>
+      </>
+    ),
+  },
+  {
+    id: "content",
+    title: "Your content",
+    body: (
+      <p>
+        You keep all rights to the pictures and information you provide. You grant us only the limited permission needed to process them to deliver the
+        feature you request, including sending them to the third-party providers described in the Privacy Policy when you use Enhanced (cloud) mode. You are
+        responsible for having the right to submit what you submit.
+      </p>
+    ),
+  },
+  {
+    id: "third-party",
+    title: "Third-party services",
+    body: (
+      <p>
+        The Service relies on third-party providers for vision models, electricity prices, grid data, maps, weather and hosting. Their availability and
+        accuracy are outside our control, and your use of features that rely on them is also subject to their terms. We are not responsible for third-party
+        services.
+      </p>
+    ),
+  },
+  {
+    id: "license",
+    title: "Open-source license",
+    body: (
+      <p>
+        The Service&apos;s source code is released under the{" "}
+        <a href={LICENSE} className="text-cyan underline-offset-4 hover:underline">
+          MIT License
+        </a>
+        . That license governs your use of the code. These Terms govern your use of the hosted Service. The Ghost Watt name and logo are not licensed for use
+        in a way that suggests endorsement.
+      </p>
+    ),
+  },
+  {
+    id: "warranty",
+    title: "Disclaimer of warranties",
+    body: (
+      <p className="uppercase tracking-[0.01em] text-[0.88rem]">
+        The Service is provided &ldquo;as is&rdquo; and &ldquo;as available&rdquo;, without warranties of any kind, express or implied, including warranties of
+        accuracy, fitness for a particular purpose, merchantability and non-infringement. We do not warrant that the Service will be uninterrupted, error-free
+        or secure, or that its results will be correct.
+      </p>
+    ),
+  },
+  {
+    id: "liability",
+    title: "Limitation of liability",
+    body: (
+      <p className="uppercase tracking-[0.01em] text-[0.88rem]">
+        To the fullest extent permitted by law, the Service&apos;s authors and contributors are not liable for any indirect, incidental, special, consequential
+        or punitive damages, or for any loss of data, savings, profits or goodwill, arising from your use of or inability to use the Service or from reliance
+        on its estimates. Because the Service is free, our total liability for any claim relating to it is limited to zero dollars where the law allows, and
+        otherwise to the minimum amount the law permits.
+      </p>
+    ),
+  },
+  {
+    id: "changes",
+    title: "Changes to these terms",
+    body: (
+      <p>
+        We may update these Terms. The date at the top shows when they were last updated. Continued use of the Service after a change means you accept the
+        updated Terms.
+      </p>
+    ),
+  },
+  {
+    id: "law",
+    title: "Governing law",
+    body: <p>These Terms are governed by the laws of the State of Washington, United States, without regard to its conflict-of-law rules.</p>,
+  },
+  {
+    id: "contact",
+    title: "Contact",
+    body: (
+      <p>
+        Questions about these Terms can be raised through the project&apos;s{" "}
+        <a href={ISSUES} className="text-cyan underline-offset-4 hover:underline">
+          GitHub issue tracker
+        </a>
+        .
+      </p>
+    ),
+  },
+];
 
 export default function TermsPage() {
   return (
-    <div className="mx-auto max-w-3xl px-5 pb-16 pt-24 sm:px-6 sm:pt-32">
-      <PageHeader eyebrow="Terms" title="Estimates," accent="not meter readings.">
-        Plain-language terms for using Ghost Watt. They are short because the app does little that needs terms: it reads
-        pictures you choose, does arithmetic you can inspect, and keeps the results on your device.
-      </PageHeader>
-
-      <Section title="What the numbers are">
-        <P>
-          Every dollar, kilowatt-hour and kilogram of CO₂ is an estimate: a published typical wattage for a device class, times
-          hours from a usage profile for the kind of room, times an electricity rate for your area or from your bill, times your
-          state grid&apos;s emission factor. Each is shown as a range because that is how much is actually known. The{" "}
-          <Link href="/methodology" className="text-cyan underline-offset-4 hover:underline">
-            Method page
-          </Link>{" "}
-          cites the source of each figure.
-        </P>
-        <P>
-          A vision model or an on-device detector decides what is in the picture. Both make mistakes: they miss devices, miscount
-          them and sometimes name the wrong thing. Items the app cannot cross-check are marked unverified and not counted until you
-          confirm them. You can edit or delete any detection. A wattage you measure with a plug-in meter replaces the estimate.
-        </P>
-      </Section>
-
-      <Section title="What they are not">
-        <P>They are not a utility bill, an engineering audit, or a guarantee of savings. Payback figures assume the fix is used as described and the device keeps the state in which it was seen.</P>
-        <P>
-          Ghost Watt does not state an accuracy percentage because it cannot back one up for your room. The calibration table on the
-          Method page shows how the estimates compared with meter readings you entered, and nothing more.
-        </P>
-      </Section>
-
-      <Section title="Using it">
-        <P>Ghost Watt is free, open source (MIT) and provided as is, without warranty of any kind. Decisions about buying, replacing or switching off equipment are yours, or your facilities staff&apos;s, to make.</P>
-        <P>
-          Photograph only places you are allowed to photograph, and avoid people in frame; the live view does not track people and
-          the photo pipeline does not identify them, but a picture sent to a cloud model is still a picture.
-        </P>
-        <P>
-          In Enhanced (cloud) mode, use of the model provider is also subject to that provider&apos;s terms. The app does not store the
-          picture; see <Link href="/privacy" className="text-cyan underline-offset-4 hover:underline">Privacy</Link>.
-        </P>
-      </Section>
-    </div>
+    <LegalPage
+      kind="Legal"
+      title="Terms of Service"
+      effective={EFFECTIVE}
+      other={{ href: "/privacy", label: "Privacy Policy" }}
+      summary={
+        <>
+          <span className="font-medium text-fog">In short:</span> Ghost Watt is free and open source. Its figures are estimates to help you decide what to
+          check and fix first, not measurements or guarantees. Use it only where you are allowed to take pictures, and do not misuse the service.
+        </>
+      }
+      sections={sections}
+    />
   );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="mt-12">
-      <h2 className="text-[1.3rem] font-semibold tracking-[-0.02em] text-fog">{title}</h2>
-      <div className="mt-4 space-y-4">{children}</div>
-    </section>
-  );
-}
-
-function P({ children }: { children: React.ReactNode }) {
-  return <p className="text-[0.95rem] leading-relaxed text-mist">{children}</p>;
 }

@@ -24,12 +24,12 @@ const COMPARABLE: Record<string, string[]> = {
   fridge: ["fridge", "vending_cold", "reach_in_cooler"],
   vending_cold: ["fridge", "vending_cold", "reach_in_cooler"],
   microwave: ["microwave"],
-  ceiling_light: ["ceiling_light", "downlight"],
-  downlight: ["ceiling_light", "downlight"],
+  // Lights are not cross-checked: the on-device light finder misses most
+  // fixtures (docs/live-detector-benchmark.md), so its silence is not evidence.
 };
 
 /** Below this the model itself was hedging, whatever the detector saw. */
-export const LOW_CONFIDENCE = 0.5;
+export const LOW_CONFIDENCE = 0.4;
 
 export interface CrossCheckOptions {
   /** The detector saw nothing of a comparable kind and the model claims at least this many. */
@@ -39,7 +39,10 @@ export interface CrossCheckOptions {
   slack?: number;
 }
 
-const DEFAULTS: Required<CrossCheckOptions> = { noneSeenMin: 3, ratio: 2.5, slack: 1 };
+// The detector finds about half the screens in an ordinary photo, so "it saw
+// none" only means something when the model claims many, and "far more" means
+// several times more, not a few.
+const DEFAULTS: Required<CrossCheckOptions> = { noneSeenMin: 6, ratio: 4, slack: 3 };
 
 /**
  * Mark cloud observations the on-device reading cannot back.

@@ -19,8 +19,9 @@ export async function GET(req: Request) {
   const lonRaw = url.searchParams.get("lon");
   const state = (url.searchParams.get("state") ?? "US").trim().toUpperCase();
 
-  const lat = latRaw === null ? undefined : Number(latRaw);
-  const lon = lonRaw === null ? undefined : Number(lonRaw);
+  // About 1 km: solar resource does not change within a town.
+  const lat = latRaw === null ? undefined : Math.round(Number(latRaw) * 100) / 100;
+  const lon = lonRaw === null ? undefined : Math.round(Number(lonRaw) * 100) / 100;
 
   const ok = (v: number | undefined) => typeof v === "number" && Number.isFinite(v);
   const inRange = ok(lat) && ok(lon) && Math.abs(lat!) <= 90 && Math.abs(lon!) <= 180;

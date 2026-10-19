@@ -214,6 +214,12 @@ export interface Offender {
   typicalHoursPerDay?: number;
   typicalKwhPerYear?: number;
   typicalCostPerYear?: number;
+  /**
+   * What this line costs to run for a year, all in: normal use, plus whatever it
+   * draws beyond standby through the empty hours if it is left on. This is the
+   * headline figure; costPerYear (after-hours waste) is the part of it a fix removes.
+   */
+  annualCostPerYear?: number;
   /** Where the typical hours come from, in words. */
   usageBasis?: string;
   /** Source id (lib/sources.ts) behind the typical hours, or "estimate". */
