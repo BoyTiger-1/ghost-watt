@@ -20,6 +20,8 @@ export interface RoomRollup {
   co2Kg: number;
   kwh: number;
   devices: number;
+  /** Lines in the latest scan that were left out because nobody confirmed them. */
+  unverified: number;
   /** Earlier scans of the same room, newest first, for the trend. */
   history: SavedAudit[];
 }
@@ -62,6 +64,7 @@ export function rollupRooms(audits: SavedAudit[]): RoomRollup[] {
       co2Kg: os.reduce((s, o) => s + o.co2KgPerYear, 0),
       kwh: os.reduce((s, o) => s + o.kwhPerYear, 0),
       devices: os.reduce((s, o) => s + o.count, 0),
+      unverified: latest.offenders.length - os.length,
       history: list.slice(1),
     });
   }

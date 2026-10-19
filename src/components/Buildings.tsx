@@ -103,7 +103,7 @@ export function Buildings() {
           </header>
           <ol className="divide-y divide-line">
             {rollup.rooms.map((r, i) => {
-              const top = r.audit.offenders[0];
+              const top = r.audit.offenders.find((o) => !o.unverified);
               const prev = r.history[0];
               const prevCost = prev ? prev.offenders.reduce((s, o) => s + o.costPerYear, 0) : null;
               const change = prevCost === null ? null : r.afterHoursCost - prevCost;
@@ -124,6 +124,7 @@ export function Buildings() {
                       <span className="font-mono text-[0.7rem] text-dim">
                         {r.devices} device{r.devices === 1 ? "" : "s"}
                         {top ? ` · worst: ${top.label.toLowerCase()}` : ""}
+                        {r.unverified > 0 ? ` · ${r.unverified} unverified left out` : ""}
                       </span>
                     </div>
                     <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-surface2">
@@ -147,8 +148,9 @@ export function Buildings() {
             })}
           </ol>
           <p className="border-t border-line px-5 py-3 text-[0.76rem] leading-relaxed text-dim sm:px-6">
-            Ranked by what each room costs if left as it was seen. A room scanned again replaces its earlier scan here; the change since the last
-            scan is shown where there is one. {fmtKwh(rollup.kwh)} a year across the building.
+            Ranked by what each room costs if left as it was seen, counting only devices that were verified or confirmed. A room scanned again
+            replaces its earlier scan here; the change since the last scan is shown where there is one. {fmtKwh(rollup.kwh)} a year across the
+            building.
           </p>
         </section>
       )}

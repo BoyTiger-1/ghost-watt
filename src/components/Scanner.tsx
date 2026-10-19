@@ -10,6 +10,7 @@ import { BuildingBar } from "./BuildingBar";
 import { BudgetPlanner } from "./BudgetPlanner";
 import { GridPulse } from "./GridPulse";
 import { SolarOffset } from "./SolarOffset";
+import { ActionPlan } from "./ActionPlan";
 import { BillCalibration } from "./BillCalibration";
 import { ContributeBar } from "./ContributeBar";
 import { WeatherContext } from "./WeatherContext";
@@ -793,7 +794,12 @@ export function Scanner() {
                 </div>
               )}
 
-              {tab === "plan" && <BudgetPlanner offenders={countedOffenders} />}
+              {tab === "plan" && (
+                <div className="space-y-5">
+                  <ActionPlan offenders={countedOffenders} settings={settings} />
+                  <BudgetPlanner offenders={countedOffenders} />
+                </div>
+              )}
 
               {tab === "grid" && (
                 <div className="space-y-5">
@@ -965,7 +971,7 @@ function ModeSwitch({ mode, onChange }: { mode: Mode; onChange: (m: Mode) => voi
 function TabBar({ tab, onChange, count }: { tab: ResultTab; onChange: (t: ResultTab) => void; count: number }) {
   const tabs: { id: ResultTab; label: string; hint: string }[] = [
     { id: "offenders", label: "Offenders", hint: "What is running" },
-    { id: "plan", label: "Plan", hint: "What to do with the money you have" },
+    { id: "plan", label: "Plan", hint: "What to do, in order, and what it changes" },
     { id: "grid", label: "Grid", hint: "When to burn it, and what would cancel it" },
     { id: "context", label: "Context", hint: "What it means and how you compare" },
   ];

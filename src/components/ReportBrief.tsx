@@ -17,7 +17,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/useStore";
-import { auditsFor } from "@/lib/storage";
+import { auditsFor, type SavedAudit } from "@/lib/storage";
+import { rollupBuilding } from "@/lib/rollup";
 import { buildBrief, headline, type BriefItem } from "@/lib/report";
 import { fmtCo2, fmtMoneyFull, fmtPayback } from "@/lib/energy";
 
@@ -28,7 +29,11 @@ export function ReportBrief() {
   // Fall back to the first building: an active id can go stale when its building is deleted.
   const building = store.buildings.find((b) => b.id === store.activeBuildingId) ?? store.buildings[0];
   const audits = building ? auditsFor(store, building.id) : [];
-  const audit = audits.find((a) => a.id === auditId) ?? audits[0];
+  // With more than one room saved, the default brief is the whole building:
+  // the latest scan of every room added together, which is the document a
+  // principal actually wants. Any single room can still be picked.
+  const whole = audits.length > 1 ? wholeBuilding(audits) : null;
+  const audit = auditId === "building" && whole ? whole : (audits.find((a) => a.id === auditId) ?? whole ?? audits[0]);
   const brief = audit ? buildBrief(audit, building) : null;
 
   if (!building || !audit || !brief) {
@@ -71,6 +76,7 @@ export function ReportBrief() {
               onChange={(e) => setAuditId(e.target.value)}
               className="w-full max-w-full border border-line bg-surface px-3 py-2 text-sm text-fog outline-none focus:border-cyan rounded-xl"
             >
+              {whole && <option value="building">Whole building · {whole.areas.length} rooms</option>}
               {audits.map((a) => (
                 <option key={a.id} value={a.id}>
                   {new Date(a.at).toLocaleDateString()} · {a.areas.join(", ") || "no areas"}
@@ -108,7 +114,7 @@ export function ReportBrief() {
 
         {/* The ask, as four numbers. */}
         <section className="grid grid-cols-2 gap-px border border-line bg-line sm:grid-cols-4">
-          <Cell label="wasted per year" value={fmtMoneyFull(brief.annualWaste)} tone="ember" />
+          <Cell label="wasted after hours / yr" value={fmtMoneyFull(brief.annualWaste)} tone="ember" />
           <Cell label="recoverable" value={fmtMoneyFull(brief.totalRecoverable)} tone="lime" />
           <Cell
             label="up front"
@@ -119,6 +125,67 @@ export function ReportBrief() {
             value={brief.paybackMonths === null ? "immediate" : fmtPayback(brief.paybackMonths)}
           />
         </section>
+
+        {/* The split the whole app is built on, stated once in plain words. */}
+        <section className="avoid-break grid gap-4 border-b border-line pb-6 text-[0.84rem] leading-relaxed text-mist sm:grid-cols-2">
+          <p>
+            <span className="font-semibold text-ember">{fmtMoneyFull(brief.annualWaste)} a year</span> is what the devices
+            seen cost if they stay as they were photographed through the hours the building is empty.
+            Plausible range {fmtMoneyFull(brief.annualWasteLow)} – {fmtMoneyFull(brief.annualWasteHigh)}.
+          </p>
+          <p>
+            <span className="font-semibold text-fog">{fmtMoneyFull(brief.typicalCost)} a year</span> is what the same
+            devices cost in normal use for the kind of room they are in. That part is not waste; the first figure
+            is what the fixes below go after.
+          </p>
+        </section>
+
+        {/* The best moves in order: the page a decision-maker reads if they read one. */}
+        {brief.topActions.length > 0 && (
+          <section className="avoid-break space-y-4">
+            <div className="space-y-1">
+              <span className="mono-label text-cyan">best return first</span>
+              <h2 className="text-lg font-semibold tracking-tight text-fog">Top moves</h2>
+              <p className="max-w-[62ch] text-sm leading-relaxed text-mist">
+                Ranked by dollars saved a year per dollar spent; free moves lead. A swap is priced at normal use, so its saving is what a bill would show.
+              </p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[34rem] border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-line text-left">
+                    <Th>move</Th>
+                    <Th>where</Th>
+                    <Th align="right">saves / yr</Th>
+                    <Th align="right">cost</Th>
+                    <Th align="right">per $1</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {brief.topActions.map((a, i) => (
+                    <tr key={a.id} className="border-b border-line/60 align-top">
+                      <td className="py-2.5 pr-4">
+                        <div className="text-fog">
+                          <span className="mr-2 font-mono text-[0.72rem] text-dim tabular-nums">{i + 1}.</span>
+                          {a.title}
+                        </div>
+                        <div className="mt-0.5 text-[0.78rem] leading-snug text-dim">
+                          {a.label}
+                          {a.count > 1 ? ` ×${a.count}` : ""}
+                          {a.confidence === "low" && <span className="ml-2 text-amber">low confidence</span>}
+                        </div>
+                      </td>
+                      <td className="py-2.5 pr-4 text-[0.82rem] text-mist">{a.where}</td>
+                      <td className="py-2.5 pr-4 text-right tabular-nums text-lime">{fmtMoneyFull(a.annualSavings)}</td>
+                      <td className="py-2.5 pr-4 text-right tabular-nums text-mist">{a.cost > 0 ? fmtMoneyFull(a.cost) : "free"}</td>
+                      <td className="py-2.5 text-right tabular-nums text-mist">{a.savingsPerDollar === null ? "—" : `$${a.savingsPerDollar.toFixed(2)}`}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
 
         {/* Free wins first: this is the half that can happen without a purchase
             order, and putting it second would bury the only part of the document
@@ -137,7 +204,7 @@ export function ReportBrief() {
           <Group
             eyebrow={`${fmtMoneyFull(brief.capital.upfront)} up front`}
             title="Needs equipment"
-            blurb={`${fmtMoneyFull(brief.capital.annualSavings)} a year once installed. Ordered by annual return, so the list can be cut from the bottom to fit a budget.`}
+            blurb={`${fmtMoneyFull(brief.capital.annualSavings)} a year once installed. Ordered by return per dollar spent, so the list can be cut from the bottom to fit a budget.`}
             items={brief.capital.items}
             showCost
           />
@@ -188,12 +255,25 @@ export function ReportBrief() {
               </p>
             </div>
           </div>
-          <p className="text-[0.75rem] leading-relaxed text-dim">
-            Device wattages come from a published catalogue; hours from this
-            building&apos;s schedule; price per kWh from{" "}
-            {building.bill ? "a utility bill entered for this building" : "a published state average"}.
-            The full derivation for every figure above is at /methodology.
-          </p>
+          <div className="avoid-break space-y-2">
+            <span className="mono-label">method and sources</span>
+            <p className="text-[0.78rem] leading-relaxed text-mist">
+              Each device&apos;s draw × the hours it runs × the price per kWh. Draws come from a published catalogue or a
+              plug-in meter reading where one was entered; hours a day in use from the room type, with the building&apos;s
+              schedule setting the empty hours; price per kWh from{" "}
+              {building.bill
+                ? `this building's own bill ($${audit.settings.ratePerKwh.toFixed(3)}/kWh)`
+                : `a published average for this state ($${audit.settings.ratePerKwh.toFixed(3)}/kWh)`}
+              ; carbon at {audit.settings.co2PerKwh.toFixed(2)} kg CO₂ per kWh for this grid. Full derivation at /methodology.
+            </p>
+            <ol className="space-y-1 text-[0.74rem] leading-snug text-dim">
+              {brief.sources.map((src, i) => (
+                <li key={src.id}>
+                  {i + 1}. {src.label}. {src.publisher}, {src.year}.
+                </li>
+              ))}
+            </ol>
+          </div>
 
           {/* Signature block. The point of the whole document. */}
           <div className="signature-block grid gap-6 pt-4 sm:grid-cols-2">
@@ -204,6 +284,24 @@ export function ReportBrief() {
       </article>
     </div>
   );
+}
+
+/** The building as one audit: the latest scan of each room, offenders re-sourced to the room name. */
+function wholeBuilding(audits: SavedAudit[]): SavedAudit {
+  const r = rollupBuilding(audits);
+  const latest = r.rooms[0]?.audit ?? audits[0];
+  const engines = [...new Set(r.rooms.map((x) => x.audit.engine))];
+  return {
+    id: "building",
+    buildingId: latest.buildingId,
+    at: r.latestAt ?? latest.at,
+    areas: r.rooms.map((x) => x.room),
+    // Unverified lines travel too, so the brief can say how many it left out.
+    offenders: r.rooms.flatMap((x) => x.audit.offenders.map((o) => ({ ...o, source: x.room }))),
+    settings: latest.settings,
+    mode: r.mode,
+    engine: engines.length === 1 ? engines[0] : `${engines.length} engines`,
+  };
 }
 
 function Cell({
