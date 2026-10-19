@@ -53,6 +53,7 @@ export const VISION_SCHEMA = {
           watts: { type: "number", description: "Best estimate of one unit's draw while running, W." },
           technology: { type: "string", description: "e.g. LED, CFL, T8 fluorescent, halogen, CRT, laser projector. Omit if unsure." },
           evidence: { type: "string", description: "A few words on what decided the state and wattage." },
+          where: { type: "string", description: "Where in the picture these units are, in a few words: 'ceiling, left half', 'desk under the window', 'far wall'." },
           boxes: {
             type: "array",
             maxItems: 8,
@@ -112,14 +113,14 @@ Also give "boxes": where each unit is, as [x1, y1, x2, y2] pixel coordinates in 
 
   const example = video
     ? `[{"device":"computer monitor","count":24,"state":"on","confidence":0.8,"visible":true,"watts":22,"evidence":"screens lit, login page"},{"device":"overhead lights","count":12,"state":"on","confidence":0.9,"visible":true,"watts":35,"evidence":"LED panels lit"}]`
-    : `[{"device":"computer monitor","count":12,"state":"on","confidence":0.85,"visible":true,"watts":22,"technology":"LED","evidence":"screens lit, 24-inch LED","boxes":[[112,388,201,470],[236,392,318,468]]},{"device":"overhead lights","count":6,"state":"on","confidence":0.9,"visible":true,"watts":35,"evidence":"LED troffers lit","boxes":[[300,20,420,60]]},{"device":"projector","count":1,"state":"standby","confidence":0.5,"visible":true,"watts":250,"evidence":"amber standby light, partly hidden","boxes":[[480,90,560,140]]}]`;
+    : `[{"device":"computer monitor","count":12,"state":"on","confidence":0.85,"visible":true,"watts":22,"technology":"LED","evidence":"screens lit, 24-inch LED","where":"two rows of desks, centre","boxes":[[112,388,201,470],[236,392,318,468]]},{"device":"overhead lights","count":6,"state":"on","confidence":0.9,"visible":true,"watts":35,"technology":"LED","evidence":"LED troffers lit","where":"ceiling, whole room","boxes":[[300,20,420,60]]},{"device":"projector","count":1,"state":"standby","confidence":0.5,"visible":true,"watts":250,"evidence":"amber standby light, partly hidden","where":"ceiling mount, front","boxes":[[480,90,560,140]]}]`;
 
   return `You are auditing ${video ? "a video walkthrough" : "a photo"} of a room in a school or office, ideally taken after hours. Your job is to spot electrical devices and appliances that are left running or drawing power, and to judge how much each draws.
 
 ${layout}
 ${context.length ? "\n" + context.join("\n") + "\n" : ""}
 List only the electrical devices and appliances you can actually see in this picture. Never add a device because a room of this kind usually has one: if it is not visible, it is not listed. For each give:
-- "device": use these names where they fit: ${DEVICE_NAMES}.
+- "device": be specific. Use these names where they fit: ${DEVICE_NAMES}. Never a vague "lights" or "electronics": say which kind (recessed downlights, LED panels, a desk lamp, a 24-inch monitor, a mini-fridge). Each distinct kind of device gets its own entry, even when two kinds sit side by side.
 - "count": how many you can see. Do not round up to a typical number.
 - "state": ON (lit, running, display showing something), STANDBY (dark but with an indicator light or clock), or OFF.
 - "confidence": 0 to 1, how sure you are of the device and the count. Use a low number for anything half-hidden, far away or ambiguous rather than leaving it out or guessing it is fine.
@@ -127,6 +128,7 @@ List only the electrical devices and appliances you can actually see in this pic
 - "watts": your best estimate of ONE unit's power draw in watts while running, judged from its visible size, age and technology. Reference points: ${WATT_GUIDE}.
 - "technology": the kind of unit if you can tell, e.g. "LED", "halogen", "incandescent", "CFL", "T8 fluorescent", "T12 fluorescent", "CRT", "CCFL LCD", "plasma", "lamp projector", "laser projector". Omit if unsure.
 - "evidence": a few words on what you saw that decided the state and wattage.
+- "where": where in the picture the units are, in a few words ("ceiling, left half", "desk under the window"), so a person can walk to them.
 
 Counting rules - these are where audits go wrong:
 - Count every light fixture individually, including small recessed downlights far down a corridor. Report each kind of light as its own entry (troffers, downlights, pendants), never lumped together.

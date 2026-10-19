@@ -118,12 +118,15 @@ npm run dev
 
 Open http://localhost:3000. With no keys at all the app runs in **On-device** mode: the
 scanner, costs, plan, rooms, buildings and brief all work, and the pill in the header says
-so. To turn on **Enhanced (cloud)** reading, add one or more vision keys to `.env.local`
-(`ANTHROPIC_API_KEY`, `GROQ_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`; each is a
-fallback for the one before it), or run a local Ollama vision model
-(`ollama pull moondream`), and restart. On Vercel, add the same variables under Settings →
-Environment Variables. Defaults per provider: `claude-haiku-5-5`, `qwen/qwen3.6-27b`,
-`gpt-4o-mini`, `google/gemini-2.5-flash`; override any with `<KEY NAME>_MODEL`.
+so. To turn on **Enhanced (cloud)** reading, add one or more vision keys to `.env.local`, or
+run a local Ollama vision model (`ollama pull moondream`), and restart. Keys are tried in
+this order, each a fallback for the one before it, so two is better than one:
+`ANTHROPIC_API_KEY` (paid, best), `GEMINI_API_KEY` (free tier, best free),
+`GROQ_API_KEY` (free, fastest), `MISTRAL_API_KEY` (free tier), `OPENAI_API_KEY` (paid),
+`OPENROUTER_API_KEY` (some free models). On Vercel, add the same variables under
+Settings → Environment Variables and redeploy. Defaults per provider: `claude-haiku-5-5`,
+`gemini-2.5-flash`, `qwen/qwen3.6-27b`, `mistral-small-latest`, `gpt-4o-mini`,
+`google/gemini-2.5-flash`; override any with `<KEY NAME>_MODEL`.
 
 ## Running the live model
 
