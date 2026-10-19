@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { applyInputs, captureSettings, costCapture, parseOffenderKey, readTime, resolveResult, type Capture } from "./capture";
+import { applyInputs, captureSettings, costCapture, parseOffenderKey, readTime, type Capture } from "./capture";
 import { SCHEDULE_PRESETS } from "./schedule";
-import { DEFAULT_SETTINGS, type AnalysisResult } from "./types";
+import { DEFAULT_SETTINGS } from "./types";
 import type { CategorizedObservation } from "./parse";
 
 const obs: CategorizedObservation[] = [
@@ -21,7 +21,7 @@ function capture(over: Partial<Capture> = {}): Capture {
     adjust: {},
     roomType: "unknown",
     status: "done",
-    result: { mode: "live", engine: "test", source: "Lab", offenders: [], observations: obs },
+    result: { mode: "enhanced", engine: "test", source: "Lab", offenders: [], observations: obs },
     ...over,
   };
 }
@@ -63,13 +63,6 @@ describe("costCapture", () => {
     expect(parseOffenderKey(m1.id)).toEqual({ captureId: "c1", categoryId: "monitor" });
   });
 
-  it("rebuilds a room-profile estimate from its preset", () => {
-    const c = capture({
-      roomType: "hallway",
-      result: { mode: "fallback", engine: "preset", source: "Lab", offenders: [] },
-    });
-    expect(costCapture(c, DEFAULT_SETTINGS).map((o) => o.categoryId)).toEqual(["ceiling_light"]);
-  });
 });
 
 describe("captureSettings", () => {
@@ -86,34 +79,39 @@ describe("captureSettings", () => {
   });
 });
 
-describe("resolveResult", () => {
-  const fallback = (reason: AnalysisResult["fallbackReason"]): AnalysisResult => ({
-    mode: "fallback",
-    engine: "preset",
-    source: "Lab",
-    offenders: [],
-    fallbackReason: reason,
-  });
-  it("shows nothing-found as an empty reading, not a guess", () => {
-    const r = resolveResult(fallback("nothing-found"), obs, "on-device");
-    expect(r.mode).toBe("live");
-    expect(r.observations).toEqual([]);
-  });
-  it("prefers the on-device reading over a room preset when no model answers", () => {
-    const r = resolveResult(fallback("unavailable"), obs, "on-device");
-    expect(r.engine).toBe("on-device");
-    expect(r.observations).toBe(obs);
-  });
-  it("keeps the preset when the detector saw nothing either", () => {
-    expect(resolveResult(fallback("unavailable"), [], "on-device").mode).toBe("fallback");
-  });
-});
-
 describe("readTime", () => {
   const school = SCHEDULE_PRESETS[0].schedule;
   it("labels the time and says whether the building was open", () => {
     expect(readTime("2026-10-14T21:42:00", school)).toEqual({ label: "9:42 PM, Wednesday", afterHours: true });
     expect(readTime("2026-10-14T10:05:00", school)?.afterHours).toBe(false);
     expect(readTime(undefined, school)).toBeNull();
+  });
+});
+
+describe("confirm, delete and re-identify", () => {
+  const unsure: CategorizedObservation[] = [
+    { device: "monitor", count: 6, state: "on", categoryId: "monitor", confidence: 0.9, verification: "unverified" },
+    { device: "projector", count: 1, state: "on", categoryId: "projector", verification: "verified" },
+  ];
+
+  it("keeps an unverified line out of the totals but in the list, until confirmed", () => {
+    const c = capture({ result: { mode: "enhanced", engine: "t", source: "Lab", offenders: [], observations: unsure } });
+    const os = costCapture(c, DEFAULT_SETTINGS);
+    expect(os.find((o) => o.categoryId === "monitor")?.unverified).toBe(true);
+    expect(os.find((o) => o.categoryId === "monitor")?.id).toBe("c1::monitor::?");
+    expect(parseOffenderKey("c1::monitor::?")).toEqual({ captureId: "c1", categoryId: "monitor" });
+    const confirmed = costCapture(capture({ result: c.result, adjust: { monitor: { confirmed: true } } }), DEFAULT_SETTINGS);
+    expect(confirmed.find((o) => o.categoryId === "monitor")?.unverified).toBeUndefined();
+  });
+
+  it("deletes a line the user says is not there", () => {
+    const out = applyInputs(unsure, {}, { monitor: { deleted: true } }, DEFAULT_SETTINGS);
+    expect(out.map((o) => o.categoryId)).toEqual(["projector"]);
+  });
+
+  it("re-identifies a device, which also counts as confirming it and drops the old wattage read", () => {
+    const out = applyInputs([{ ...unsure[0], wattsHint: 22 }], {}, { monitor: { categoryId: "tv" } }, DEFAULT_SETTINGS);
+    expect(out[0]).toMatchObject({ categoryId: "tv", device: "TV / large display", verification: "confirmed" });
+    expect(out[0].wattsHint).toBeUndefined();
   });
 });

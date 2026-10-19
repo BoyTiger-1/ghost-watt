@@ -34,16 +34,34 @@ const det = (cls: string, x: number, y = 0, w = 100, h = 80, score = 0.8): Detec
 });
 
 describe("Tracker", () => {
-  it("hides a detection until it has been seen twice", () => {
+  it("hides a detection until it has been seen in three of the last five frames", () => {
     const t = new Tracker();
     expect(t.update([det("tv", 10)])).toHaveLength(0);
-    const v = t.update([det("tv", 12)]);
+    expect(t.update([det("tv", 12)])).toHaveLength(0);
+    const v = t.update([det("tv", 11)]);
     expect(v).toHaveLength(1);
     expect(v[0].id).toBe(1);
   });
 
+  it("survives a dropped frame but not a flicker", () => {
+    const t = new Tracker();
+    t.update([det("tv", 10)]);
+    t.update([]);
+    t.update([det("tv", 10)]);
+    // Two of four: not yet.
+    expect(t.update([])).toHaveLength(0);
+    // Three of five: shown, even though one frame in the window missed it.
+    expect(t.update([det("tv", 10)])).toHaveLength(1);
+    // One blink, then nothing, never shows.
+    const f = new Tracker();
+    f.update([det("laptop", 300)]);
+    expect(f.update([])).toHaveLength(0);
+    expect(f.update([])).toHaveLength(0);
+  });
+
   it("keeps one id while a box moves, and eases toward the new position", () => {
     const t = new Tracker();
+    t.update([det("tv", 0)]);
     t.update([det("tv", 0)]);
     const [a] = t.update([det("tv", 20)]);
     expect(a.id).toBe(1);
@@ -63,12 +81,14 @@ describe("Tracker", () => {
     const t = new Tracker();
     t.update([det("car", 0)]);
     t.update([det("tv", 0)]);
+    t.update([det("tv", 0), det("car", 0)]);
     const v = t.update([det("tv", 0), det("car", 0)]);
     expect(v.map((x) => x.cls).sort()).toEqual(["car", "tv"]);
   });
 
   it("holds back an easily invented appliance for an extra frame", () => {
     const t = new Tracker();
+    t.update([det("refrigerator", 0)]);
     t.update([det("refrigerator", 0)]);
     expect(t.update([det("refrigerator", 0)])).toHaveLength(0);
     expect(t.update([det("refrigerator", 0)])).toHaveLength(1);
@@ -77,15 +97,17 @@ describe("Tracker", () => {
   it("gives two neighbouring screens stable, distinct ids", () => {
     const t = new Tracker();
     t.update([det("tv", 0), det("tv", 200)]);
+    t.update([det("tv", 2), det("tv", 203)]);
     const v = t.update([det("tv", 205), det("tv", 3)]);
     const byX = [...v].sort((a, b) => a.box.x - b.box.x);
     expect(byX.map((x) => x.id)).toEqual([1, 2]);
   });
 
   it("holds a lost track for a few frames, then drops it", () => {
-    const t = new Tracker({ minIou: 0.25, smoothing: 0.55, maxMissed: 3, minHits: 2 });
+    const t = new Tracker({ minIou: 0.25, smoothing: 0.55, maxMissed: 3, window: 5, needed: 2 });
     t.update([det("tv", 0)]);
     t.update([det("tv", 0)]);
+    // Two of the last five still counts while it is missed, until the window empties or maxMissed drops it.
     for (let i = 0; i < 3; i++) expect(t.update([])).toHaveLength(1);
     expect(t.update([])).toHaveLength(0);
   });
@@ -100,7 +122,7 @@ describe("Tracker", () => {
 });
 
 describe("tallyView", () => {
-  const track = (cls: string, id: number) => ({ id, cls, score: 0.9, box: { x: 0, y: 0, w: 1, h: 1 }, hits: 3, missed: 0 });
+  const track = (cls: string, id: number) => ({ id, cls, score: 0.9, box: { x: 0, y: 0, w: 1, h: 1 }, hits: 3, missed: 0, seen: [true, true, true] });
 
   it("counts devices per category and prices them as on", () => {
     const tally = tallyView([track("tv", 1), track("tv", 2), track("laptop", 3)], settings);

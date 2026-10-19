@@ -21,7 +21,7 @@
 // Only ONE hosted key needs to be set. Whichever is present wins, in the order
 // listed in HOSTED below.
 
-import { describeImage as describeViaOllama, probeOllama, buildVisionPrompt, VISION_MODEL } from "./ollama";
+import { describeImage as describeViaOllama, probeOllama, buildVisionPrompt, VISION_MODEL, VISION_SCHEMA } from "./ollama";
 import { FULL_FRAME, type Frame } from "./boxes";
 
 export type VisionKind = "local" | "hosted" | "none";
@@ -34,6 +34,11 @@ export interface VisionResult {
   provider: string;
   kind: VisionKind;
   error?: string;
+  /**
+   * On failure: whether an engine was configured at all. False means "nothing to
+   * try" (no key, no local daemon); true means an engine exists and did not answer.
+   */
+  configured?: boolean;
 }
 
 interface HostedProvider {
@@ -44,7 +49,7 @@ interface HostedProvider {
   model: string;
   signup: string;
   note: string;
-  call: (images: DecodedImage[], key: string, model: string, prompt: string) => Promise<string>;
+  call: (images: DecodedImage[], key: string, model: string, prompt: string, schema: object) => Promise<string>;
   /**
    * Where to list this provider's models, for recovering when the default model
    * is retired. Only set for providers whose model list says which models take
@@ -136,7 +141,11 @@ async function callAnthropic(
   key: string,
   model: string,
   prompt: string,
+  schema: object,
 ): Promise<string> {
+  // The schema is enforced as a forced tool call: the model can only answer by
+  // filling in the typed fields, so there is no prose to parse and no field to
+  // forget.
   const json = (await postJson(
     "https://api.anthropic.com/v1/messages",
     { "x-api-key": key, "anthropic-version": "2023-06-01" },
@@ -144,6 +153,14 @@ async function callAnthropic(
       model,
       max_tokens: imgs.length > 1 || anthropicTuning(model).output_config ? MAX_TOKENS_LARGE : MAX_TOKENS,
       ...anthropicTuning(model),
+      tools: [
+        {
+          name: "report",
+          description: "Report what the picture shows, in the required shape.",
+          input_schema: schema,
+        },
+      ],
+      tool_choice: { type: "tool", name: "report" },
       messages: [
         {
           role: "user",
@@ -157,8 +174,10 @@ async function callAnthropic(
         },
       ],
     },
-  )) as { content?: { type?: string; text?: string }[] };
+  )) as { content?: { type?: string; text?: string; input?: unknown }[] };
 
+  const tool = (json.content ?? []).find((c) => c.type === "tool_use" && c.input);
+  if (tool) return JSON.stringify(tool.input);
   return (json.content ?? [])
     .filter((c) => c.type === "text")
     .map((c) => c.text ?? "")
@@ -167,26 +186,34 @@ async function callAnthropic(
 }
 
 function openAiCompatible(endpoint: string) {
-  return async (imgs: DecodedImage[], key: string, model: string, prompt: string): Promise<string> => {
-    const json = (await postJson(
-      endpoint,
-      { Authorization: `Bearer ${key}` },
-      {
-        model,
-        max_tokens: imgs.length > 1 ? MAX_TOKENS_LARGE : MAX_TOKENS,
-        temperature: 0,
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: prompt },
-              ...imgs.map((img) => ({ type: "image_url", image_url: { url: img.dataUrl } })),
-            ],
-          },
-        ],
-      },
-    )) as { choices?: { message?: { content?: string } }[] };
-
+  return async (imgs: DecodedImage[], key: string, model: string, prompt: string, schema: object): Promise<string> => {
+    const body = (strict: boolean) => ({
+      model,
+      max_tokens: imgs.length > 1 ? MAX_TOKENS_LARGE : MAX_TOKENS,
+      temperature: 0,
+      ...(strict
+        ? { response_format: { type: "json_schema", json_schema: { name: "report", schema } } }
+        : { response_format: { type: "json_object" } }),
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: prompt },
+            ...imgs.map((img) => ({ type: "image_url", image_url: { url: img.dataUrl } })),
+          ],
+        },
+      ],
+    });
+    let json: { choices?: { message?: { content?: string } }[] };
+    try {
+      json = (await postJson(endpoint, { Authorization: `Bearer ${key}` }, body(true))) as typeof json;
+    } catch (err) {
+      // Not every model behind these endpoints takes a schema. A 400 about the
+      // response format falls back to plain JSON mode; anything else is real.
+      const msg = err instanceof Error ? err.message : "";
+      if (!/HTTP 400/.test(msg) || !/response_format|json_schema|schema/i.test(msg)) throw err;
+      json = (await postJson(endpoint, { Authorization: `Bearer ${key}` }, body(false))) as typeof json;
+    }
     return (json.choices?.[0]?.message?.content ?? "").trim();
   };
 }
@@ -273,17 +300,22 @@ export async function describeImageAny(
   return describeImagesAny([image], buildVisionPrompt(frame));
 }
 
-/** The same chain over one or more images (a video's keyframes) and a prompt. */
-export async function describeImagesAny(images: string[], prompt: string): Promise<VisionResult> {
+/** The same chain over one or more images (a video's keyframes), a prompt and the JSON shape the answer must take. */
+export async function describeImagesAny(images: string[], prompt: string, schema: object = VISION_SCHEMA): Promise<VisionResult> {
   const forced = process.env.VISION_PROVIDER?.trim().toLowerCase();
   const errors: string[] = [];
+  let localConfigured = false;
 
   if (forced !== "hosted" && !HOSTED.some((h) => h.id === forced)) {
-    const local = await describeViaOllama(images, prompt);
+    const local = await describeViaOllama(images, prompt, schema);
     if (local.ok && local.text.trim()) {
       return { ...local, provider: "Ollama (local)", kind: "local" };
     }
-    if (local.error) errors.push(`local: ${local.error}`);
+    if (local.error) {
+      errors.push(`local: ${local.error}`);
+      // A daemon that answered and failed is configured; a refused connection is not.
+      localConfigured = !/fetch failed|ECONNREFUSED|ENOTFOUND|ECONNRESET/i.test(local.error);
+    }
   }
 
   const hosted = activeHosted();
@@ -294,12 +326,12 @@ export async function describeImagesAny(images: string[], prompt: string): Promi
       const img = images.map(decodeImage);
       let text: string;
       try {
-        text = await callWithRetry(hosted, img, key, model, prompt);
+        text = await callWithRetry(hosted, img, key, model, prompt, schema);
       } catch (err) {
         const replacement = isRetiredModel(err) ? await discoverImageModel(hosted, key, model) : null;
         if (!replacement) throw err;
         model = replacement;
-        text = await callWithRetry(hosted, img, key, model, prompt);
+        text = await callWithRetry(hosted, img, key, model, prompt, schema);
       }
       if (text) {
         return {
@@ -325,6 +357,7 @@ export async function describeImagesAny(images: string[], prompt: string): Promi
     provider: "none",
     kind: "none",
     error: errors.join("; "),
+    configured: Boolean(hosted) || localConfigured,
   };
 }
 
@@ -345,14 +378,15 @@ async function callWithRetry(
   key: string,
   model: string,
   prompt: string,
+  schema: object,
 ): Promise<string> {
   try {
-    return await p.call(img, key, model, prompt);
+    return await p.call(img, key, model, prompt, schema);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "";
     if (!/HTTP (429|5\d\d)/.test(msg)) throw err;
     await new Promise((r) => setTimeout(r, retryDelayMs(msg)));
-    return await p.call(img, key, model, prompt);
+    return await p.call(img, key, model, prompt, schema);
   }
 }
 

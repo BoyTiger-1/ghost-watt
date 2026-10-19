@@ -195,14 +195,15 @@ export function ExportBar({
   offenders,
   settings,
   buildingName,
-  onSave,
-  saved,
+  savedTo,
+  roomCount = 0,
 }: {
   offenders: Offender[];
   settings: AuditSettings;
   buildingName: string;
-  onSave?: () => void;
-  saved?: boolean;
+  /** The building these scans are being saved to, as rooms. */
+  savedTo?: string;
+  roomCount?: number;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -235,17 +236,12 @@ export function ExportBar({
 
   return (
     <div className="panel flex flex-wrap items-center gap-2 p-3">
-      <span className="mono-label mr-auto">take it with you</span>
-
-      {onSave && (
-        <button
-          onClick={onSave}
-          disabled={saved}
-          className="rounded-full bg-fog px-3.5 py-1.5 text-[0.82rem] font-medium text-ink transition-colors enabled:hover:bg-fog/85 disabled:bg-transparent disabled:text-dim disabled:ring-1 disabled:ring-line"
-        >
-          {saved ? "✓ Saved to this building" : "Save audit"}
-        </button>
-      )}
+      <span className="mr-auto flex items-center gap-2 text-[0.8rem] text-mist">
+        <span className="h-1.5 w-1.5 rounded-full bg-lime" aria-hidden />
+        {savedTo
+          ? `${roomCount} room${roomCount === 1 ? "" : "s"} saved to ${savedTo}`
+          : "Saving to a building…"}
+      </span>
       <button
         onClick={exportCsv}
         className="border border-line px-3 py-1.5 text-[0.8rem] text-mist transition-colors hover:border-fog/40 hover:text-fog rounded-full"

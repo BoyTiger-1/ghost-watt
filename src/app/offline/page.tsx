@@ -6,8 +6,8 @@ export const metadata = {
 
 const STILL_WORKS = [
   ["Saved audits and buildings still open.", "They live in this browser, not on a server."],
-  ["Room-profile estimates still work.", "The wattage table and room presets ship with the app."],
-  ["Photos are safe.", "Take them now; a scan that needs a hosted model will say so, and you can run it back in range."],
+  ["On-device scanning still works.", "The detector and the wattage table ship with the app, so a scan is read here and priced here."],
+  ["Enhanced (cloud) reading waits.", "The mode pill says Offline; it switches back to the cloud model when you have a connection."],
 ];
 
 export default function OfflinePage() {

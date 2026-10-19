@@ -1,14 +1,17 @@
-# Ghost Watt 
+# Ghost Watt
 
-Walk an empty school with your phone, snap a photo of each room, and Ghost Watt tells you
-what's quietly burning power and money while nobody's there. It finds the phantom loads (the
-projector left on overnight, the wall of monitors stuck in standby, the humming vending
-machine) and hands you back a ranked list: what's costing the most, what it costs to fix,
-and how fast that fix pays for itself.
+Point a phone at a room, or upload a photo, and Ghost Watt finds the powered things in it
+(screens, computers, lights, appliances), prices each one at your real electricity rate,
+separates what it costs in normal use from what it wastes after hours or in standby, and
+ranks the fixes by dollars saved per dollar spent. Rooms roll up into a building, the
+building into a one-page brief a principal or facilities manager can act on.
 
-The looking is done by a vision model that runs entirely on your own machine. The math is
-plain, deterministic code you can read top to bottom. No accounts, no cloud, no paid APIs,
-nothing leaves your laptop.
+Two reading paths, and the pill in the header always says which one is about to run:
+**On-device** (a small detector in the browser; no picture ever leaves the device) or
+**Enhanced (cloud)** (a hosted vision model reads the photo and discards it). The energy
+math is plain, deterministic code you can read top to bottom, every figure is a range
+with a cited source, and nothing is ever filled in from a preset: a scan that could not
+be read says so.
 
 > My School's Hidden Footprint: take a building's invisible energy waste and make it
 > visible, countable, and actually fixable.
@@ -27,80 +30,66 @@ this first, here's the price, here's the payback.
 
 ## How it works
 
-The whole design rests on one idea: keep the fuzzy part and the exact part separate. The
+The whole design rests on one idea: keep the fuzzy part and the exact part separate. A
 model guesses what's in the room. The code does the money and carbon. That way the numbers
 people actually act on are always something you can check by hand.
 
-1. **Seeing.** Each photo goes to a vision model running in [Ollama](https://ollama.com) on
-   `localhost`. All it reports back is what it sees: the devices in the frame and whether
-   each one looks on, in standby, or off. It never touches energy.
-2. **Counting.** Every device it spots gets matched against the wattage table in
-   [`src/lib/devices.ts`](src/lib/devices.ts) and run through one formula to get kWh, dollars,
-   and CO2 per year, plus a suggested fix and its payback. The math lives in
-   [`src/lib/energy.ts`](src/lib/energy.ts).
-3. **Ranking.** Offenders get sorted worst-first by yearly cost. Even when a single wattage
-   guess is off, the ordering tends to hold, and the ordering is the thing that drives action.
-
-Every card on screen is labelled `live model` if it came from your photo, or `estimated` if
-it came from the room-profile fallback, so you always know which is which.
+1. **Seeing.** A picture is read by one of two engines. In **Enhanced (cloud)** mode a
+   hosted vision-language model (Anthropic, Groq, OpenAI or OpenRouter, or a local Ollama
+   model during development) answers through a strict JSON schema at temperature 0: for
+   each item, its type, count, state, a confidence and whether it is actually visible. In
+   **On-device** mode an EfficientDet-Lite0 detector plus a lit-fixture finder read the
+   picture in the browser. Both report only what is in the frame; neither touches energy.
+2. **Cross-checking.** Every cloud reading is compared with the on-device detector. A class
+   or count the detector cannot back, or a low-confidence item, is shown as *unverified*
+   and left out of totals until you confirm it. Any detection can be confirmed, re-typed,
+   given a wattage, quantity or hours, or deleted. "X of Y units located" stays visible.
+3. **Counting.** Each device is matched to the wattage table in
+   [`src/lib/devices.ts`](src/lib/devices.ts) (a published band per class, not a point) and
+   costed two ways in [`src/lib/energy.ts`](src/lib/energy.ts): at typical use for its room
+   type (hours a day in use, standby the rest; [`src/lib/rooms.ts`](src/lib/rooms.ts)) and
+   as after-hours waste (what it draws through the building's empty hours in the state it
+   was seen). Totals are 80% ranges from a Monte Carlo over wattage, hours and price.
+4. **Deciding.** Each line gets up to two moves, the after-hours fix and an efficient swap,
+   ranked by dollars saved per dollar spent ([`src/lib/actions.ts`](src/lib/actions.ts)).
+   Tick moves and the annual bill, payback and carbon re-total live.
 
 ### Scanning: camera and upload
 
-The scanner has two modes, and opens in **Camera**.
-
-- **Camera** opens the camera straight away and runs an object detector (EfficientDet-Lite,
-  on the device, nothing uploaded) on the live video. Each screen, laptop, appliance and lit
-  light fixture gets a box with its state, wattage and yearly cost drawn over the picture, and
-  the side panel (a pull-up sheet on a phone) totals what's in view. Screens are judged lit or
-  dark from their own pixels; lit fixtures are found as small bright blobs near the ceiling.
-  A second on-device model, an ImageNet classifier (EfficientNet-Lite0), checks each box:
-  an appliance such as a fridge is only drawn once the classifier agrees (so a door is not
-  a fridge), and a lamp the camera is pointed at is found even when it is a lit shade or a
-  ring the blob finder cannot see. Hold the camera still on a view and that frame goes to the
-  same full AI audit a photo gets; while the camera stays on that view, the AI's boxes replace
-  the on-device guesses (so a sunlit window is not counted as a light). Each view is sent once,
-  and the **AI on/off** button keeps everything on the device.
-  Tap **Photo** to run the full AI audit on that frame. Tap **Video** to record a walkthrough:
-  labels hide while you film, and when you stop, the sharpest frame from each distinct view
-  is picked and the whole clip is audited at once, with each device counted once.
+- **Camera** runs the on-device detector on the live video as a *candidate finder*: a box is
+  drawn only after it has been seen in three of the last five frames, tracked so it does not
+  flicker, limited to the classes the small model is reliably good at, with bright windows,
+  huge rectangles and overlapping labels filtered out. Candidates are dashed and unpriced.
+  Hold the camera still and that frame goes through the same pipeline a photo gets (cloud in
+  Enhanced mode, a tiled on-device pass otherwise); only confirmed detections are priced.
+  **Photo** audits the current frame; **Video** records a walkthrough and audits its distinct
+  views once.
 - **Upload** takes photos or videos (drag, paste or pick). A photo's EXIF supplies where and
-  when it was taken; a video is split into keyframes the same way as a recording.
+  when it was taken, which sets the rate and whether the room should have been empty.
 
-Every capture can carry what you know: the **watts** of its main device (off a label or a
-plug-in meter), **hours on per day**, and a note for the AI. Leave them blank and the
-estimate is built from everything else:
-
-- the AI reads each device's wattage from what it can see (size, age, lamp or LED), which is
-  blended with the published band for that device class (a log-normal Bayesian update in
-  [`src/lib/estimate.ts`](src/lib/estimate.ts)); a reading outside the plausible band is
-  dropped,
-- the photo's GPS (or your phone's location) picks the serving utility's rate and the state
-  grid's carbon ([`/api/locate`](src/app/api/locate/route.ts)),
-- the timestamp is checked against the building's schedule, so the AI knows whether the room
-  should have been empty,
-- the on-device detector's read is passed to the AI as hints to verify.
-
-Typed-in figures re-price instantly without asking the AI again, since perception and costing
-are kept separate. The headline range is an 80% interval from a Monte Carlo over wattage,
-hours and price rather than a sum of every worst case, so it narrows as you add real figures.
-With no AI engine reachable, a capture falls back to the on-device reading of that capture,
-and only to a room-profile estimate if the detector saw nothing either.
+The detector choice is measured, not assumed: see
+[`docs/live-detector-benchmark.md`](docs/live-detector-benchmark.md) for EfficientDet-Lite0
+against Lite2 and YOLOv8n (ONNX Runtime Web) on 40 Open Images photos.
 
 ### Two costs, real prices, and an efficiency verdict
 
 - **Left on vs. typical use.** Each device shows what it costs if it is left on
   whenever the space is empty (the phantom-load figure), and what it costs at typical
-  use: hours actually in use for that kind of device at a home, school or office, and
-  standby the rest ([`src/lib/usage.ts`](src/lib/usage.ts)). Home lights run about
-  3 h a day (DOE lighting study), a microwave about 10 minutes plus its clock, a TV
-  4-5 h (Nielsen); school and office hours follow the building's occupied hours.
-  Pick **Home / School / Office** on the scanner.
+  use: hours actually in use for that kind of room (classroom, office, bedroom,
+  kitchen and others), standby the rest ([`src/lib/rooms.ts`](src/lib/rooms.ts),
+  [`src/lib/usage.ts`](src/lib/usage.ts)). Home lamp hours come from the PNNL
+  residential lighting study, monitor duty from ENERGY STAR, TV hours from Nielsen;
+  the rest are marked as the app's own estimates. Pick **Home / School / Office** on
+  the scanner and the room type on each capture.
 - **Prices.** A home pays the residential rate and a school or office the
   commercial one, often 2x apart in the same state. When a capture has a location,
   the serving utility's current published tariff comes from OpenEI's Utility Rate
   Database, at the marginal rate a typical customer's month reaches, hour-weighted for
   time-of-use plans ([`src/lib/tariff.ts`](src/lib/tariff.ts)). Otherwise the
-  state's 2026 average for that sector (EIA Electric Power Monthly, Table 5.6.B).
+  state's 2024 average for that sector (EIA, Table 4). A line off a real bill, typed
+  or read from a photo of the bill and confirmed by you, beats both. A plug-in meter
+  reading for a device replaces its wattage, and the Method page keeps an
+  estimated-vs-measured table of every such reading.
 - **Efficiency.** Every device is graded A-F against an efficient modern
   equivalent (an LED bulb, an ENERGY STAR monitor, an LED troffer...) and given a
   verdict: *replace* (with savings and payback at typical use), *fix the habit*
@@ -123,25 +112,15 @@ formulas and the wattage table are on the in-app Methodology page.
 ## Quick start
 
 ```bash
-# 1. Install and run Ollama, then pull a small vision model (fine for 8GB RAM)
-ollama pull moondream
-#    (Ollama needs to be running: `ollama serve` or the desktop app)
-
-# 2. Install web deps and run
 npm install
-cp .env.example .env.local   # optional, sane defaults are already baked in
 npm run dev
 ```
 
-Open http://localhost:3000 and it drops you straight into the scanner. The pill in the
-top-right tells you whether the local model is live.
-
-### No Ollama? It still runs.
-
-If there's no model it can reach, Ghost Watt falls back to a transparent room-profile
-estimate. Pick the room type per photo (or hit the "add a room-profile estimate" button) and
-every card gets tagged `estimated`. Start Ollama and the exact same audit runs `live`. So the
-app never goes blank on you, and it's always upfront about where a number came from.
+Open http://localhost:3000. With no keys at all the app runs in **On-device** mode: the
+scanner, costs, plan, rooms, buildings and brief all work, and the pill in the header says
+so. To turn on **Enhanced (cloud)** reading, add one vision key to `.env.local`
+(`ANTHROPIC_API_KEY`, `GROQ_API_KEY`, `OPENAI_API_KEY` or `OPENROUTER_API_KEY`), or run a
+local Ollama vision model (`ollama pull moondream`), and restart.
 
 ## Running the live model
 
@@ -196,16 +175,23 @@ TypeScript you can follow line by line.
 
 ## Data and sources
 
-- **Wattage table.** [`src/lib/devices.ts`](src/lib/devices.ts) is a hand-built lookup of
-  typical power figures for common school devices (projectors, monitors, vending machines,
-  and so on). These are representative published values, not nameplate maximums.
-- **Defaults.** US-average commercial electricity price (around $0.15/kWh), US grid carbon
-  intensity (around 0.385 kg CO2/kWh), and roughly 6,800 empty hours a year (a building used
-  about 10 hours a day across 190 school days). All three are editable in the app.
-- **Room profiles.** Synthetic, representative device mixes per room type (computer lab,
-  classroom, hallway, break room, and others) in [`src/lib/parse.ts`](src/lib/parse.ts), used
-  for the offline estimate path. Nothing here needs real or private school data to work.
-- **Photos.** You supply them at runtime. They're processed locally and never uploaded.
+Every figure the app multiplies by is listed, with its source, on the Method page
+(`/methodology#sources`) and in [`src/lib/sources.ts`](src/lib/sources.ts):
+
+- **Wattage table.** [`src/lib/devices.ts`](src/lib/devices.ts): a representative draw and a
+  published low–high band per device class, with a source note on each row.
+- **Standby draw.** LBNL's standby power summary table and the DOE microwave standby
+  analysis.
+- **Hours in use.** PNNL-22182 residential lighting study, ENERGY STAR displays duty
+  (35% on / 65% sleep), Nielsen TV hours; room-type hours without a published figure are
+  marked as estimates.
+- **Prices.** EIA 2024 average retail price by state and sector; OpenEI tariffs when a
+  location is known; a bill beats both.
+- **Carbon.** EPA eGRID state output rates. Washington's mostly-hydro grid is about
+  0.10 kg CO₂/kWh, roughly a quarter of the US average, and the app uses the state's
+  own figure.
+- **Photos.** You supply them at runtime. In On-device mode they never leave the browser;
+  in Enhanced mode each one is sent to the model once and discarded.
 
 ## Responsible AI
 
@@ -216,11 +202,13 @@ is too thin a basis, and the trade-offs (budget, timetable, safety) too local, t
 decision to a model.
 
 **The risk we worried about, and what we did about it.** The obvious failure is the model
-misreading a device's state, say calling an off monitor "on", and producing a savings number
-that isn't real. So perception and the energy math are kept apart, every figure shows its
-assumptions and a live/estimated tag, each offender carries a confidence level, and the
-ranking is built to survive fuzzy individual readings so the order you act in stays right.
-The app nudges you to spot-check before acting on any single number.
+misreading a device's state, say calling an off monitor "on", or inventing one that is not
+there, and producing a savings number that isn't real. So perception and the energy math
+are kept apart, the cloud model answers through a strict schema and is cross-checked by the
+on-device detector, anything that cannot be backed is marked unverified and not counted,
+every figure is a range with its assumptions shown, and the app never states an accuracy
+percentage it has not earned: the only one it shows is its own record against meter
+readings people entered.
 
 ## A note on the numbers
 
@@ -232,31 +220,39 @@ and formula is laid out on the Methodology page.
 ## Things that were tricky
 
 - **Guessing power from one photo without overselling it.** Splitting perception from the
-  accounting and leaning on ranking instead of false precision is what made this honest.
-- **Vision models on ordinary hardware.** Defaulting to a small, CPU-friendly model
-  (moondream) and giving inference a generous timeout keeps it usable on an 8 GB laptop.
-- **Never showing an empty screen.** The room-profile fallback keeps the app (and a demo)
-  working with no model at all, while being clear that those numbers are estimates.
-- **Getting structured output from a chatty model.** The parser tries JSON first, then falls
-  back to scanning the text clause by clause, so even rambling descriptions are usable. See
-  [`src/lib/parse.ts`](src/lib/parse.ts).
+  accounting, showing ranges, and leaning on ranking instead of false precision is what
+  made this honest.
+- **A small detector that misses things.** Rather than keep tuning it, live mode became a
+  candidate finder with temporal smoothing and a confirm step through the strong path. The
+  alternatives were measured first (see the benchmark) and the measured winner kept.
+- **Hallucinated devices.** A strict schema at temperature 0, a "visible: true/false" field,
+  and a cross-check against the detector turn a silent miscount into a visible
+  "unverified" tag the user resolves.
+- **The 24/7 assumption.** Pricing every device as if it ran all year was wrong and would
+  have been caught. Room-type usage profiles and an explicit after-hours state (observed,
+  assumed standby, or set by the user) replaced it.
+- **No fake fallbacks.** Removing every preset and sample path meant real empty states and
+  real error states everywhere, and auto-saving each scan so the rooms, buildings and brief
+  pages have real data to show.
 
-## Where it goes next
+## Accessibility
 
-- Per-school wattage overrides and a CSV/PDF export for facilities staff.
-- A guided mobile capture flow (one tap per room) with saved audit history.
-- Importing sub-meter readings to calibrate the estimates against reality over time.
-- Region- and utility-specific grid carbon factors.
+Ten settings under Settings → Display & accessibility, stored on the device: theme (system,
+light, dark), text size, high contrast, reduce motion (which also disables every animation),
+a colour-blind-safe palette, English or Spanish for the core flow, underlined links, bigger
+touch targets, wider letter spacing and an always-visible focus ring. Screen-reader labels,
+keyboard navigation with a skip link and live regions for results are always on.
 
 ## Project layout
 
 ```
 src/
   app/            App Router pages (scanner, methodology, about) and API routes
-  components/     Scanner UI, offender cards, 3D hero, status pill, and so on
+  components/     Scanner UI, offender cards, action plan, brief, engine indicator
   lib/
-    ollama.ts     Local vision client and prompt (seeing only)
-    parse.ts      Model/preset output into categorized observations
+    vision.ts     Cloud vision providers behind one strict-schema call (seeing only)
+    ollama.ts     Local Ollama client and the prompt
+    parse.ts      Model output into categorized observations
     devices.ts    Wattage lookup table (the deterministic backbone)
     energy.ts     The energy, cost, and carbon math plus ranking
     types.ts      Shared types

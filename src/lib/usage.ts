@@ -17,6 +17,8 @@
 // that runs evening classes gets a longer lighting day than one that does not.
 
 import type { DeviceCategory } from "./types";
+import { roomHours, roomType as roomTypeOf } from "./rooms";
+import { SOURCE_BY_ID } from "./sources";
 
 export type UsageContext = "home" | "school" | "office";
 
@@ -91,18 +93,36 @@ export function usageProfile(categoryId: string): Profile {
   return PROFILES[categoryId] ?? DEFAULT;
 }
 
-/** Typical hours of active use a day, for this device where it is. */
-export function typicalHoursPerDay(cat: DeviceCategory, context: UsageContext, occupiedHoursPerYear: number): number {
+/** Typical hours of active use a day, for this device where it is. The room type, when given, wins. */
+export function typicalHoursPerDay(cat: DeviceCategory, context: UsageContext, occupiedHoursPerYear: number, roomTypeId?: string): number {
   if (cat.thermostatic) return 24;
+  const room = roomTypeId ? roomHours(roomTypeOf(roomTypeId), cat.id, cat.group) : null;
+  if (room) return Math.max(0, Math.min(24, room.hours));
   const h = usageProfile(cat.id)[context];
   const perDay = typeof h === "number" ? h : (h.occupied * occupiedHoursPerYear) / 365;
   return Math.max(0, Math.min(24, perDay));
+}
+
+/** Where the hours came from, for the card and the Method page. */
+export function usageBasis(cat: DeviceCategory, context: UsageContext, roomTypeId?: string): { basis: string; source: string } {
+  if (cat.thermostatic) return { basis: "Runs around the clock, cycling", source: "catalog" };
+  const room = roomTypeId ? roomTypeOf(roomTypeId) : null;
+  const rh = room ? roomHours(room, cat.id, cat.group) : null;
+  if (room && rh) {
+    const src = SOURCE_BY_ID[rh.source];
+    return {
+      basis: src ? `${room.label}: ${rh.hours} h/day (${src.label})` : `${room.label}: ${rh.hours} h/day, this app's estimate`,
+      source: rh.source,
+    };
+  }
+  return { basis: usageProfile(cat.id).basis, source: "estimate" };
 }
 
 export interface TypicalUse {
   hoursPerDay: number;
   kwhPerYear: number;
   basis: string;
+  source: string;
 }
 
 /**
@@ -115,12 +135,14 @@ export function typicalUse(
   activeWatts: number,
   context: UsageContext,
   occupiedHoursPerYear: number,
+  roomTypeId?: string,
 ): TypicalUse {
-  const hoursPerDay = typicalHoursPerDay(cat, context, occupiedHoursPerYear);
+  const hoursPerDay = typicalHoursPerDay(cat, context, occupiedHoursPerYear, roomTypeId);
   const activeH = hoursPerDay * 365;
   const standbyH = cat.thermostatic ? 0 : 8760 - activeH;
   const kwhPerYear = (activeH * activeWatts + standbyH * cat.wattsStandby) / 1000;
-  return { hoursPerDay, kwhPerYear, basis: usageProfile(cat.id).basis };
+  const b = usageBasis(cat, context, roomTypeId);
+  return { hoursPerDay, kwhPerYear, basis: b.basis, source: b.source };
 }
 
 /** The setting a building type implies, for the default. */

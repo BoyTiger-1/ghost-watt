@@ -7,8 +7,7 @@
 // concludes the app is broken.
 
 import { describe, expect, it } from "vitest";
-import { fallbackObservations, matchCategory, parseModelOutput, ROOM_TYPES } from "./parse";
-import { CATALOG_BY_ID } from "./devices";
+import { matchCategory, parseModelOutput } from "./parse";
 
 describe("matchCategory", () => {
   it("matches on a keyword anywhere in the label", () => {
@@ -153,32 +152,5 @@ describe("parseModelOutput", () => {
   it("accepts the alternate key names models use for the device field", () => {
     expect(parseModelOutput(`[{"name": "monitor", "count": 1}]`)[0].categoryId).toBe("monitor");
     expect(parseModelOutput(`[{"label": "monitor", "count": 1}]`)[0].categoryId).toBe("monitor");
-  });
-});
-
-describe("room-type fallbacks", () => {
-  it("gives every preset a set of observations that all resolve to real categories", () => {
-    // The no-photo path is what a user without a vision model sees, so a typo in a
-    // preset id would silently produce an empty audit for them and nobody else.
-    for (const room of ROOM_TYPES) {
-      const rows = fallbackObservations(room.id);
-      expect(rows.length, `${room.id} produced no observations`).toBeGreaterThan(0);
-      for (const r of rows) {
-        expect(CATALOG_BY_ID[r.categoryId], `${room.id} -> ${r.categoryId}`).toBeDefined();
-      }
-    }
-  });
-
-  it("falls back to the generic profile for a room type it does not know", () => {
-    // Deliberately not an empty array: someone who picks an odd room type should
-    // still get an estimate to argue with, not a blank screen that reads as a bug.
-    expect(fallbackObservations("submarine")).toEqual(fallbackObservations("unknown"));
-  });
-
-  it("has the generic profile the fallback path depends on", () => {
-    // fallbackObservations dereferences ROOM_TYPE_BY_ID["unknown"] directly, so
-    // renaming that preset would throw on every unrecognised room type.
-    expect(ROOM_TYPES.some((r) => r.id === "unknown")).toBe(true);
-    expect(fallbackObservations("unknown").length).toBeGreaterThan(0);
   });
 });

@@ -37,20 +37,25 @@ export function ContributeBar({
   // Pre-fill from whatever the /class page already knows, so a student who joined
   // a session five minutes ago does not retype the code they were given.
   useEffect(() => {
-    try {
-      const c = localStorage.getItem(CODE_KEY);
-      if (c && isValidCode(c)) {
-        setCode(c);
-        setOpen(true);
+    const t = setTimeout(() => {
+      try {
+        const c = localStorage.getItem(CODE_KEY);
+        if (c && isValidCode(c)) {
+          setCode(c);
+          setOpen(true);
+        }
+        const n = localStorage.getItem(NAME_KEY);
+        if (n) setName(n);
+      } catch {
+        /* private mode; typing it once is not a hardship */
       }
-      const n = localStorage.getItem(NAME_KEY);
-      if (n) setName(n);
-    } catch {
-      /* private mode; typing it once is not a hardship */
-    }
+    }, 0);
+    return () => clearTimeout(t);
   }, []);
 
-  useEffect(() => setArea(defaultArea), [defaultArea]);
+  // The area name follows the first capture's name until the user edits it.
+  const [areaTouched, setAreaTouched] = useState(false);
+  const areaValue = areaTouched ? area : defaultArea;
 
   const send = async () => {
     const c = normalizeCode(code);
@@ -71,7 +76,7 @@ export function ContributeBar({
       const res = await fetch(`/api/class/${c}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ area, contributor: name, mode, offenders }),
+        body: JSON.stringify({ area: areaValue, contributor: name, mode, offenders }),
       });
       const json = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !json.ok) {
@@ -98,7 +103,7 @@ export function ContributeBar({
           <span className="mono-label text-cyan">Class mode</span>
           <span className="mt-0.5 block truncate text-sm text-mist">
             {phase === "sent"
-              ? `Sent to session ${code} as "${area}"`
+              ? `Sent to session ${code} as "${areaValue}"`
               : "Send these rows to a shared building map"}
           </span>
         </span>
@@ -141,8 +146,11 @@ export function ContributeBar({
                 </Field>
                 <Field label="area you covered">
                   <input
-                    value={area}
-                    onChange={(e) => setArea(e.target.value)}
+                    value={areaValue}
+                    onChange={(e) => {
+                      setAreaTouched(true);
+                      setArea(e.target.value);
+                    }}
                     placeholder="Room 214"
                     maxLength={40}
                     className="w-full border border-line bg-surface px-3 py-2 text-sm text-fog outline-none focus:border-cyan rounded-xl"
@@ -163,7 +171,7 @@ export function ContributeBar({
                       : `send ${offenders.length} rows`}
                 </button>
                 <Link
-                  href="/class"
+                  href="/buildings"
                   className="font-mono text-[0.72rem] text-dim underline-offset-4 transition-colors hover:text-cyan hover:underline"
                 >
                   open the shared map →

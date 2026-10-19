@@ -40,7 +40,6 @@ import { fmtMoney, fmtMoneyFull, fmtCo2, fmtPct } from "@/lib/energy";
 import { exportStore, importStore, downloadText } from "@/lib/export";
 import { BUILDING_TYPE_BY_ID } from "@/lib/benchmark";
 import { regionOrDefault } from "@/lib/grid";
-import { SampleData } from "./SampleData";
 
 const STATUS_TINT: Record<DeltaRow["status"], string> = {
   resolved: "var(--color-cyan)",
@@ -94,10 +93,7 @@ export function Portfolio() {
       </PageHeader>
 
       {store.buildings.length === 0 ? (
-        <div className="space-y-6">
-          <SampleData />
-          <EmptyPortfolio />
-        </div>
+        <EmptyPortfolio />
       ) : (
         <>
           <div className="mb-6 flex flex-wrap items-center gap-2">
@@ -123,15 +119,6 @@ export function Portfolio() {
             >
               + Building
             </button>
-
-            {/* The full panel above only renders on an empty portfolio, so without
-                this the example becomes unremovable the moment it is loaded - the
-                one property that makes shipping demo data defensible at all. It
-                also lets someone who already has a real building pull the example
-                up alongside it. */}
-            <span className="ml-auto">
-              <SampleData compact />
-            </span>
           </div>
 
           {active && <BuildingDetail buildingId={active.id} />}
@@ -344,10 +331,10 @@ function BuildingDetail({ buildingId }: { buildingId: string }) {
                 </span>
                 <span
                   className={`text-[0.72rem] ${
-                    a.mode === "live" ? "text-cyan" : a.mode === "mixed" ? "text-amber" : "text-dim"
+                    a.mode === "enhanced" ? "text-cyan" : a.mode === "mixed" ? "text-amber" : "text-lime"
                   }`}
                 >
-                  {a.mode}
+                  {a.mode === "enhanced" ? "cloud" : a.mode}
                 </span>
                 <span className="min-w-0 flex-1 truncate text-sm text-dim">
                   {a.areas.join(", ") || "no areas named"}
@@ -634,11 +621,10 @@ function EmptyPortfolio() {
         <div className="mx-auto mb-5 grid h-16 w-16 place-items-center border border-line2 bg-surface2">
           <span className="h-3 w-3 grad-energy-bg flicker" />
         </div>
-        <h3 className="text-lg font-semibold text-fog">Nothing saved yet</h3>
+        <h3 className="text-lg font-semibold text-fog">No rooms scanned yet</h3>
         <p className="mt-2 text-sm leading-relaxed text-mist">
-          Run an audit and press <span className="font-mono text-cyan">Save audit</span>. It
-          gets stored in this browser and shows up here, ready to be compared against the next
-          one.
+          Every scan is saved here automatically as a room of your building, in this browser only.
+          Scan a room, fix something, scan it again, and this page shows whether the load really went away.
         </p>
         <Link
           href="/scan"

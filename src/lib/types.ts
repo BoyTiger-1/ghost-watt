@@ -26,14 +26,47 @@ export interface DeviceObservation {
   userWatts?: number;
   /** Hours a year this device is costed for, when the user said how long it runs. */
   hoursPerYear?: number;
+  /**
+   * The state assumed through the building's empty hours, when it is not simply the
+   * observed one: set by the user ("it is left on overnight" / "it goes to sleep").
+   */
+  afterHours?: DeviceState;
   /** One short phrase on why the engine judged it this way, e.g. "screen lit, login page". */
   evidence?: string;
   /** Technology as read by the vision model, e.g. "LED", "T8 fluorescent", "CRT". */
   tech?: string;
+  /** The model's own 0-1 confidence in the device and its count, when it gave one. */
+  confidence?: number;
+  /**
+   * Cross-check verdict. "unverified": the model's claim could not be backed by
+   * the on-device detector (or the model itself was unsure), so it is shown but
+   * not counted until the user confirms it. "confirmed": the user said it is real.
+   */
+  verification?: "verified" | "unverified" | "confirmed";
 }
 
-/** How a given offender was produced. Surfaced to the user as a badge. */
-export type AnalysisMode = "live" | "fallback";
+/**
+ * Which path read the picture. "on-device": the small detector in the browser,
+ * nothing uploaded. "enhanced": the frame was sent to the vision-language model
+ * behind /api/analyze. There is no third, invented path.
+ */
+export type AnalysisMode = "enhanced" | "on-device";
+
+/** Why an analysis could not be done. Shown to the user as a plain error. */
+export type AnalyzeErrorCode =
+  | "bad-request"
+  | "too-large"
+  | "rate-limited"
+  | "no-engine"
+  | "engine-failed"
+  | "unparseable";
+
+export interface AnalyzeError {
+  error: string;
+  code: AnalyzeErrorCode;
+  /** Seconds until a rate limit lifts, when that is the cause. */
+  retryAfterSeconds?: number;
+}
 
 /** Coarse device grouping, used for filtering and the load-mix breakdown. */
 export type DeviceGroup =
@@ -116,6 +149,15 @@ export interface AuditSettings {
   usageContext?: "home" | "school" | "office";
   /** Hours a year the space is occupied, for school and office usage profiles. */
   occupiedHoursPerYear?: number;
+  /** Kind of room (lib/rooms.ts): refines the typical in-use hours per device. */
+  roomType?: string;
+  /**
+   * Whether the picture was taken while the building was meant to be empty.
+   * True: what was seen on is what runs after hours. False: a device seen on during
+   * the day is assumed to go to standby after hours unless the user says otherwise.
+   * Null or absent: unknown, so the observed state is assumed to persist.
+   */
+  capturedAfterHours?: boolean | null;
 }
 
 /** A single ranked offender after the energy math is applied. */
@@ -151,10 +193,19 @@ export interface Offender {
   boxes?: Box[];
   /** Where the per-unit wattage came from: a measurement, the AI's read blended with the catalog, or the catalog. */
   basis?: "measured" | "ai" | "catalog";
+  /** Shown but not counted: the reading could not be cross-checked and the user has not confirmed it. */
+  unverified?: boolean;
+  /** The model's confidence, 0-1, when it gave one. */
+  modelConfidence?: number;
   /** Hours a year this line is costed for. */
   hoursPerYear?: number;
   /** True when the hours came from the user rather than the building schedule. */
   hoursKnown?: boolean;
+  /** The state this line is costed in through the empty hours, and why. */
+  afterHoursState?: DeviceState;
+  afterHoursBasis?: "observed" | "assumed-standby" | "user";
+  /** What this line would cost if it only ever drew standby power through the empty hours. */
+  standbyCostPerYear?: number;
   evidence?: string;
   tech?: string;
   /** One unit's draw while in use, W (the on-state figure, whatever state it was seen in). */
@@ -163,8 +214,10 @@ export interface Offender {
   typicalHoursPerDay?: number;
   typicalKwhPerYear?: number;
   typicalCostPerYear?: number;
-  /** Where the typical hours come from. */
+  /** Where the typical hours come from, in words. */
   usageBasis?: string;
+  /** Source id (lib/sources.ts) behind the typical hours, or "estimate". */
+  usageSource?: string;
 }
 
 export interface AnalysisResult {
@@ -181,14 +234,8 @@ export interface AnalysisResult {
    * without asking the model again.
    */
   observations?: (DeviceObservation & { categoryId: string })[];
-  /** Present when the live path failed and we fell back. */
+  /** A true sentence about a limitation of this result, e.g. that nothing powered was recognised. */
   notice?: string;
-  /**
-   * Why this is a fallback, for code that has to react rather than read: the
-   * scanner shows "nothing-found" as an empty reading rather than a guess, and
-   * swaps "limited" and "unavailable" for the on-device reading when it has one.
-   */
-  fallbackReason?: "requested" | "limited" | "unavailable" | "nothing-found";
   /**
    * Devices the model located but judged switched off. They cost nothing, so
    * they are not offenders, but drawing them on the photo shows the scan looked
@@ -205,8 +252,13 @@ export interface Sighting {
   boxes: Box[];
 }
 
+/**
+ * Used only when nothing better is known. Price is the EIA 2024 U.S. average
+ * commercial rate; carbon is the eGRID2023 U.S. average output rate (767
+ * lb/MWh). A building with a state set never sees these.
+ */
 export const DEFAULT_SETTINGS: AuditSettings = {
-  ratePerKwh: 0.15,
-  co2PerKwh: 0.385,
+  ratePerKwh: 0.13,
+  co2PerKwh: 0.35,
   unoccupiedHoursPerYear: 6800,
 };

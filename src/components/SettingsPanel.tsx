@@ -17,6 +17,8 @@ import { BUILDING_TYPES } from "@/lib/benchmark";
 import { useStore, updateBuilding, setActiveBuilding, replaceStore } from "@/lib/useStore";
 import { exportStore, importStore, downloadText } from "@/lib/export";
 import { EMPTY_STORE, type Building } from "@/lib/storage";
+import { BillScan } from "./BillScan";
+import { AccessibilityPanel } from "./AccessibilityPanel";
 
 interface KeyInfo {
   env: string;
@@ -77,12 +79,17 @@ export function SettingsPanel() {
   return (
     <section className="relative z-10 mx-auto max-w-4xl px-5 pb-20 pt-24 sm:px-6 sm:pt-32">
       <PageHeader eyebrow="Settings" title="What is" accent="switched on." className="mb-10">
-        Ghost Watt runs with no API keys at all.{" "}
+        Ghost Watt scans with no API keys at all, on the device.{" "}
         <span className="hidden sm:inline">
-          Every provider below upgrades a stored government table to a live figure. None is
-          required, and none changes whether the app works.
+          A vision key turns on Enhanced (cloud) reading, which recognises far more devices. The data providers below
+          upgrade stored government tables to live figures.
         </span>
       </PageHeader>
+
+      {/* ---- display & accessibility ---- */}
+      <div className="mb-6">
+        <AccessibilityPanel />
+      </div>
 
       {/* ---- the vision engine ---- */}
       <div className="panel ticked p-5 sm:p-6">
@@ -139,8 +146,8 @@ export function SettingsPanel() {
           />
           <ChainStep
             n={3}
-            title="Room-profile estimate"
-            detail="Always available. Produces a full costed audit with no model at all."
+            title="On-device detector"
+            detail="Always available, in the browser. Reads screens, laptops, common appliances and lit fixtures without uploading anything; it misses other device types."
             state={engine?.active === "none" ? "active" : "ready"}
           />
         </ol>
@@ -448,7 +455,7 @@ function engineSentence(engine: EngineStatus | null): string {
   if (engine.active === "hosted") {
     return `${engine.activeLabel} is answering. Visitors can scan without installing anything.`;
   }
-  return "No vision engine available - scans fall back to the room-profile estimate.";
+  return "No cloud vision model is configured. Scans are read by the detector in the browser, which finds fewer kinds of device.";
 }
 
 function ChainStep({
@@ -704,9 +711,13 @@ function BillField({ building }: { building: Building }) {
 
       <p className="mt-2 text-[0.76rem] leading-relaxed text-dim">
         Use the totals printed on the bill, including delivery and taxes - the blended figure is
-        what a savings estimate actually needs. Stored in this browser with the rest of the
-        building record and never sent anywhere.
+        what a savings estimate actually needs. The figures are stored in this browser with the
+        rest of the building record and never sent anywhere.
       </p>
+
+      <div className="mt-3">
+        <BillScan onAccept={(b) => updateBuilding(building.id, { bill: b })} />
+      </div>
     </div>
   );
 }

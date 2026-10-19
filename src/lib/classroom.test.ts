@@ -58,7 +58,7 @@ function contribution(patch: Partial<Contribution> = {}): Contribution {
     area: "Room 214",
     contributor: "Sam",
     at: new Date().toISOString(),
-    mode: "live",
+    mode: "enhanced",
     offenders: [offender()],
     ...patch,
   };
@@ -135,18 +135,18 @@ describe("classTotals", () => {
     expect(t.contributorCount).toBe(2);
   });
 
-  it("reports the share read by a model rather than estimated", () => {
+  it("reports the share read by the cloud model rather than on the device", () => {
     expect(
       classTotals([
-        contribution({ mode: "live" }),
-        contribution({ id: "c2", mode: "fallback" }),
-      ]).liveShare,
+        contribution({ mode: "enhanced" }),
+        contribution({ id: "c2", mode: "on-device" }),
+      ]).enhancedShare,
     ).toBe(0.5);
   });
 
   it("does not divide by zero on an empty session", () => {
     const t = classTotals([]);
-    expect(t.liveShare).toBe(0);
+    expect(t.enhancedShare).toBe(0);
     expect(t.costPerYear).toBe(0);
   });
 });
@@ -211,12 +211,12 @@ describe("sanitizeOffender", () => {
 describe("sanitizeContribution", () => {
   it("accepts a well-formed submission", () => {
     const c = sanitizeContribution(
-      { area: "Room 214", contributor: "Sam", mode: "live", offenders: [offender()] },
+      { area: "Room 214", contributor: "Sam", mode: "enhanced", offenders: [offender()] },
       "id-1",
     )!;
     expect(c.area).toBe("Room 214");
     expect(c.offenders).toHaveLength(1);
-    expect(c.mode).toBe("live");
+    expect(c.mode).toBe("enhanced");
   });
 
   it("rejects a submission with no usable rows", () => {
@@ -261,9 +261,9 @@ describe("sanitizeContribution", () => {
     expect(c.id).toBe("real");
   });
 
-  it("treats an unrecognised mode as an estimate, not a live reading", () => {
-    // Claiming "live" is a credibility claim, so the default has to be the humble one.
+  it("treats an unrecognised mode as the weaker on-device reading", () => {
+    // Claiming the cloud model read it is a credibility claim, so the default is the humble one.
     const c = sanitizeContribution({ area: "X", mode: "verified", offenders: [offender()] }, "id")!;
-    expect(c.mode).toBe("fallback");
+    expect(c.mode).toBe("on-device");
   });
 });

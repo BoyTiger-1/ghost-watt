@@ -11,13 +11,21 @@
 // landing page literally true. The schema is versioned so a future migration has
 // something to migrate from.
 
-import type { AuditSettings, Offender } from "./types";
+import type { AnalysisMode, AuditSettings, Offender } from "./types";
 import type { WeeklySchedule } from "./schedule";
 import type { UtilityBill } from "./calibration";
 
 export const SCHEMA_VERSION = 1;
 const KEY = "ghostwatt.store.v1";
 
+/** How the pictures behind a saved scan were read. "mixed" when a building rolls up both. */
+export type SavedMode = AnalysisMode | "mixed";
+
+/**
+ * One saved scan: a room, read once, costed. Written automatically when a
+ * capture finishes, so the portfolio, the brief and the building roll-up
+ * always have real readings to work from rather than waiting on a button.
+ */
 export interface SavedAudit {
   id: string;
   buildingId: string;
@@ -27,10 +35,15 @@ export interface SavedAudit {
   areas: string[];
   offenders: Offender[];
   settings: AuditSettings;
-  /** "live" if any offender came from a real model reading. */
-  mode: "live" | "fallback" | "mixed";
+  mode: SavedMode;
   engine: string;
   note?: string;
+  /** Room kind, for the usage profile that priced it. */
+  roomType?: string;
+  /** A small JPEG of the picture, for the room list. Never the full photo. */
+  thumb?: string;
+  /** The scanner capture this was written from, so a re-analysis replaces it. */
+  captureId?: string;
 }
 
 export interface FixRecord {
@@ -82,11 +95,33 @@ export interface Building {
   bill?: UtilityBill;
 }
 
+/**
+ * One meter reading against one estimate.
+ *
+ * Written whenever a user types a measured wattage for a device. Together these
+ * are the only honest accuracy figure the app can show: how far its estimates
+ * were from meters on the devices someone actually checked.
+ */
+export interface CalibrationRecord {
+  id: string;
+  buildingId: string;
+  categoryId: string;
+  label: string;
+  /** The app's per-unit estimate before the reading, W, and where it came from. */
+  estimatedWatts: number;
+  estimateBasis: "ai" | "catalog";
+  /** What the meter said, W per unit. */
+  measuredWatts: number;
+  /** ISO timestamp. */
+  at: string;
+}
+
 export interface Store {
   version: number;
   buildings: Building[];
   audits: SavedAudit[];
   fixes: FixRecord[];
+  calibrations: CalibrationRecord[];
   activeBuildingId: string | null;
 }
 
@@ -95,6 +130,7 @@ export const EMPTY_STORE: Store = {
   buildings: [],
   audits: [],
   fixes: [],
+  calibrations: [],
   activeBuildingId: null,
 };
 
@@ -109,17 +145,43 @@ export function loadStore(): Store {
     if (!raw) return EMPTY_STORE;
     const parsed = JSON.parse(raw) as Partial<Store>;
     if (typeof parsed !== "object" || parsed === null) return EMPTY_STORE;
-    return {
+    return migrate({
       version: SCHEMA_VERSION,
       buildings: Array.isArray(parsed.buildings) ? parsed.buildings : [],
       audits: Array.isArray(parsed.audits) ? parsed.audits : [],
       fixes: Array.isArray(parsed.fixes) ? parsed.fixes : [],
+      calibrations: Array.isArray(parsed.calibrations) ? parsed.calibrations : [],
       activeBuildingId: parsed.activeBuildingId ?? null,
-    };
+    });
   } catch {
     // A corrupt store should never take the app down with it.
     return EMPTY_STORE;
   }
+}
+
+/**
+ * Bring an older store up to date.
+ *
+ * Earlier versions saved "live" / "fallback" audits and a fictional sample
+ * school. Fallback audits were room presets, not readings, and the sample was
+ * invented, so both are dropped rather than carried forward as if they were
+ * measurements. "live" becomes "enhanced", which is what it always meant.
+ */
+export function migrate(store: Store): Store {
+  const isSample = (id: string | null | undefined) => typeof id === "string" && id.startsWith("sample-");
+  const buildings = store.buildings.filter((b) => !isSample(b.id));
+  const audits = store.audits
+    .filter((a) => !isSample(a.buildingId) && (a.mode as string) !== "fallback")
+    .map((a) => {
+      const raw = a.mode as string;
+      const mode: SavedMode = raw === "live" ? "enhanced" : raw === "enhanced" || raw === "on-device" || raw === "mixed" ? (raw as SavedMode) : "enhanced";
+      return mode === a.mode ? a : { ...a, mode };
+    });
+  const fixes = store.fixes.filter((f) => !isSample(f.buildingId));
+  const calibrations = (store.calibrations ?? []).filter((c) => !isSample(c.buildingId));
+  const activeBuildingId =
+    store.activeBuildingId && buildings.some((b) => b.id === store.activeBuildingId) ? store.activeBuildingId : (buildings[0]?.id ?? null);
+  return { ...store, buildings, audits, fixes, calibrations, activeBuildingId };
 }
 
 export function saveStore(store: Store): boolean {

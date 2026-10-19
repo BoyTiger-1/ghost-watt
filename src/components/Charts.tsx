@@ -50,7 +50,8 @@ export function LoadMixDonut({
   const stroke = 22;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
-  let offset = 0;
+  // Where each arc starts: the running total of the arcs before it.
+  const offsets = slices.reduce<number[]>((acc, s, i) => [...acc, (acc[i - 1] ?? 0) + (i > 0 ? slices[i - 1].share * c : 0)], []);
 
   return (
     <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center sm:gap-7">
@@ -67,7 +68,8 @@ export function LoadMixDonut({
           {slices.map((s, i) => {
             const len = s.share * c;
             const dash = `${len} ${c - len}`;
-            const el = (
+            const offset = offsets[i];
+            return (
               <circle
                 key={s.group}
                 cx={size / 2}
@@ -91,8 +93,6 @@ export function LoadMixDonut({
                 <title>{`${GROUP_LABELS[s.group]}: ${fmtMoneyFull(s.costPerYear)}/yr`}</title>
               </circle>
             );
-            offset += len;
-            return el;
           })}
         </svg>
         <div className="absolute inset-0 grid place-items-center">
