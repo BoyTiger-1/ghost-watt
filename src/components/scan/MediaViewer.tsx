@@ -225,8 +225,8 @@ export function MediaViewer({
             </button>
           )}
         </div>
-        <button onClick={onClear} className="shrink-0 rounded-full px-2.5 py-1.5 text-[0.74rem] text-dim hover:text-ember">
-          Clear all
+        <button onClick={onClear} className="shrink-0 rounded-full px-2.5 py-1.5 text-[0.76rem] font-medium text-ember/80 hover:bg-ember/[0.07] hover:text-ember">
+          Clear current work
         </button>
       </div>
 

@@ -15,6 +15,8 @@ const KEY = "current";
 export interface Workspace {
   captures: (Capture & { videoBlob?: Blob })[];
   selectedId: string | null;
+  /** Captures added to a place, and as which room. */
+  added?: Record<string, { buildingId: string; room: string }>;
   savedAt: string;
 }
 
@@ -43,7 +45,11 @@ async function run<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRe
 /** Video blobs already read, so each save does not re-read every clip. */
 const blobs = new Map<string, Blob>();
 
-export async function saveWorkspace(captures: Capture[], selectedId: string | null): Promise<void> {
+export async function saveWorkspace(
+  captures: Capture[],
+  selectedId: string | null,
+  added: Record<string, { buildingId: string; room: string }>,
+): Promise<void> {
   if (typeof indexedDB === "undefined") return;
   const out: Workspace["captures"] = [];
   for (const c of captures) {
@@ -60,7 +66,7 @@ export async function saveWorkspace(captures: Capture[], selectedId: string | nu
     const rest = { ...c, videoUrl: undefined };
     out.push(videoBlob ? { ...rest, videoBlob } : rest);
   }
-  const ws: Workspace = { captures: out, selectedId, savedAt: new Date().toISOString() };
+  const ws: Workspace = { captures: out, selectedId, added, savedAt: new Date().toISOString() };
   try {
     await run("readwrite", (s) => s.put(ws, KEY));
   } catch {
@@ -69,7 +75,11 @@ export async function saveWorkspace(captures: Capture[], selectedId: string | nu
 }
 
 /** The saved work, ready to show: half-finished readings are queued again, clips get fresh URLs. */
-export async function loadWorkspace(): Promise<{ captures: Capture[]; selectedId: string | null } | null> {
+export async function loadWorkspace(): Promise<{
+  captures: Capture[];
+  selectedId: string | null;
+  added: Record<string, { buildingId: string; room: string }>;
+} | null> {
   if (typeof indexedDB === "undefined") return null;
   try {
     const ws = await run<Workspace | undefined>("readonly", (s) => s.get(KEY));
@@ -85,7 +95,7 @@ export async function loadWorkspace(): Promise<{ captures: Capture[]; selectedId
       restored.progress = undefined;
       return restored;
     });
-    return { captures, selectedId: ws.selectedId };
+    return { captures, selectedId: ws.selectedId, added: ws.added ?? {} };
   } catch {
     return null;
   }

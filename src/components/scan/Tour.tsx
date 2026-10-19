@@ -28,29 +28,24 @@ const STEPS: Step[] = [
     body: "Point your camera at a room, or upload photos and videos you already have. Either works.",
   },
   {
-    target: "place",
-    title: "Where are you?",
-    body: "Pick home, school or office. It changes the price of electricity and which hours the place sits empty.",
-  },
-  {
     target: "add",
     title: "Add a picture",
     body: "Each device we find gets a box on the photo. Next to it you'll get the short version: what it all costs a year, what's wasted, and what you could save.",
   },
   {
     target: "settings",
-    title: "Your price",
-    body: "We guess your electricity price from your state. If you have a bill, put its price here and every number gets more exact.",
+    title: "Where you are, and your price",
+    body: "This shows the kind of place (home, school or office) and what electricity costs there. Tap it to change either, or type in the price from your bill for exact numbers.",
   },
   {
     target: "places",
-    title: "Everything is saved",
-    body: "Each room you scan is kept in My places, with one to-do list of fixes for all of them. Tick fixes off and scan again to check they worked.",
+    title: "Keep track in My places",
+    body: "Happy with a scan? Tap Add to place to save its rooms to a place like your home. My places then gives you one to-do list for every room, and checks your fixes worked.",
   },
   {
     target: "help",
     title: "That's it",
-    body: "Your work is saved on this device as you go. Open this tour again any time with the ? button.",
+    body: "Your work is saved on this device as you go. Open this tour again any time from this ⋯ menu.",
   },
 ];
 

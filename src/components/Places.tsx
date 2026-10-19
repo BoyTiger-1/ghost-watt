@@ -9,17 +9,24 @@
 // them, ticked off as you go, and a re-scan of a room checking whether the
 // waste really went away. Everything stays in this browser.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { BuildingBar } from "./BuildingBar";
+import { PlaceEditor } from "./PlaceEditor";
+import { ReportBrief } from "./ReportBrief";
+import { BenchmarkPanel, LoadMixPanel } from "./AuditPanels";
+import { EfficiencyPanel } from "./EfficiencyPanel";
+import { EquivalenceStrip } from "./EquivalenceStrip";
+import { BillCompare, Card, EmptyTime, MoneyOverTime } from "./scan/Visuals";
+import { BUILDING_TYPE_BY_ID } from "@/lib/benchmark";
+import { regionOrDefault } from "@/lib/grid";
 import { DeviceGlyph } from "./DeviceGlyph";
-import { auditsFor, fixesFor, uid, type FixRecord, type SavedAudit } from "@/lib/storage";
+import { auditsFor, fixesFor, uid, type Building, type FixRecord, type SavedAudit } from "@/lib/storage";
 import { rollupBuilding, type RoomRollup } from "@/lib/rollup";
 import { listActions, rankActions, type ActionItem } from "@/lib/actions";
 import { counted, fmtMoney, fmtMoneyFull } from "@/lib/energy";
 import { exportStore, importStore, downloadText } from "@/lib/export";
-import { addBuilding, addFix, newBuilding, removeAudit, removeBuilding, removeFix, replaceStore, setActiveBuilding, useStore } from "@/lib/useStore";
+import { addBuilding, addFix, currentStore, newBuilding, removeAudit, removeBuilding, removeFix, replaceStore, setActiveBuilding, updateBuilding, useStore } from "@/lib/useStore";
 import type { Offender } from "@/lib/types";
 
 /** One fix on the to-do list: the move, the device and room it is for, and whether it's done. */
@@ -35,14 +42,32 @@ const fixKey = (area: string, categoryId: string, title: string) => `${area.toLo
 export function Places() {
   const store = useStore();
   const active = store.buildings.find((b) => b.id === store.activeBuildingId) ?? store.buildings[0] ?? null;
+  // Rename and Edit from the Scanner's place menu arrive as ?place=<id>&action=rename|edit.
+  const [intent, setIntent] = useState<{ tab: PlaceTab; rename: boolean; n: number }>({ tab: "overview", rename: false, n: 0 });
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const q = new URLSearchParams(window.location.search);
+      const id = q.get("place");
+      const action = q.get("action");
+      if (id && currentStore().buildings.some((b) => b.id === id)) setActiveBuilding(id);
+      if (action === "rename") setIntent({ tab: "overview", rename: true, n: 1 });
+      else if (action === "edit") setIntent({ tab: "details", rename: false, n: 1 });
+      if (id || action) window.history.replaceState(null, "", "/places");
+    }, 0);
+    return () => clearTimeout(t);
+  }, []);
 
   if (!active) return <Empty />;
   return (
     <div className="space-y-6">
-      <PlacePicker activeId={active.id} />
-      <Place key={active.id} buildingId={active.id} />
-      {store.buildings.length > 1 && <AllPlaces />}
-      <Backup />
+      <div className="no-print">
+        <PlacePicker activeId={active.id} />
+      </div>
+      <Place key={`${active.id}:${intent.n}`} buildingId={active.id} initialTab={intent.tab} renameNow={intent.rename} />
+      <div className="no-print space-y-6">
+        {store.buildings.length > 1 && <AllPlaces />}
+        <Backup />
+      </div>
     </div>
   );
 }
@@ -78,14 +103,22 @@ function PlacePicker({ activeId }: { activeId: string }) {
 
 // ---- one place ---------------------------------------------------------------
 
-function Place({ buildingId }: { buildingId: string }) {
+type PlaceTab = "overview" | "charts" | "report" | "details";
+
+function Place({ buildingId, initialTab, renameNow }: { buildingId: string; initialTab: PlaceTab; renameNow: boolean }) {
   const store = useStore();
   const building = store.buildings.find((b) => b.id === buildingId)!;
   const audits = useMemo(() => auditsFor(store, buildingId), [store, buildingId]);
   const fixes = useMemo(() => fixesFor(store, buildingId), [store, buildingId]);
   const rollup = useMemo(() => rollupBuilding(audits), [audits]);
-  const [editing, setEditing] = useState(false);
+  const [tab, setTab] = useState<PlaceTab>(initialTab);
+  const [renaming, setRenaming] = useState(renameNow);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const nameRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (renaming) nameRef.current?.select();
+  }, [renaming]);
 
   // Every fix across every room, best value first, each matched to whether it's been done.
   const todos = useMemo<Todo[]>(() => {
@@ -108,36 +141,66 @@ function Place({ buildingId }: { buildingId: string }) {
   const savedSoFar = doneTodos.reduce((s, t) => s + t.action.annualSavings, 0);
   const stillToDo = todos.filter((t) => !t.done).reduce((s, t) => s + t.action.annualSavings, 0);
   const share = savedSoFar + stillToDo > 0 ? savedSoFar / (savedSoFar + stillToDo) : 0;
+  const type = BUILDING_TYPE_BY_ID[building.typeId];
+
+  const tabs: { id: PlaceTab; label: string }[] = [
+    { id: "overview", label: "Overview" },
+    { id: "charts", label: "Charts" },
+    { id: "report", label: "Report" },
+    { id: "details", label: "Details" },
+  ];
 
   return (
     <div className="space-y-6">
       {/* the place, in a sentence */}
-      <section className="panel relative overflow-hidden p-5 sm:p-7">
+      <section className="no-print panel relative overflow-hidden p-5 sm:p-7">
         <div aria-hidden className="absolute inset-0 -z-10 opacity-70" style={{ background: "radial-gradient(60% 100% at 100% 0%, rgba(239,157,46,0.1), transparent 60%)" }} />
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="font-editorial text-[2rem] leading-tight text-fog sm:text-[2.4rem]">{building.name}</h2>
+          <div className="min-w-0 flex-1">
+            {renaming ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  setRenaming(false);
+                }}
+                className="flex flex-wrap items-center gap-2"
+              >
+                <input
+                  ref={nameRef}
+                  value={building.name}
+                  onChange={(e) => updateBuilding(building.id, { name: e.target.value })}
+                  onBlur={() => setRenaming(false)}
+                  aria-label="Place name"
+                  className="font-editorial min-w-0 flex-1 rounded-xl border border-cyan bg-surface px-3 py-1 text-[1.8rem] leading-tight text-fog outline-none sm:text-[2.1rem]"
+                />
+                <button type="submit" className="rounded-full bg-fog px-4 py-2 text-[0.85rem] font-medium text-ink">
+                  Save
+                </button>
+              </form>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="font-editorial text-[2rem] leading-tight text-fog sm:text-[2.4rem]">{building.name}</h2>
+                <button onClick={() => setRenaming(true)} className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.8rem] text-dim hover:bg-fog/[0.05] hover:text-fog">
+                  <PencilIcon />
+                  Rename
+                </button>
+              </div>
+            )}
             <p className="mt-1 text-[0.86rem] text-dim">
-              {rollup.rooms.length} room{rollup.rooms.length === 1 ? "" : "s"} scanned
+              {type?.label ?? "Place"} · {regionOrDefault(building.regionCode).name} · {rollup.rooms.length} room{rollup.rooms.length === 1 ? "" : "s"}
               {rollup.latestAt ? ` · last scan ${ago(rollup.latestAt)}` : ""}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/scan" className="rounded-full bg-fog px-4 py-2 text-[0.85rem] font-medium text-ink transition-colors hover:bg-fog/85">
-              Scan a room
-            </Link>
-            <button onClick={() => setEditing((e) => !e)} aria-expanded={editing} className="rounded-full border border-line px-4 py-2 text-[0.85rem] text-fog transition-colors hover:border-fog/40">
-              {editing ? "Done" : "Edit details"}
-            </button>
-          </div>
+          <Link href="/scan" className="rounded-full bg-fog px-4 py-2 text-[0.85rem] font-medium text-ink transition-colors hover:bg-fog/85">
+            Scan a room
+          </Link>
         </div>
 
         {rollup.rooms.length > 0 ? (
           <>
             <p className="mt-5 max-w-[46ch] text-[1.15rem] leading-snug text-fog sm:text-[1.3rem]">
               Things left on here waste about <strong className="font-semibold text-ember">{fmtMoneyFull(rollup.afterHoursCost)} a year</strong>{" "}
-              while nobody&apos;s
-              around.
+              while nobody&apos;s around.
             </p>
             <div className="mt-5">
               <div className="flex flex-wrap items-baseline justify-between gap-2 text-[0.86rem]">
@@ -155,45 +218,159 @@ function Place({ buildingId }: { buildingId: string }) {
             </div>
           </>
         ) : (
-          <p className="mt-5 max-w-[52ch] text-[0.95rem] leading-relaxed text-mist">
-            No rooms here yet. Scan a room and it&apos;s saved here automatically. Scan a few, and this page tells you which room is the problem and what to fix
-            first.
+          <p className="mt-5 max-w-[56ch] text-[0.95rem] leading-relaxed text-mist">
+            No rooms here yet. Scan a room, then tap <span className="font-medium text-fog">Add to place</span> and pick {building.name}. Add a few, and this page
+            tells you which room is the problem and what to fix first.
           </p>
         )}
 
-        <AnimatePresence initial={false}>
-          {editing && (
-            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-              <div className="mt-5 space-y-3 border-t border-line pt-5">
-                <p className="text-[0.84rem] text-mist">Name, kind of place, state and opening hours. These set the price of electricity and which hours count as empty.</p>
-                <BuildingBar building={building} buildings={store.buildings} />
-                {confirmDelete ? (
-                  <div className="flex flex-wrap items-center gap-2 rounded-xl bg-ember/[0.07] px-3.5 py-2.5 text-[0.84rem]">
-                    <span className="text-mist">Delete {building.name} and its {rollup.rooms.length} rooms? This can&apos;t be undone.</span>
-                    <button onClick={() => removeBuilding(building.id)} className="rounded-full bg-ember px-3.5 py-1.5 text-[0.8rem] font-medium text-white">
-                      Delete
-                    </button>
-                    <button onClick={() => setConfirmDelete(false)} className="rounded-full px-3 py-1.5 text-[0.8rem] text-mist hover:text-fog">
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <button onClick={() => setConfirmDelete(true)} className="text-[0.82rem] text-dim hover:text-ember">
-                    Delete this place
-                  </button>
-                )}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* the place's own sections */}
+        <div className="mt-6 flex gap-1 overflow-x-auto rounded-full bg-fog/[0.05] p-1" role="tablist">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              role="tab"
+              aria-selected={tab === t.id}
+              onClick={() => setTab(t.id)}
+              className={`flex-1 whitespace-nowrap rounded-full px-3 py-2 text-[0.88rem] font-medium transition-colors ${
+                tab === t.id ? "bg-surface text-fog shadow-[0_1px_2px_rgba(28,27,24,0.08)]" : "text-dim hover:text-mist"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </section>
 
-      {rollup.rooms.length > 0 && (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:items-start">
-          <Rooms rooms={rollup.rooms} />
-          <TodoList todos={todos} buildingId={buildingId} audits={audits} />
-        </div>
+      {tab === "overview" &&
+        (rollup.rooms.length > 0 ? (
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:items-start">
+            <Rooms rooms={rollup.rooms} />
+            <TodoList todos={todos} buildingId={buildingId} audits={audits} />
+          </div>
+        ) : (
+          <NoRoomsYet name={building.name} />
+        ))}
+
+      {tab === "charts" && (rollup.rooms.length > 0 ? <PlaceCharts building={building} audits={audits} /> : <NoRoomsYet name={building.name} />)}
+
+      {tab === "report" && (rollup.rooms.length > 0 ? <ReportBrief /> : <NoRoomsYet name={building.name} />)}
+
+      {tab === "details" && (
+        <section className="panel p-5 sm:p-7">
+          <PlaceEditor building={building} />
+          <div className="mt-8 border-t border-line pt-5">
+            {confirmDelete ? (
+              <div className="flex flex-wrap items-center gap-2 rounded-xl bg-ember/[0.07] px-3.5 py-2.5 text-[0.86rem]">
+                <span className="text-mist">
+                  Delete {building.name} and its {rollup.rooms.length} room{rollup.rooms.length === 1 ? "" : "s"}? This can&apos;t be undone.
+                </span>
+                <button onClick={() => removeBuilding(building.id)} className="rounded-full bg-ember px-3.5 py-1.5 text-[0.82rem] font-medium text-white">
+                  Delete
+                </button>
+                <button onClick={() => setConfirmDelete(false)} className="rounded-full px-3 py-1.5 text-[0.82rem] text-mist hover:text-fog">
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => setConfirmDelete(true)} className="text-[0.86rem] text-dim hover:text-ember">
+                Delete this place
+              </button>
+            )}
+          </div>
+        </section>
       )}
+    </div>
+  );
+}
+
+function NoRoomsYet({ name }: { name: string }) {
+  return (
+    <div className="panel p-8 text-center">
+      <p className="mx-auto max-w-md text-[0.92rem] leading-relaxed text-mist">
+        Nothing to show for {name} yet. Scan a room on the Scanner and tap <span className="font-medium text-fog">Add to place</span>.
+      </p>
+      <Link href="/scan" className="mt-4 inline-block rounded-full bg-fog px-4 py-2 text-[0.85rem] font-medium text-ink hover:bg-fog/85">
+        Go to the Scanner
+      </Link>
+    </div>
+  );
+}
+
+function PencilIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4" />
+    </svg>
+  );
+}
+
+// ---- the place's charts ------------------------------------------------------------
+
+function PlaceCharts({ building, audits }: { building: Building; audits: SavedAudit[] }) {
+  const rollup = useMemo(() => rollupBuilding(audits), [audits]);
+  const settings = rollup.rooms[0]?.audit.settings;
+  const offenders = rollup.offenders;
+
+  // The place's total waste after each scan day: the latest scan of every room known by then.
+  const timeline = useMemo(() => {
+    const days = [...new Set(audits.map((a) => a.at.slice(0, 10)))].sort();
+    return days.map((d) => ({ day: d, waste: rollupBuilding(audits.filter((a) => a.at.slice(0, 10) <= d)).afterHoursCost }));
+  }, [audits]);
+  const tMax = Math.max(1, ...timeline.map((t) => t.waste));
+  const rMax = Math.max(1, ...rollup.rooms.map((r) => r.afterHoursCost + r.typicalCost));
+
+  if (!settings) return null;
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-5 md:grid-cols-2">
+        <Card title="Each room's yearly cost" sub="Needed while people use it, and wasted while it's empty">
+          <ul className="space-y-3">
+            {rollup.rooms.map((r) => (
+              <li key={r.room}>
+                <div className="flex items-baseline justify-between gap-3 text-[0.84rem]">
+                  <span className="truncate text-fog">{r.room}</span>
+                  <span className="font-mono text-mist">
+                    {fmtMoney(r.typicalCost)} + <span className="text-ember">{fmtMoney(r.afterHoursCost)}</span>
+                  </span>
+                </div>
+                <div className="mt-1 flex h-3 overflow-hidden rounded-full bg-surface2">
+                  <span className="h-full bg-cyan/60" style={{ width: `${(r.typicalCost / rMax) * 100}%` }} />
+                  <span className="h-full bg-ember" style={{ width: `${(r.afterHoursCost / rMax) * 100}%` }} />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+        <Card title="Waste over time" sub="The whole place's yearly waste after each day you scanned">
+          {timeline.length < 2 ? (
+            <p className="text-[0.86rem] leading-relaxed text-mist">
+              Scan a room again after fixing something and this shows whether the total is going down.
+            </p>
+          ) : (
+            <div className="flex h-40 items-end gap-2">
+              {timeline.map((t, i) => (
+                <div key={t.day} className="flex min-w-0 flex-1 flex-col items-center gap-1">
+                  <span className="font-mono text-[0.68rem] text-mist">{fmtMoney(t.waste)}</span>
+                  <span className={`w-full max-w-12 rounded-t-md ${i === timeline.length - 1 ? "bg-ember" : "bg-ember/40"}`} style={{ height: `${Math.max(4, (t.waste / tMax) * 110)}px` }} />
+                  <span className="truncate text-[0.66rem] text-dim">{new Date(t.day + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+      <div className="grid gap-5 md:grid-cols-2">
+        <BillCompare offenders={offenders} settings={settings} />
+        <EmptyTime settings={settings} home={building.typeId === "home"} />
+      </div>
+      <MoneyOverTime offenders={offenders} settings={settings} />
+      <div className="grid gap-5 md:grid-cols-2">
+        <LoadMixPanel offenders={offenders} />
+        {offenders.length > 0 && <EfficiencyPanel offenders={offenders} settings={settings} />}
+      </div>
+      <EquivalenceStrip co2Kg={rollup.co2Kg} dollars={rollup.afterHoursCost} />
+      <BenchmarkPanel offenders={offenders} building={building} settings={settings} />
     </div>
   );
 }
