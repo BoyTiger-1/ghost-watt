@@ -20,7 +20,7 @@
  *     session with no way to tell the user it happened.
  */
 
-const VERSION = "gw-v2";
+const VERSION = "gw-v3";
 const SHELL = `${VERSION}-shell`;
 const RUNTIME = `${VERSION}-runtime`;
 
