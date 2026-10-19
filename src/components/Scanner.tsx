@@ -1,11 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { PageHeader } from "./PageHeader";
-import { BuildingBar } from "./BuildingBar";
 import { BudgetPlanner } from "./BudgetPlanner";
 import { GridPulse } from "./GridPulse";
 import { SolarOffset } from "./SolarOffset";
@@ -30,6 +28,10 @@ import { UploadMode } from "./scan/UploadMode";
 import { CaptureCard } from "./scan/CaptureCard";
 import { ClearWorkDialog } from "./scan/ClearWorkDialog";
 import { Tour, TOUR_KEY } from "./scan/Tour";
+import { Drawer } from "./scan/Drawer";
+import { PlaceSelect } from "./scan/PlaceSelect";
+import { AddToPlace } from "./scan/AddToPlace";
+import { MoreMenu } from "./scan/MoreMenu";
 import { clearWorkspace, eraseEverything, loadWorkspace, saveWorkspace } from "@/lib/workspace";
 import { Icon } from "./scan/icons";
 import { analysisSquare } from "@/lib/image";
@@ -58,11 +60,15 @@ import {
   type GeoContext,
 } from "@/lib/capture";
 import type { Building, SavedAudit } from "@/lib/storage";
-import { addBuilding, currentStore, newBuilding, removeAudit, removeCalibration, upsertAudit, upsertCalibration, useStore } from "@/lib/useStore";
+import { addBuilding, currentStore, newBuilding, setActiveBuilding, removeAudit, removeCalibration, upsertAudit, upsertCalibration, useStore } from "@/lib/useStore";
+import { BUILDING_TYPE_BY_ID } from "@/lib/benchmark";
 import type { AnalysisResult, AnalyzeError, AuditSettings } from "@/lib/types";
 
 type Mode = "camera" | "upload";
 type ResultTab = "devices" | "fix" | "charts" | "report";
+
+/** Rooms saved in a place: one per room name, however many times it was scanned. */
+const rollupRoomCount = (audits: SavedAudit[]) => new Set(audits.map((a) => (a.areas[0] ?? "").trim().toLowerCase())).size;
 
 /** The saved-scan id a capture writes to, so a re-analysis replaces rather than duplicates. */
 const auditIdFor = (captureId: string) => `scan_${captureId}`;
@@ -340,6 +346,9 @@ export function Scanner() {
 
   // ---- the work in progress, kept on this device ---------------------------
 
+  /** Captures saved to a place, and the room name each was saved as. Nothing is saved until it's added. */
+  const [added, setAdded] = useState<Record<string, { buildingId: string; room: string }>>({});
+
   /** True once the saved work has been read, so an empty first render never overwrites it. */
   const [restored, setRestored] = useState(false);
   useEffect(() => {
@@ -349,6 +358,7 @@ export function Scanner() {
       if (ws && !capturesRef.current.length) {
         setCaptures(ws.captures);
         setSelectedId(ws.selectedId);
+        setAdded(ws.added);
         // Carry on numbering where the saved work left off.
         for (const c of ws.captures) {
           const m = /^(Photo|Video) (\d+)$/.exec(c.name);
@@ -368,9 +378,9 @@ export function Scanner() {
   }, []);
   useEffect(() => {
     if (!restored) return;
-    const t = setTimeout(() => saveWorkspace(captures, selectedId), 800);
+    const t = setTimeout(() => saveWorkspace(captures, selectedId, added), 800);
     return () => clearTimeout(t);
-  }, [captures, selectedId, restored]);
+  }, [captures, selectedId, added, restored]);
 
   const [confirmClear, setConfirmClear] = useState(false);
 
@@ -390,6 +400,7 @@ export function Scanner() {
     for (const c of capturesRef.current) if (c.videoUrl) URL.revokeObjectURL(c.videoUrl);
     setCaptures([]);
     setSelectedId(null);
+    setAdded({});
     setOverride({});
     setTab("devices");
     counter.current = { photo: 0, video: 0 };
@@ -653,6 +664,12 @@ export function Scanner() {
     });
     // The saved room goes with it: removing a capture is saying it was not a reading to keep.
     removeAudit(auditIdFor(id));
+    setAdded((prev) => {
+      if (!(id in prev)) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
   }
 
   // ---- pricing ------------------------------------------------------------
@@ -763,34 +780,26 @@ export function Scanner() {
   }, [done]);
 
   /**
-   * Every finished capture is saved as a room of the active building, and
-   * re-saved whenever its pricing or its name changes.
-   *
-   * Saving used to be a button, and a brief or a building roll-up that depended
-   * on someone having pressed it was a brief that usually said "nothing saved".
-   * The saved record is what the rooms page, the brief and the building total
-   * are built from, so it is written as soon as there is a reading to write.
+   * A scan is saved to My places only once it's added to a place. After that it
+   * is kept up to date there as its reading, corrections or prices change.
    */
-  const buildingIdRef = useRef(building.id);
-  useEffect(() => {
-    buildingIdRef.current = building.id;
-  }, [building.id]);
   useEffect(() => {
     if (!ready) return;
     let alive = true;
     const t = setTimeout(async () => {
       for (const p of priced) {
         const r = p.c.result;
-        if (!r || p.c.status !== "done") continue;
+        const where = added[p.c.id];
+        if (!where || !r || p.c.status !== "done") continue;
         const id = auditIdFor(p.c.id);
         const existing = currentStore().audits.find((a) => a.id === id);
         const thumb = existing?.thumb ?? (await thumbOf(p.c.dataUrl));
         if (!alive) return;
         const audit: SavedAudit = {
           id,
-          buildingId: existing?.buildingId ?? buildingIdRef.current,
+          buildingId: where.buildingId,
           at: existing?.at ?? new Date().toISOString(),
-          areas: [p.c.name],
+          areas: [where.room],
           offenders: p.offenders,
           settings: captureSettings(settings, { geo: p.c.geo ?? null }, rateQualityBase).settings,
           mode: r.mode,
@@ -808,7 +817,7 @@ export function Scanner() {
       alive = false;
       clearTimeout(t);
     };
-  }, [priced, ready, settings, rateQualityBase]);
+  }, [priced, ready, settings, rateQualityBase, added]);
 
   // A finished capture gets a tone and, if asked, a spoken summary.
   const announcedRef = useRef(new Set<string>());
@@ -881,43 +890,85 @@ export function Scanner() {
     setShowSettings(true);
   }
 
-  // Escape closes the settings panel.
-  useEffect(() => {
-    if (!showSettings) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setShowSettings(false);
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [showSettings]);
 
-  const settingsButton = (
+  const PLACE_WORD: Record<UsageContext, string> = { home: "Home", school: "School", office: "Office" };
+  const priceChip = (
     <button
       onClick={() => setShowSettings(true)}
       aria-haspopup="dialog"
       data-tour="settings"
-      className="inline-flex min-w-0 items-center gap-2 rounded-full bg-fog/[0.06] px-3.5 py-2 text-[0.8rem] font-medium text-mist transition-colors hover:bg-fog/[0.1] hover:text-fog sm:text-[0.82rem]"
+      title="Building and prices"
+      className="inline-flex min-w-0 items-center gap-2 rounded-full bg-fog/[0.06] px-3.5 py-2.5 text-[0.84rem] font-medium text-mist transition-colors hover:bg-fog/[0.1] hover:text-fog"
     >
       <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" aria-hidden>
         <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
         <circle cx="16" cy="7" r="2" />
         <circle cx="10" cy="17" r="2" />
       </svg>
-      <span className="truncate">{building.name}</span>
+      {PLACE_WORD[place]}
       <span className="text-dim">·</span>
-      <span className="shrink-0 font-mono text-[0.76rem]">${settings.ratePerKwh.toFixed(2)}/kWh</span>
+      <span className="shrink-0 font-mono text-[0.78rem]">${settings.ratePerKwh.toFixed(2)}/kWh</span>
     </button>
   );
 
-  const helpButton = (
+  const [addOpen, setAddOpen] = useState(0);
+  const addedHere = done.filter((p) => added[p.c.id]);
+  const allAdded = done.length > 0 && addedHere.length === done.length;
+  const addedPlace = allAdded ? store.buildings.find((b) => b.id === added[done[0].c.id]?.buildingId) : undefined;
+  const addButton = hasResults && (
     <button
-      onClick={() => setTouring(true)}
-      data-tour="help"
-      aria-label="Show me around"
-      title="Show me around"
-      className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-fog/[0.06] text-[0.95rem] font-semibold text-mist transition-colors hover:bg-fog/[0.1] hover:text-fog"
+      onClick={() => setAddOpen((n) => n + 1)}
+      className={`inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-[0.92rem] font-semibold shadow-[0_8px_20px_-10px_rgba(168,97,12,0.7)] transition-transform hover:scale-[1.02] active:scale-[0.98] ${
+        allAdded ? "bg-lime text-white" : "bg-sodium text-black"
+      }`}
     >
-      ?
+      {allAdded ? (
+        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M5 12.5l4.5 4.5L19 7.5" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" aria-hidden>
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      )}
+      {allAdded ? `Saved to ${addedPlace?.name ?? "a place"}` : "Add to place"}
     </button>
   );
+
+  const moreMenu = (
+    <MoreMenu
+      items={[
+        { label: "Building and prices", onClick: () => setShowSettings(true) },
+        { label: "Show me around", onClick: () => setTouring(true) },
+        ...(captures.length ? [{ label: "Clear current work", danger: true, onClick: () => setConfirmClear(true) }] : []),
+      ]}
+    />
+  );
+
+  function addToPlace(target: { buildingId: string } | { newPlace: { name: string; typeId: string } }, rooms: { captureId: string; room: string }[]) {
+    let buildingId: string;
+    let name: string;
+    let typeId: string;
+    if ("newPlace" in target) {
+      const b = newBuilding(target.newPlace.name, target.newPlace.typeId, building.regionCode);
+      addBuilding(b);
+      buildingId = b.id;
+      name = b.name;
+      typeId = b.typeId;
+    } else {
+      const b = store.buildings.find((x) => x.id === target.buildingId)!;
+      setActiveBuilding(b.id);
+      buildingId = b.id;
+      name = b.name;
+      typeId = b.typeId;
+    }
+    // Prices now follow the place the rooms belong to.
+    choosePlace(contextForBuildingType(typeId));
+    setAdded((prev) => ({ ...prev, ...Object.fromEntries(rooms.map((r) => [r.captureId, { buildingId, room: r.room }])) }));
+    setCaptures((prev) => prev.map((c) => (rooms.find((r) => r.captureId === c.id) ? { ...c, name: rooms.find((r) => r.captureId === c.id)!.room } : c)));
+    setAddOpen(0);
+    setToast(`Added ${rooms.length} room${rooms.length === 1 ? "" : "s"} to ${name}. Find ${rooms.length === 1 ? "it" : "them"} in My places.`);
+  }
 
   const roomChip = roomName && (
     <span className="inline-flex items-center gap-1.5 rounded-full bg-cyan/10 py-1.5 pl-3.5 pr-1.5 text-[0.82rem] text-cyan">
@@ -952,12 +1003,9 @@ export function Scanner() {
             <ModeSwitch mode={mode} onChange={setMode} />
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <div data-tour="place">
-              <PlacePicker place={place} onChange={choosePlace} />
-            </div>
-            {settingsButton}
             {roomChip}
-            {helpButton}
+            {priceChip}
+            {moreMenu}
           </div>
         </div>
       </div>
@@ -968,21 +1016,10 @@ export function Scanner() {
             <ModeSwitch mode={mode} onChange={setMode} />
           </div>
           <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-            <div data-tour="place">
-              <PlacePicker place={place} onChange={choosePlace} />
-            </div>
-            {settingsButton}
             {roomChip}
-            {helpButton}
-            <button
-              onClick={() => setConfirmClear(true)}
-              className="inline-flex items-center gap-1.5 rounded-full border border-ember/35 px-3.5 py-2 text-[0.82rem] font-medium text-ember transition-colors hover:bg-ember/[0.08]"
-            >
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <path d="M4 7h16M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" />
-              </svg>
-              Clear current work
-            </button>
+            {priceChip}
+            {addButton}
+            {moreMenu}
           </div>
         </div>
       )}
@@ -1142,98 +1179,93 @@ export function Scanner() {
         </div>
       )}
 
-      {/* ---- the building and the figures everything is priced with ----
-          Portalled to <body> so it sits above the site header, outside this section's stacking context. */}
-      {typeof document !== "undefined" &&
-        createPortal(
-          <AnimatePresence>
-            {showSettings && (
-              <>
-                <motion.div
-                  key="scrim"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  onClick={() => setShowSettings(false)}
-                  className="no-print fixed inset-0 z-[70] bg-black/35 backdrop-blur-[2px]"
-                  aria-hidden
-                />
-                <motion.aside
-                  key="panel"
-                  role="dialog"
-                  aria-modal="true"
-                  aria-label="Building and prices"
-                  initial={{ x: "100%" }}
-                  animate={{ x: 0 }}
-                  exit={{ x: "100%" }}
-                  transition={{ type: "spring", stiffness: 380, damping: 38 }}
-                  className="no-print fixed inset-y-0 right-0 z-[71] flex w-full max-w-md flex-col border-l border-line bg-ink pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] shadow-[0_0_60px_-10px_rgba(0,0,0,0.35)]"
-                >
-                  <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-4">
-                    <div>
-                      <h2 className="text-[1.05rem] font-semibold text-fog">Building and prices</h2>
-                      <p className="text-[0.78rem] text-dim">What every number on this page is priced with.</p>
-                    </div>
-                    <button onClick={() => setShowSettings(false)} aria-label="Close" className="grid h-9 w-9 place-items-center rounded-full text-mist hover:bg-fog/[0.06] hover:text-fog">
-                      <Icon name="close" className="h-4 w-4" />
-                    </button>
-                  </div>
-                  <div className="flex-1 space-y-6 overflow-y-auto px-5 py-5">
-                    {ready && (
-                      <section className="space-y-2">
-                        <h3 className="text-[0.8rem] font-medium text-mist">Your building</h3>
-                        <BuildingBar building={building} buildings={store.buildings} liveRate={liveRate} onFetchRate={fetchLiveRate} />
-                      </section>
-                    )}
-                    <section className="space-y-4">
-                      <div>
-                        <h3 className="text-[0.8rem] font-medium text-mist">Prices and hours</h3>
-                        <p className="mt-0.5 text-[0.76rem] leading-relaxed text-dim">
-                          Change these if you know better. The price on your electric bill beats every estimate
-                          {override.ratePerKwh === undefined && billRate !== undefined ? ", and it's already in use" : ""}.
-                        </p>
-                      </div>
-                  <Field
-                    label="Price of electricity (dollars per kWh, on your bill)"
-                    value={Math.round(settings.ratePerKwh * 1000) / 1000}
-                    step={0.01}
-                    onChange={(v) => setOverride((s) => ({ ...s, ratePerKwh: v }))}
-                  />
-                  <Field
-                    label="Hours a year the place is empty"
-                    value={Math.round(settings.unoccupiedHoursPerYear)}
-                    step={100}
-                    onChange={(v) => setOverride((s) => ({ ...s, unoccupiedHoursPerYear: v }))}
-                  />
-                  <Field
-                    label="Carbon per kWh from your grid (kg of CO₂)"
-                    value={Math.round(settings.co2PerKwh * 1000) / 1000}
-                    step={0.005}
-                    onChange={(v) => setOverride((s) => ({ ...s, co2PerKwh: v }))}
-                  />
-                  <Field
-                    label="Demand charge, businesses only (dollars per kW each month, optional)"
-                    value={settings.demandChargePerKw ?? 0}
-                    step={0.5}
-                    onChange={(v) => setOverride((s) => ({ ...s, demandChargePerKw: v }))}
-                  />
-                  <button
-                    onClick={() => {
-                      setOverride({});
-                      setLiveRate(null);
-                    }}
-                    className="text-[0.76rem] text-dim hover:text-cyan"
-                  >
-                    ↺ Back to the building&apos;s own figures
-                  </button>
-                    </section>
-                  </div>
-                </motion.aside>
-              </>
-            )}
-          </AnimatePresence>,
-          document.body,
-        )}
+      {/* ---- the place and the figures everything is priced with ---- */}
+      <Drawer open={showSettings} onClose={() => setShowSettings(false)} title="Building and prices" sub="What every number on this page is priced with.">
+        <div className="space-y-7">
+          {ready && (
+            <section>
+              <h3 className="text-[0.92rem] font-medium text-fog">Place</h3>
+              <p className="mt-0.5 text-[0.8rem] text-dim">Its state and opening hours set the prices below. Right-click to rename or edit it.</p>
+              <div className="mt-2.5">
+                <PlaceSelect buildings={store.buildings} activeId={building.id} />
+              </div>
+              <p className="mt-2 text-[0.78rem] text-dim">
+                {BUILDING_TYPE_BY_ID[building.typeId]?.label ?? "Place"} · {region.name}
+              </p>
+            </section>
+          )}
+          <section>
+            <h3 className="text-[0.92rem] font-medium text-fog">What kind of place is this room in?</h3>
+            <p className="mt-0.5 text-[0.8rem] text-dim">Homes and businesses pay different prices and sit empty at different times.</p>
+            <div className="mt-2.5">
+              <PlacePicker place={place} onChange={choosePlace} label={false} />
+            </div>
+          </section>
+          <section className="space-y-4">
+            <div>
+              <h3 className="text-[0.92rem] font-medium text-fog">Prices and hours</h3>
+              <p className="mt-0.5 text-[0.8rem] leading-relaxed text-dim">
+                Change these if you know better. The price on your electric bill beats every estimate
+                {override.ratePerKwh === undefined && billRate !== undefined ? ", and it's already in use" : ""}.
+              </p>
+            </div>
+            <Field
+              label="Price of electricity (dollars per kWh, on your bill)"
+              value={Math.round(settings.ratePerKwh * 1000) / 1000}
+              step={0.01}
+              onChange={(v) => setOverride((s) => ({ ...s, ratePerKwh: v }))}
+            />
+            <Field
+              label="Hours a year the place is empty"
+              value={Math.round(settings.unoccupiedHoursPerYear)}
+              step={100}
+              onChange={(v) => setOverride((s) => ({ ...s, unoccupiedHoursPerYear: v }))}
+            />
+            <Field
+              label="Carbon per kWh from your grid (kg of CO₂)"
+              value={Math.round(settings.co2PerKwh * 1000) / 1000}
+              step={0.005}
+              onChange={(v) => setOverride((s) => ({ ...s, co2PerKwh: v }))}
+            />
+            <Field
+              label="Demand charge, businesses only (dollars per kW each month, optional)"
+              value={settings.demandChargePerKw ?? 0}
+              step={0.5}
+              onChange={(v) => setOverride((s) => ({ ...s, demandChargePerKw: v }))}
+            />
+            <button
+              onClick={() => {
+                setOverride({});
+                setLiveRate(null);
+              }}
+              className="text-[0.76rem] text-dim hover:text-cyan"
+            >
+              ↺ Back to the building&apos;s own figures
+            </button>
+            <button onClick={fetchLiveRate} className="block w-full rounded-xl border border-line px-3.5 py-2.5 text-left text-[0.84rem] text-mist transition-colors hover:border-fog/40 hover:text-fog">
+              {liveRate ? `Published price for this state: $${liveRate.ratePerKwh.toFixed(3)} per kWh` : "Look up the latest published price for this state"}
+              {liveRate && <span className="mt-0.5 block text-[0.74rem] text-dim">{liveRate.source}</span>}
+            </button>
+          </section>
+        </div>
+      </Drawer>
+
+      <AddToPlace
+        key={addOpen}
+        open={addOpen > 0}
+        onClose={() => setAddOpen(0)}
+        buildings={store.buildings}
+        activeId={building.id}
+        roomCounts={Object.fromEntries(store.buildings.map((b) => [b.id, rollupRoomCount(store.audits.filter((x) => x.buildingId === b.id))]))}
+        items={done.map((p) => ({
+          captureId: p.c.id,
+          name: p.c.name,
+          thumb: p.c.keyframes?.[0]?.annotated ?? p.c.dataUrl ?? undefined,
+          wastePerYear: counted(p.offenders).reduce((t, o) => t + o.costPerYear, 0),
+          savedIn: added[p.c.id],
+        }))}
+        onAdd={addToPlace}
+      />
 
       <Tour open={touring} onClose={() => setTouring(false)} />
       <ClearWorkDialog open={confirmClear} count={captures.length} onCancel={() => setConfirmClear(false)} onConfirm={clearWork} />
@@ -1258,7 +1290,7 @@ export function Scanner() {
 // ---- subcomponents -----------------------------------------------------
 
 /** Where the scan is. Sets typical hours, empty hours and the price sector. */
-function PlacePicker({ place, onChange }: { place: UsageContext; onChange: (p: UsageContext) => void }) {
+function PlacePicker({ place, onChange, label = true }: { place: UsageContext; onChange: (p: UsageContext) => void; label?: boolean }) {
   const t = useT();
   const opts: { id: UsageContext; label: string }[] = [
     { id: "home", label: t("scan.home") },
@@ -1266,8 +1298,8 @@ function PlacePicker({ place, onChange }: { place: UsageContext; onChange: (p: U
     { id: "office", label: t("scan.office") },
   ];
   return (
-    <div className="flex shrink-0 items-center justify-end gap-3">
-      <span className="hidden text-[0.78rem] text-dim sm:inline">{t("scan.scanning")}</span>
+    <div className="flex shrink-0 items-center gap-3">
+      {label && <span className="hidden text-[0.78rem] text-dim sm:inline">{t("scan.scanning")}</span>}
       <div className="flex rounded-full bg-fog/[0.06] p-0.5" role="radiogroup" aria-label="Where you are scanning">
         {opts.map((o) => (
           <button

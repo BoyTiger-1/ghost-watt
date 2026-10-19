@@ -11,7 +11,7 @@
 import { useEffect, useState } from "react";
 import { PageHeader } from "./PageHeader";
 import { motion } from "framer-motion";
-import { ScheduleEditor } from "./BuildingBar";
+import { ScheduleEditor } from "./PlaceEditor";
 import { REGIONS } from "@/lib/grid";
 import { BUILDING_TYPES } from "@/lib/benchmark";
 import { useStore, updateBuilding, setActiveBuilding, replaceStore } from "@/lib/useStore";
