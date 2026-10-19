@@ -80,7 +80,8 @@ export default function MethodologyPage() {
               This is the code that runs, quoted from the source with its real line numbers. A test
               fails if it ever drifts from what is shown here.
             </p>
-            <div className="mt-6 hidden sm:block">
+            {/* wider than the prose column on a large screen, so whole lines fit */}
+            <div className="mt-6 hidden sm:block xl:w-[calc(100%+7rem)]">
               <CodeWindow files={[ENERGY_TS, DEVICES_TS]} />
             </div>
             <div className="mt-6 sm:hidden">
