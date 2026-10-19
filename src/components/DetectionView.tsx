@@ -38,6 +38,8 @@ interface Mark {
   count: number;
   /** Null for a sighting: off devices are not costed. */
   cost: number | null;
+  /** Reported by the model but not backed by the detector: drawn dashed, not counted. */
+  unverified?: boolean;
 }
 
 interface Placed {
@@ -71,7 +73,7 @@ export function DetectionView({
     if (!photo) return [];
     const out: Placed[] = [];
     for (const o of photo.offenders) {
-      const mark: Mark = { id: o.id, label: o.label, state: o.state, count: o.count, cost: o.costPerYear };
+      const mark: Mark = { id: o.id, label: o.label, state: o.state, count: o.count, cost: o.costPerYear, unverified: o.unverified };
       (o.boxes ?? []).forEach((box, n) => out.push({ key: `${o.id}-${n}`, box, mark, n }));
     }
     for (const [i, s] of (photo.sightings ?? []).entries()) {
@@ -216,7 +218,10 @@ export function DetectionView({
                   width: `${(x2 - x1) * 100}%`,
                   height: `${(y2 - y1) * 100}%`,
                   background: isHot ? `${color}22` : "transparent",
-                  boxShadow: `inset 0 0 0 1px ${color}${isHot ? "ff" : "66"}`,
+                  boxShadow: p.mark.unverified ? "none" : `inset 0 0 0 1px ${color}${isHot ? "ff" : "66"}`,
+                  outline: p.mark.unverified ? `1.5px dashed ${color}` : undefined,
+                  outlineOffset: p.mark.unverified ? "-1px" : undefined,
+                  opacity: p.mark.unverified && !isHot ? 0.75 : undefined,
                   zIndex: isHot ? 20 : 10,
                 }}
               >
@@ -314,10 +319,12 @@ function ToggleChip({
 }
 
 function tag(m: Mark) {
+  if (m.unverified) return `unverified ×${m.count}`;
   return m.cost === null ? `off ×${m.count}` : `${fmtMoney(m.cost)}/yr`;
 }
 
 function costWords(m: Mark) {
+  if (m.unverified) return `${m.count} reported by the model but unverified, not counted`;
   return m.cost === null
     ? `${m.count} seen switched off, costing nothing`
     : `${fmtMoney(m.cost)} a year for all ${m.count}`;
@@ -369,7 +376,7 @@ async function downloadAnnotated(photo: DetectionPhoto, placed: Placed[], labels
   }
 
   // Footer stamp: what this is and where the numbers came from.
-  const total = photo.offenders.reduce((s, o) => s + o.costPerYear, 0);
+  const total = photo.offenders.reduce((s, o) => s + (o.unverified ? 0 : o.costPerYear), 0);
   const stamp = `GhostWatt · ${photo.name} · ${fmtMoney(total)}/yr phantom load · ${photo.engine}`;
   const sh = font + 12;
   ctx.fillStyle = "rgba(0,0,0,0.72)";

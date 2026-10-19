@@ -23,7 +23,8 @@ import { Icon } from "./scan/icons";
 import { analysisSquare } from "@/lib/image";
 import type { CategorizedObservation } from "@/lib/parse";
 import { ON_DEVICE_ENGINE, describeAnalyzeError, useEngine } from "@/lib/engine";
-import { aggregate, fmtCo2, fmtKwh, fmtMoney, fmtMoneyFull } from "@/lib/energy";
+import { aggregate, counted, fmtCo2, fmtKwh, fmtMoney, fmtMoneyFull } from "@/lib/energy";
+import { crossCheck } from "@/lib/crosscheck";
 import { costRange, RATE_SIGMA, type RateQuality } from "@/lib/estimate";
 import { regionOrDefault, regionRate } from "@/lib/grid";
 import { occupiedHours, unoccupiedHours, SCHEDULE_BY_ID, SCHEDULE_PRESETS } from "@/lib/schedule";
@@ -458,6 +459,8 @@ export function Scanner() {
           throw Object.assign(new Error(describeAnalyzeError(res.status, errBody)), { code: errBody?.code ?? "engine-failed" });
         }
         const result = (await res.json()) as AnalysisResult;
+        // Two readers of one picture: what the detector cannot back is shown, not counted.
+        result.observations = crossCheck(result.observations ?? [], onDevice);
         patch(id, { status: "done", result, errorCode: undefined, stage: undefined, progress: undefined });
       } catch (err) {
         // No invented answer. The card shows the error and, when the detector saw
@@ -542,7 +545,10 @@ export function Scanner() {
     return flat.sort((a, b) => b.offender.costPerYear - a.offender.costPerYear);
   }, [priced]);
 
+  /** Every line, unverified ones included, for the list. */
   const offenders = useMemo(() => ranked.map((r) => r.offender), [ranked]);
+  /** The lines that count toward totals, plans and exports. */
+  const countedOffenders = useMemo(() => counted(offenders), [offenders]);
   const totals = useMemo(() => aggregate(offenders), [offenders]);
   const done = priced.filter((p) => p.c.result);
   const rateQuality = useMemo<RateQuality>(() => {
@@ -550,7 +556,7 @@ export function Scanner() {
     const qs = done.map((p) => p.rateQuality);
     return qs.length ? qs.reduce((a, b) => (RATE_SIGMA[b] > RATE_SIGMA[a] ? b : a)) : "national";
   }, [done]);
-  const range = useMemo(() => costRange(offenders, rateQuality), [offenders, rateQuality]);
+  const range = useMemo(() => costRange(countedOffenders, rateQuality), [countedOffenders, rateQuality]);
   const maxCost = ranked[0]?.offender.costPerYear ?? 0;
   const hasResults = done.length > 0;
   const working = captures.some((c) => c.status === "working" || c.status === "pending");
@@ -627,9 +633,9 @@ export function Scanner() {
 
   const basisMix = useMemo(() => {
     const m = { measured: 0, ai: 0, catalog: 0 };
-    for (const o of offenders) m[o.basis ?? "catalog"]++;
+    for (const o of countedOffenders) m[o.basis ?? "catalog"]++;
     return m;
-  }, [offenders]);
+  }, [countedOffenders]);
 
   return (
     <section id="scanner" className="relative z-10 mx-auto max-w-6xl scroll-mt-20 px-4 pb-16 pt-[4.25rem] sm:px-6 md:pt-24">
@@ -717,19 +723,21 @@ export function Scanner() {
                 captures={done.length}
                 basisMix={basisMix}
                 working={working}
-                typical={offenders.reduce((t, o) => t + (o.typicalCostPerYear ?? 0), 0)}
+                typical={countedOffenders.reduce((t, o) => t + (o.typicalCostPerYear ?? 0), 0)}
+                unverified={totals.unverifiedCost}
+                unverifiedCount={offenders.length - countedOffenders.length}
                 place={place}
               />
 
-              <ExportBar offenders={offenders} settings={settings} buildingName={building.name} savedTo={ready ? building.name : undefined} roomCount={done.length} />
+              <ExportBar offenders={countedOffenders} settings={settings} buildingName={building.name} savedTo={ready ? building.name : undefined} roomCount={done.length} />
 
-              <ContributeBar offenders={offenders} mode={auditMode} defaultArea={done[0]?.c.name ?? building.name} />
+              <ContributeBar offenders={countedOffenders} mode={auditMode} defaultArea={done[0]?.c.name ?? building.name} />
 
               <TabBar tab={tab} onChange={setTab} count={ranked.length} />
 
               {tab === "offenders" && (
                 <div className="space-y-4">
-                  {offenders.length > 0 && <EfficiencyPanel offenders={offenders} settings={settings} />}
+                  {countedOffenders.length > 0 && <EfficiencyPanel offenders={countedOffenders} settings={settings} />}
                   {detectionPhotos.length > 0 && <DetectionView photos={detectionPhotos} hovered={hovered} onHover={setHovered} />}
                   {ranked.length === 0 && (
                     <div className="panel p-6 text-center text-[0.9rem] text-mist">
@@ -759,12 +767,12 @@ export function Scanner() {
                 </div>
               )}
 
-              {tab === "plan" && <BudgetPlanner offenders={offenders} />}
+              {tab === "plan" && <BudgetPlanner offenders={countedOffenders} />}
 
               {tab === "grid" && (
                 <div className="space-y-5">
                   <GridPulse regionCode={building.regionCode} annualKwhWasted={totals.kwhPerYear} />
-                  <WeatherContext lat={building.lat ?? deviceGeo?.lat} lon={building.lon ?? deviceGeo?.lon} offenders={offenders} />
+                  <WeatherContext lat={building.lat ?? deviceGeo?.lat} lon={building.lon ?? deviceGeo?.lon} offenders={countedOffenders} />
                   <SolarOffset
                     lat={building.lat ?? deviceGeo?.lat}
                     lon={building.lon ?? deviceGeo?.lon}
@@ -778,9 +786,9 @@ export function Scanner() {
 
               {tab === "context" && (
                 <div className="space-y-5">
-                  <LoadMixPanel offenders={offenders} />
+                  <LoadMixPanel offenders={countedOffenders} />
                   <EquivalenceStrip co2Kg={totals.co2KgPerYear} dollars={totals.costPerYear} />
-                  <BenchmarkPanel offenders={offenders} building={building} settings={settings} />
+                  <BenchmarkPanel offenders={countedOffenders} building={building} settings={settings} />
                   <BillCalibration
                     bill={building.bill}
                     auditKwhPerYear={totals.kwhPerYear}
@@ -981,6 +989,8 @@ function TotalsHeader({
   basisMix,
   working,
   typical,
+  unverified,
+  unverifiedCount,
   place,
 }: {
   cost: number;
@@ -994,6 +1004,9 @@ function TotalsHeader({
   basisMix: { measured: number; ai: number; catalog: number };
   working: boolean;
   typical: number;
+  /** Annual cost of lines shown but not counted, and how many there are. */
+  unverified: number;
+  unverifiedCount: number;
   place: UsageContext;
 }) {
   const lines = basisMix.measured + basisMix.ai + basisMix.catalog;
@@ -1064,8 +1077,15 @@ function TotalsHeader({
         </div>
       )}
 
-      <div className="mt-4 font-mono text-[0.72rem] text-mist">
-        biggest offender: <span className="text-lime">{topLabel}</span>
+      <div className="mt-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 font-mono text-[0.72rem] text-mist">
+        <span>
+          biggest offender: <span className="text-lime">{topLabel}</span>
+        </span>
+        {unverifiedCount > 0 && (
+          <span className="text-amber" title="The cloud model reported these but the on-device detector could not back them. Confirm or delete each one on its card.">
+            + {fmtMoney(unverified)}/yr in {unverifiedCount} unverified line{unverifiedCount > 1 ? "s" : ""}, not counted
+          </span>
+        )}
       </div>
     </motion.div>
   );

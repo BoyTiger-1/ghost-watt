@@ -148,6 +148,8 @@ export function scoreObservation(
     ...(obs.tech ? { tech: obs.tech } : {}),
     ...(obs.evidence ? { evidence: obs.evidence } : {}),
     ...(obs.boxes?.length ? { boxes: obs.boxes } : {}),
+    ...(obs.verification === "unverified" ? { unverified: true } : {}),
+    ...(obs.confidence !== undefined ? { modelConfidence: obs.confidence } : {}),
   };
 }
 
@@ -162,9 +164,11 @@ export function rankObservations(
     .filter((o): o is Offender => o !== null);
 
   // Merge duplicate categories within one source (e.g. two "monitor" lines).
+  // Unverified lines stay separate from counted ones of the same kind.
   const merged = new Map<string, Offender>();
   for (const o of offenders) {
-    const existing = merged.get(o.categoryId);
+    const mergeKey = o.unverified ? `${o.categoryId}:unverified` : o.categoryId;
+    const existing = merged.get(mergeKey);
     if (existing) {
       existing.count += o.count;
       existing.totalWatts += o.totalWatts;
@@ -182,11 +186,16 @@ export function rankObservations(
           ? (existing.fixCost / existing.annualSavings) * 12
           : null;
     } else {
-      merged.set(o.categoryId, { ...o, ...(o.boxes ? { boxes: [...o.boxes] } : {}) });
+      merged.set(mergeKey, { ...o, id: o.unverified ? `${o.id}-unverified` : o.id, ...(o.boxes ? { boxes: [...o.boxes] } : {}) });
     }
   }
 
   return [...merged.values()].sort((a, b) => b.costPerYear - a.costPerYear);
+}
+
+/** The lines that count: everything the user has not been told to doubt. */
+export function counted<T extends { unverified?: boolean }>(offenders: readonly T[]): T[] {
+  return offenders.filter((o) => !o.unverified);
 }
 
 export interface AuditTotals {
@@ -200,11 +209,15 @@ export interface AuditTotals {
   /** Average continuous draw across the whole audit, W. */
   averageWatts: number;
   topOffender: Offender | null;
+  /** Annual cost of the lines left out of the total because nobody could confirm them. */
+  unverifiedCost: number;
 }
 
-export function aggregate(offenders: Offender[]): AuditTotals {
-  // Don't double-count a shared room-level fix (e.g. one "smart strips" line per
-  // category per source already collapsed); sum fix cost across distinct offenders.
+export function aggregate(all: Offender[]): AuditTotals {
+  // Unverified lines are shown, not summed: a total that quietly included a
+  // device nobody could confirm would be the exact failure this app exists to avoid.
+  const offenders = counted(all);
+  const unverifiedCost = all.reduce((s, o) => s + (o.unverified ? o.costPerYear : 0), 0);
   const totals = offenders.reduce(
     (acc, o) => {
       acc.costPerYear += o.costPerYear;
@@ -231,7 +244,7 @@ export function aggregate(offenders: Offender[]): AuditTotals {
   const topOffender = offenders.length
     ? offenders.reduce((a, b) => (b.costPerYear > a.costPerYear ? b : a))
     : null;
-  return { ...totals, topOffender };
+  return { ...totals, topOffender, unverifiedCost };
 }
 
 // ---- breakdowns ---------------------------------------------------------

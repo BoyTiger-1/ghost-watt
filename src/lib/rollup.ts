@@ -5,6 +5,7 @@
 // because somebody re-photographed it. Everything here is plain arithmetic over
 // saved scans, so the Buildings page works with no server at all.
 
+import { counted } from "./energy";
 import type { SavedAudit } from "./storage";
 import type { Offender } from "./types";
 
@@ -52,7 +53,7 @@ export function rollupRooms(audits: SavedAudit[]): RoomRollup[] {
   for (const list of byRoom.values()) {
     list.sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
     const latest = list[0];
-    const os = latest.offenders;
+    const os = counted(latest.offenders);
     out.push({
       room: roomOf(latest),
       audit: latest,
@@ -69,7 +70,7 @@ export function rollupRooms(audits: SavedAudit[]): RoomRollup[] {
 
 export function rollupBuilding(audits: SavedAudit[]): BuildingRollup {
   const rooms = rollupRooms(audits);
-  const offenders = rooms.flatMap((r) => r.audit.offenders.map((o) => ({ ...o, source: r.room })));
+  const offenders = rooms.flatMap((r) => counted(r.audit.offenders).map((o) => ({ ...o, source: r.room })));
   const modes = new Set(rooms.map((r) => r.audit.mode));
   const mode: SavedAudit["mode"] = modes.size > 1 ? "mixed" : (rooms[0]?.audit.mode ?? "on-device");
   return {
