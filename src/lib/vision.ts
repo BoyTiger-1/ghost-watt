@@ -382,6 +382,10 @@ export async function describeImagesAny(images: string[], prompt: string, schema
   // retired-model path tries its listed fallbacks, then whatever the provider's
   // own model list says accepts images.
   const providers = configuredHosted();
+  // A serverless function has about 60 s in all. Each provider gets a share of
+  // it, so one that hangs cannot take the whole request down with it: the next
+  // provider still gets its turn.
+  const budgetMs = Math.max(8000, Math.min(TIMEOUT_MS, Math.floor(50000 / Math.max(1, providers.length))));
   for (const hosted of providers) {
     const key = keyFor(hosted)!;
     const img = thinImages(images.map(decodeImage), hosted.maxImages ?? 10);
@@ -392,7 +396,7 @@ export async function describeImagesAny(images: string[], prompt: string, schema
       if (tried.has(model)) continue;
       tried.add(model);
       try {
-        const text = await callWithRetry(hosted, img, key, model, prompt, schema);
+        const text = await callWithRetry(hosted, img, key, model, prompt, schema, budgetMs);
         if (text) {
           if (i > 0) discovered.set(hosted.id, model);
           return { ok: true, text, model, provider: `${hosted.label} (hosted)`, kind: "hosted" };
@@ -449,15 +453,38 @@ async function callWithRetry(
   model: string,
   prompt: string,
   schema: object,
+  budgetMs = TIMEOUT_MS,
 ): Promise<string> {
+  const started = Date.now();
   try {
-    return await p.call(img, key, model, prompt, schema);
+    return await withBudget(p.call(img, key, model, prompt, schema), budgetMs, p.label);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "";
     if (!/HTTP (429|5\d\d)/.test(msg)) throw err;
-    await new Promise((r) => setTimeout(r, retryDelayMs(msg)));
-    return await p.call(img, key, model, prompt, schema);
+    const wait = retryDelayMs(msg);
+    const left = budgetMs - (Date.now() - started) - wait;
+    // No time left in this provider's share for a retry: let the next provider have it.
+    if (left < 4000) throw err;
+    await new Promise((r) => setTimeout(r, wait));
+    return await withBudget(p.call(img, key, model, prompt, schema), left, p.label);
   }
+}
+
+/** Give up on a call after `ms`, leaving the underlying request to its own timeout. */
+function withBudget<T>(call: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} did not answer within ${Math.round(ms / 1000)}s`)), ms);
+    call.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
 }
 
 const MAX_RETRY_WAIT_MS = 12000;
