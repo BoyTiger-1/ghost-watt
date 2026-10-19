@@ -11,9 +11,14 @@ const STAYS = [
   ["Your photos and camera frames, in On-device mode.", "The detector runs in your browser. No picture is uploaded, ever, in this mode."],
   ["Every saved scan, room, building, fix and bill.", "Stored in this browser's local storage only. There is no account and no server copy. Clearing site data erases it; Export backup saves a file you keep."],
   ["Your electricity rate, schedule and settings.", "Also local storage. They are sent with a scan request only as numbers (rate, hours), never with anything that identifies you."],
+  ["Display and accessibility choices.", "Theme, text size, language and the rest are stored in this browser and never sent anywhere."],
 ];
 
 const LEAVES = [
+  [
+    "A photo of an electricity bill, if you choose to read one, in Enhanced (cloud) mode only.",
+    "It goes the same way as a scan photo: to this app's server, then to the vision model, then it is discarded. The figures it reads are shown to you to confirm or correct before anything is saved, and only the confirmed numbers are kept, in this browser.",
+  ],
   [
     "A photo or camera frame, in Enhanced (cloud) mode only.",
     "It is sent to this app's own server, which forwards it to the configured vision model provider (for example Anthropic, Groq or OpenAI) to be read. The server does not store it. The provider's own retention policy applies while it processes the request. The pill in the header says Enhanced before you scan, so this never happens without you seeing it.",

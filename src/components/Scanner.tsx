@@ -11,6 +11,7 @@ import { BudgetPlanner } from "./BudgetPlanner";
 import { GridPulse } from "./GridPulse";
 import { SolarOffset } from "./SolarOffset";
 import { ActionPlan } from "./ActionPlan";
+import { useT } from "@/lib/i18n";
 import { BillCalibration } from "./BillCalibration";
 import { ContributeBar } from "./ContributeBar";
 import { WeatherContext } from "./WeatherContext";
@@ -124,6 +125,7 @@ function mergeObservations(lists: CategorizedObservation[][]): CategorizedObserv
 }
 
 export function Scanner() {
+  const t = useT();
   const [mode, setMode] = useState<Mode>("camera");
   const [captures, setCaptures] = useState<Capture[]>([]);
   const [showSettings, setShowSettings] = useState(false);
@@ -667,14 +669,14 @@ export function Scanner() {
   return (
     <section id="scanner" className="relative z-10 mx-auto max-w-6xl scroll-mt-20 px-4 pb-16 pt-[4.25rem] sm:px-6 md:pt-24">
       <div className="mb-3 flex flex-col gap-4 md:mb-6 md:flex-row md:items-end md:justify-between">
-        <PageHeader eyebrow="Scanner" title="Point at the building." accent="See what it's costing you." className="hidden md:block">
-          Point the camera at a room, or add a photo. Every powered device is found, costed at your rate, and matched to the fix that pays back first.{" "}
+        <PageHeader eyebrow={t("nav.scanner")} title={t("scan.title")} accent={t("scan.accent")} className="hidden md:block">
+          {t("scan.intro")}{" "}
           <Link href="/methodology" className="text-cyan underline decoration-cyan/30 underline-offset-4 hover:decoration-cyan">
-            How the numbers work
+            {t("scan.how")}
           </Link>
           .
         </PageHeader>
-        <h1 className="sr-only">Scanner</h1>
+        <h1 className="sr-only">{t("nav.scanner")}</h1>
         <div className="flex flex-col gap-2 md:items-end">
           <ModeSwitch mode={mode} onChange={setMode} />
           <PlacePicker place={place} onChange={choosePlace} />
@@ -700,20 +702,18 @@ export function Scanner() {
         {/* ---- captures ---- */}
         <div className="min-w-0 space-y-3 lg:col-start-1 lg:row-start-1">
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-            <span className="mono-label">captures · {captures.length}</span>
+            <span className="mono-label">{t("scan.captures")} · {captures.length}</span>
             <div className="flex items-center gap-3">
               {captures.length > 0 && (
                 <button onClick={() => setCaptures([])} className="text-[0.74rem] text-dim hover:text-ember">
-                  Clear
+                  {t("scan.clear")}
                 </button>
               )}
             </div>
           </div>
           {captures.length === 0 && (
             <div className="rounded-2xl border border-dashed border-line2 px-4 py-6 text-center text-[0.84rem] leading-relaxed text-mist">
-              {mode === "camera"
-                ? "Take a photo or record a walkthrough. Each one shows up here as it's analysed, and is saved as a room of this building."
-                : "Photos and videos you add show up here as they're analysed, and are saved as rooms of this building."}
+              {mode === "camera" ? t("scan.empty.camera") : t("scan.empty.upload")}
             </div>
           )}
           <AnimatePresence initial={false}>
@@ -909,14 +909,15 @@ export function Scanner() {
 
 /** Where the scan is. Sets typical hours, empty hours and the price sector. */
 function PlacePicker({ place, onChange }: { place: UsageContext; onChange: (p: UsageContext) => void }) {
+  const t = useT();
   const opts: { id: UsageContext; label: string }[] = [
-    { id: "home", label: "Home" },
-    { id: "school", label: "School" },
-    { id: "office", label: "Office" },
+    { id: "home", label: t("scan.home") },
+    { id: "school", label: t("scan.school") },
+    { id: "office", label: t("scan.office") },
   ];
   return (
     <div className="flex items-center justify-between gap-3 md:justify-end">
-      <span className="text-[0.78rem] text-dim">Scanning a</span>
+      <span className="text-[0.78rem] text-dim">{t("scan.scanning")}</span>
       <div className="flex rounded-full bg-fog/[0.06] p-0.5" role="radiogroup" aria-label="Where you are scanning">
         {opts.map((o) => (
           <button
@@ -937,9 +938,10 @@ function PlacePicker({ place, onChange }: { place: UsageContext; onChange: (p: U
 }
 
 function ModeSwitch({ mode, onChange }: { mode: Mode; onChange: (m: Mode) => void }) {
+  const t = useT();
   const opts: { id: Mode; label: string; icon: "camera" | "upload" }[] = [
-    { id: "camera", label: "Camera", icon: "camera" },
-    { id: "upload", label: "Upload", icon: "upload" },
+    { id: "camera", label: t("scan.camera"), icon: "camera" },
+    { id: "upload", label: t("scan.upload"), icon: "upload" },
   ];
   return (
     <div className="grid grid-cols-2 rounded-full bg-fog/[0.06] p-1 md:w-[260px]" role="tablist" aria-label="Scan mode">
@@ -969,11 +971,12 @@ function ModeSwitch({ mode, onChange }: { mode: Mode; onChange: (m: Mode) => voi
 }
 
 function TabBar({ tab, onChange, count }: { tab: ResultTab; onChange: (t: ResultTab) => void; count: number }) {
+  const t = useT();
   const tabs: { id: ResultTab; label: string; hint: string }[] = [
-    { id: "offenders", label: "Offenders", hint: "What is running" },
-    { id: "plan", label: "Plan", hint: "What to do, in order, and what it changes" },
-    { id: "grid", label: "Grid", hint: "When to burn it, and what would cancel it" },
-    { id: "context", label: "Context", hint: "What it means and how you compare" },
+    { id: "offenders", label: t("tab.offenders"), hint: "What is running" },
+    { id: "plan", label: t("tab.plan"), hint: "What to do, in order, and what it changes" },
+    { id: "grid", label: t("tab.grid"), hint: "When to burn it, and what would cancel it" },
+    { id: "context", label: t("tab.context"), hint: "What it means and how you compare" },
   ];
   return (
     <div className="flex rounded-full bg-fog/[0.05] p-1" role="tablist">
@@ -1042,6 +1045,7 @@ function TotalsHeader({
   unverifiedCount: number;
   place: UsageContext;
 }) {
+  const t = useT();
   const lines = basisMix.measured + basisMix.ai + basisMix.catalog;
   // Precision: how tight the 80% band is, as a share of the headline.
   const precision = Math.max(0, Math.min(1, 1 - range.spread));
@@ -1052,16 +1056,16 @@ function TotalsHeader({
         style={{ background: "radial-gradient(60% 120% at 100% 0%, rgba(239,157,46,0.1), transparent 60%)" }}
       />
       <div className="flex items-center justify-between gap-3">
-        <span className="mono-label text-cyan">after-hours waste</span>
+        <span className="mono-label text-cyan">{t("totals.eyebrow")}</span>
         <span className="font-mono text-[0.68rem] text-dim">
-          {captures} capture{captures === 1 ? "" : "s"}
-          {working && <span className="ml-1.5 text-sodium-deep">· analysing…</span>}
+          {captures} {captures === 1 ? t("totals.capture") : t("totals.captures")}
+          {working && <span className="ml-1.5 text-sodium-deep">· {t("totals.analysing")}</span>}
         </span>
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
         <BigStat
-          label="/ yr wasted after hours"
+          label={t("totals.wasted")}
           accent
           value={
             cost > 0 ? (
@@ -1073,19 +1077,19 @@ function TotalsHeader({
             )
           }
         />
-        <BigStat label="CO₂ / year" value={<CountUp value={co2} format={fmtCo2} />} />
-        <BigStat label="energy / year" value={<CountUp value={kwh} format={fmtKwh} />} />
-        <BigStat label="recoverable / yr" value={<CountUp value={recoverable} format={fmtMoneyFull} />} />
+        <BigStat label={t("totals.co2")} value={<CountUp value={co2} format={fmtCo2} />} />
+        <BigStat label={t("totals.energy")} value={<CountUp value={kwh} format={fmtKwh} />} />
+        <BigStat label={t("totals.recoverable")} value={<CountUp value={recoverable} format={fmtMoneyFull} />} />
       </div>
 
       {cost > 0 && (
         <div className="mt-5 border-t border-line pt-4">
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
             <span className="text-[0.84rem] text-fog">
-              Best estimate <span className="font-mono font-semibold">{fmtMoneyFull(cost)}</span> a year; likely between{" "}
-              <span className="font-mono font-semibold">{fmtMoney(range.p10)}</span> and <span className="font-mono font-semibold">{fmtMoney(range.p90)}</span>
+              {t("totals.best")} <span className="font-mono font-semibold">{fmtMoneyFull(cost)}</span> {t("totals.year.between")}{" "}
+              <span className="font-mono font-semibold">{fmtMoney(range.p10)}</span> {t("totals.and")} <span className="font-mono font-semibold">{fmtMoney(range.p90)}</span>
             </span>
-            <span className="font-mono text-[0.72rem] text-dim">±{Math.round(range.spread * 100)}% · 80% range</span>
+            <span className="font-mono text-[0.72rem] text-dim">±{Math.round(range.spread * 100)}% · {t("totals.range")}</span>
           </div>
           {/* The band, drawn: where the headline sits inside what's plausible. */}
           <div className="relative mt-2.5 h-2 rounded-full bg-surface2">
@@ -1112,25 +1116,22 @@ function TotalsHeader({
         <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-surface2/60 p-3 text-[0.8rem]">
           <div>
             <div className="font-mono text-lg font-semibold text-fog">{fmtMoneyFull(cost)}</div>
-            <div className="leading-snug text-mist">
-              wasted after hours: what the devices draw through the hours the {place === "home" ? "house is empty or asleep" : "building is empty"}, in the state they
-              are in then
-            </div>
+            <div className="leading-snug text-mist">{place === "home" ? t("totals.after.hours.explain.home") : t("totals.after.hours.explain")}</div>
           </div>
           <div>
             <div className="font-mono text-lg font-semibold text-fog">{fmtMoneyFull(typical)}</div>
-            <div className="leading-snug text-mist">at typical use for this kind of room: hours actually in use, standby the rest</div>
+            <div className="leading-snug text-mist">{t("totals.typical.explain")}</div>
           </div>
         </div>
       )}
 
       <div className="mt-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 font-mono text-[0.72rem] text-mist">
         <span>
-          biggest offender: <span className="text-lime">{topLabel}</span>
+          {t("totals.biggest")} <span className="text-lime">{topLabel}</span>
         </span>
         {unverifiedCount > 0 && (
           <span className="text-amber" title="The cloud model reported these but the on-device detector could not back them. Confirm or delete each one on its card.">
-            + {fmtMoney(unverified)}/yr in {unverifiedCount} unverified line{unverifiedCount > 1 ? "s" : ""}, not counted
+            + {fmtMoney(unverified)}{t("plan.yr")} · {unverifiedCount} {unverifiedCount > 1 ? t("totals.unverified.plural") : t("totals.unverified")}, {t("totals.not.counted")}
           </span>
         )}
       </div>
@@ -1148,6 +1149,7 @@ function BigStat({ label, value, accent }: { label: string; value: React.ReactNo
 }
 
 function EmptyState({ working, mode }: { working: boolean; mode: Mode }) {
+  const t = useT();
   const steps =
     mode === "camera"
       ? [
@@ -1167,17 +1169,15 @@ function EmptyState({ working, mode }: { working: boolean; mode: Mode }) {
           <div className={`h-2.5 w-2.5 rounded-full grad-energy-bg ${working ? "pulse-dot" : ""}`} />
         </div>
         <div>
-          <h3 className="text-[1.05rem] font-semibold text-fog">{working ? "Reading your capture…" : "No audit yet"}</h3>
-          <p className="text-[0.84rem] text-mist">
-            {working ? "Ranked offenders appear here as each capture finishes." : "Ranked offenders, costs and fixes appear here."}
-          </p>
+          <h3 className="text-[1.05rem] font-semibold text-fog">{working ? t("empty.reading") : t("empty.none")}</h3>
+          <p className="text-[0.84rem] text-mist">{working ? t("empty.reading.sub") : t("empty.none.sub")}</p>
         </div>
       </div>
       <ol className="mt-5 grid gap-3 sm:grid-cols-3">
-        {steps.map(([t, d], i) => (
-          <li key={t} className="rounded-xl bg-surface2 px-3.5 py-3">
+        {steps.map(([title, d], i) => (
+          <li key={title} className="rounded-xl bg-surface2 px-3.5 py-3">
             <div className="font-mono text-[0.7rem] text-dim">0{i + 1}</div>
-            <div className="mt-1 text-[0.92rem] font-medium text-fog">{t}</div>
+            <div className="mt-1 text-[0.92rem] font-medium text-fog">{title}</div>
             <p className="mt-1 text-[0.8rem] leading-relaxed text-mist">{d}</p>
           </li>
         ))}
