@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { PageHeader } from "./PageHeader";
@@ -793,11 +794,36 @@ export function Scanner() {
 
   function showAssumptions() {
     setShowSettings(true);
-    setTimeout(() => document.getElementById("assumptions")?.scrollIntoView({ behavior: scrollBehavior, block: "center" }), 30);
   }
+
+  // Escape closes the settings panel.
+  useEffect(() => {
+    if (!showSettings) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setShowSettings(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showSettings]);
+
+  const settingsButton = (
+    <button
+      onClick={() => setShowSettings(true)}
+      aria-haspopup="dialog"
+      className="inline-flex min-w-0 items-center gap-2 rounded-full bg-fog/[0.06] px-3.5 py-2 text-[0.8rem] font-medium text-mist transition-colors hover:bg-fog/[0.1] hover:text-fog sm:text-[0.82rem]"
+    >
+      <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" aria-hidden>
+        <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
+        <circle cx="16" cy="7" r="2" />
+        <circle cx="10" cy="17" r="2" />
+      </svg>
+      <span className="truncate">{building.name}</span>
+      <span className="text-dim">·</span>
+      <span className="shrink-0 font-mono text-[0.76rem]">${settings.ratePerKwh.toFixed(2)}/kWh</span>
+    </button>
+  );
 
   return (
     <section id="scanner" className="relative z-10 mx-auto max-w-6xl scroll-mt-20 px-4 pb-16 pt-[4.25rem] sm:px-6 md:pt-24">
+      {captures.length === 0 ? (
       <div className="no-print mb-3 flex flex-col gap-4 md:mb-6 md:flex-row md:items-end md:justify-between">
         <PageHeader eyebrow={t("nav.scanner")} title={t("scan.title")} accent={t("scan.accent")} className="hidden md:block">
           {t("scan.intro")}{" "}
@@ -809,9 +835,22 @@ export function Scanner() {
         <h1 className="sr-only">{t("nav.scanner")}</h1>
         <div className="flex items-center justify-between gap-2 md:flex-col md:items-end">
           <ModeSwitch mode={mode} onChange={setMode} />
-          <PlacePicker place={place} onChange={choosePlace} />
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <PlacePicker place={place} onChange={choosePlace} />
+            {settingsButton}
+          </div>
         </div>
       </div>
+      ) : (
+        <div className="no-print mb-4 flex flex-wrap items-center justify-between gap-2.5">
+          <h1 className="sr-only">{t("nav.scanner")}</h1>
+          <ModeSwitch mode={mode} onChange={setMode} />
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+            <PlacePicker place={place} onChange={choosePlace} />
+            {settingsButton}
+          </div>
+        </div>
+      )}
 
       <div className="no-print">
         {mode === "camera" && (
@@ -867,7 +906,7 @@ export function Scanner() {
                 />
               )}
             </div>
-            <div className="min-w-0 lg:sticky lg:top-20">
+            <div className="min-w-0">
               {hasResults ? (
                 <Summary
                   annual={totals.annualCostPerYear}
@@ -961,67 +1000,98 @@ export function Scanner() {
         </div>
       )}
 
-      {/* ---- the figures everything is priced with ---- */}
-      {captures.length > 0 && (
-        <div id="assumptions" className="no-print mt-8 grid scroll-mt-24 gap-4 lg:grid-cols-2">
-          {ready && <BuildingBar building={building} buildings={store.buildings} liveRate={liveRate} onFetchRate={fetchLiveRate} />}
-
-          <div className="panel self-start">
-            <button onClick={() => setShowSettings((s) => !s)} className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left" aria-expanded={showSettings}>
-              <span>
-                <span className="block text-[0.92rem] font-medium text-fog">Prices and hours we used</span>
-                <span className="block text-[0.76rem] text-dim">Change these if you know better. Your bill beats every estimate.</span>
-              </span>
-              <span className="shrink-0 font-mono text-xs text-mist">
-                ${settings.ratePerKwh.toFixed(2)} per kWh
-                {override.ratePerKwh === undefined && billRate !== undefined && <span className="ml-1.5 text-lime">from bill</span>}
-                <span className="ml-2 text-cyan">{showSettings ? "−" : "+"}</span>
-              </span>
-            </button>
-            <AnimatePresence initial={false}>
-              {showSettings && (
-                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                  <div className="space-y-4 border-t border-line px-4 py-4">
-                    <Field
-                      label="Price of electricity (dollars per kWh, on your bill)"
-                      value={settings.ratePerKwh}
-                      step={0.01}
-                      onChange={(v) => setOverride((s) => ({ ...s, ratePerKwh: v }))}
-                    />
-                    <Field
-                      label="Hours a year the place is empty"
-                      value={settings.unoccupiedHoursPerYear}
-                      step={100}
-                      onChange={(v) => setOverride((s) => ({ ...s, unoccupiedHoursPerYear: v }))}
-                    />
-                    <Field
-                      label="Carbon per kWh from your grid (kg of CO₂)"
-                      value={settings.co2PerKwh}
-                      step={0.005}
-                      onChange={(v) => setOverride((s) => ({ ...s, co2PerKwh: v }))}
-                    />
-                    <Field
-                      label="Demand charge, businesses only (dollars per kW each month, optional)"
-                      value={settings.demandChargePerKw ?? 0}
-                      step={0.5}
-                      onChange={(v) => setOverride((s) => ({ ...s, demandChargePerKw: v }))}
-                    />
-                    <button
-                      onClick={() => {
-                        setOverride({});
-                        setLiveRate(null);
-                      }}
-                      className="text-[0.76rem] text-dim hover:text-cyan"
-                    >
-                      ↺ Back to the building&apos;s own figures
+      {/* ---- the building and the figures everything is priced with ----
+          Portalled to <body> so it sits above the site header, outside this section's stacking context. */}
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {showSettings && (
+              <>
+                <motion.div
+                  key="scrim"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setShowSettings(false)}
+                  className="no-print fixed inset-0 z-[70] bg-black/35 backdrop-blur-[2px]"
+                  aria-hidden
+                />
+                <motion.aside
+                  key="panel"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="Building and prices"
+                  initial={{ x: "100%" }}
+                  animate={{ x: 0 }}
+                  exit={{ x: "100%" }}
+                  transition={{ type: "spring", stiffness: 380, damping: 38 }}
+                  className="no-print fixed inset-y-0 right-0 z-[71] flex w-full max-w-md flex-col border-l border-line bg-ink pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] shadow-[0_0_60px_-10px_rgba(0,0,0,0.35)]"
+                >
+                  <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-4">
+                    <div>
+                      <h2 className="text-[1.05rem] font-semibold text-fog">Building and prices</h2>
+                      <p className="text-[0.78rem] text-dim">What every number on this page is priced with.</p>
+                    </div>
+                    <button onClick={() => setShowSettings(false)} aria-label="Close" className="grid h-9 w-9 place-items-center rounded-full text-mist hover:bg-fog/[0.06] hover:text-fog">
+                      <Icon name="close" className="h-4 w-4" />
                     </button>
                   </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </div>
-      )}
+                  <div className="flex-1 space-y-6 overflow-y-auto px-5 py-5">
+                    {ready && (
+                      <section className="space-y-2">
+                        <h3 className="text-[0.8rem] font-medium text-mist">Your building</h3>
+                        <BuildingBar building={building} buildings={store.buildings} liveRate={liveRate} onFetchRate={fetchLiveRate} />
+                      </section>
+                    )}
+                    <section className="space-y-4">
+                      <div>
+                        <h3 className="text-[0.8rem] font-medium text-mist">Prices and hours</h3>
+                        <p className="mt-0.5 text-[0.76rem] leading-relaxed text-dim">
+                          Change these if you know better. The price on your electric bill beats every estimate
+                          {override.ratePerKwh === undefined && billRate !== undefined ? ", and it's already in use" : ""}.
+                        </p>
+                      </div>
+                  <Field
+                    label="Price of electricity (dollars per kWh, on your bill)"
+                    value={Math.round(settings.ratePerKwh * 1000) / 1000}
+                    step={0.01}
+                    onChange={(v) => setOverride((s) => ({ ...s, ratePerKwh: v }))}
+                  />
+                  <Field
+                    label="Hours a year the place is empty"
+                    value={Math.round(settings.unoccupiedHoursPerYear)}
+                    step={100}
+                    onChange={(v) => setOverride((s) => ({ ...s, unoccupiedHoursPerYear: v }))}
+                  />
+                  <Field
+                    label="Carbon per kWh from your grid (kg of CO₂)"
+                    value={Math.round(settings.co2PerKwh * 1000) / 1000}
+                    step={0.005}
+                    onChange={(v) => setOverride((s) => ({ ...s, co2PerKwh: v }))}
+                  />
+                  <Field
+                    label="Demand charge, businesses only (dollars per kW each month, optional)"
+                    value={settings.demandChargePerKw ?? 0}
+                    step={0.5}
+                    onChange={(v) => setOverride((s) => ({ ...s, demandChargePerKw: v }))}
+                  />
+                  <button
+                    onClick={() => {
+                      setOverride({});
+                      setLiveRate(null);
+                    }}
+                    className="text-[0.76rem] text-dim hover:text-cyan"
+                  >
+                    ↺ Back to the building&apos;s own figures
+                  </button>
+                    </section>
+                  </div>
+                </motion.aside>
+              </>
+            )}
+          </AnimatePresence>,
+          document.body,
+        )}
 
       <AnimatePresence>
         {toast && (
