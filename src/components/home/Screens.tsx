@@ -30,7 +30,7 @@ export function ReportScreen() {
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-[13em] shrink-0 flex-col gap-[0.3em] border-r border-[#ebe6dc] p-[1.2em]">
           <div className="mb-[1.2em] flex items-center gap-[0.5em]">
-            <Mark className="h-[1.7em] w-[1.7em]" />
+            <Mark className="h-[1.7em] w-[1.29em]" />
             <span className="text-[0.95em] font-semibold">Ghost Watt</span>
           </div>
           {["Scanner", "Portfolio", "Brief", "Class", "Methodology"].map((n) => (
