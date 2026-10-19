@@ -80,6 +80,8 @@ export interface Capture {
     height?: number;
     /** Mean luma, 0-255, from the on-device read. */
     brightness?: number;
+    /** How long the on-device read of this picture took, ms. */
+    onDeviceMs?: number;
     lighting?: "on" | "off" | "unclear";
     people?: number;
     /** Where lat/lon came from. */

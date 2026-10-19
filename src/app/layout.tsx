@@ -7,6 +7,7 @@ import { MotionProvider } from "@/components/MotionProvider";
 import { geist, geistMono, instrument } from "@/components/home/fonts";
 import { APPLY_PREFS_SCRIPT } from "@/lib/prefs-boot";
 import { SkipLink } from "@/components/SkipLink";
+import { ReadingGuide } from "@/components/ReadingGuide";
 
 export const metadata: Metadata = {
   title: "Ghost Watt - the after-hours energy map nobody has",
@@ -51,6 +52,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             {children}
           </main>
           <Footer />
+          <ReadingGuide />
           <ServiceWorker />
         </MotionProvider>
       </body>

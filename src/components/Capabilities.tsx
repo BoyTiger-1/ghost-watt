@@ -43,7 +43,7 @@ const CAPS = [
   {
     href: "/scan",
     title: "Scan a room",
-    body: "Photo, or no photo at all - a room-profile estimate works with the model off, so a demo never blanks.",
+    body: "Photo, video or live camera. With no cloud model the detector in the browser reads the picture; nothing is ever filled in from a preset.",
     stat: `${DEVICE_CATALOG.length} device categories`,
   },
   {

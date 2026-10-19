@@ -13,6 +13,8 @@ import { useEffect, useState } from "react";
 import { getDetector, detectStill, verifyStill } from "@/lib/detector";
 import { readScene } from "@/lib/scene";
 import { FrameReader, loadImage } from "@/lib/media";
+import { readStill } from "@/lib/still";
+import { DEFAULT_SETTINGS } from "@/lib/types";
 import type { FracDetection } from "@/lib/ondevice";
 
 export interface BenchDetection {
@@ -113,7 +115,7 @@ export async function benchImage(src: string, which: string[] = ["mp-lite0", "mp
 
 declare global {
   interface Window {
-    __bench?: { one: typeof benchImage };
+    __bench?: { one: typeof benchImage; still: (src: string) => Promise<{ timing: { detect: number; verify: number; scene: number; total: number }; items: number }> };
   }
 }
 
@@ -124,7 +126,14 @@ export function BenchHarness() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    window.__bench = { one: benchImage };
+    window.__bench = {
+      one: benchImage,
+      still: async (src: string) => {
+        const img = await loadImage(src, { crossOrigin: src.startsWith("http") });
+        const r = await readStill(img, DEFAULT_SETTINGS);
+        return { timing: r.timing, items: r.items.length };
+      },
+    };
   }, []);
 
   async function run() {

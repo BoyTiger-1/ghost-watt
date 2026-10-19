@@ -273,7 +273,7 @@ export const STILL_DIFF = 7;
 /** Below this, two thumbnails show the same view: reuse that view's audit. */
 export const SAME_VIEW_DIFF = 16;
 /** How long the camera must be still before a view is worth auditing. */
-export const STEADY_MS = 700;
+export const STEADY_MS = 500;
 
 /**
  * A SIG_W x SIG_H greyscale thumbnail from RGBA pixels, with the mean removed.
@@ -340,7 +340,7 @@ export function shouldAutoAudit(g: AuditGate): boolean {
   );
 }
 
-export const COOLDOWN_MIN_MS = 2500;
+export const COOLDOWN_MIN_MS = 1500;
 export const COOLDOWN_MAX_MS = 30000;
 
 /** Back off on a busy or failed answer; return to the floor on a good one. */
