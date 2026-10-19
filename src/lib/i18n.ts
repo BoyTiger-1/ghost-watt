@@ -16,6 +16,8 @@ const STRINGS = {
   "nav.method": ["Method", "Método"],
   "nav.settings": ["Settings", "Ajustes"],
   "nav.accessibility": ["Accessibility", "Accesibilidad"],
+  "nav.theme.toLight": ["Switch to light mode", "Cambiar a modo claro"],
+  "nav.theme.toDark": ["Switch to dark mode", "Cambiar a modo oscuro"],
   "nav.skip": ["Skip to content", "Saltar al contenido"],
   "nav.home": ["Ghost Watt home", "Inicio de Ghost Watt"],
   // engine pill
