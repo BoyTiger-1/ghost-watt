@@ -67,6 +67,8 @@ export async function POST(req: Request) {
     images?: unknown;
     /** What the client knows about the capture: time, place, a note, on-device hints. */
     context?: unknown;
+    /** The live view's confirm: answer quickly, without thinking first. */
+    fast?: unknown;
   };
   try {
     body = await req.json();
@@ -117,7 +119,7 @@ export async function POST(req: Request) {
   const video = images.length > 1;
   const frame = video ? undefined : sanitizeFrame(body.frame);
   const prompt = buildVisionPrompt(frame, { ...sanitizeContext(body.context), kind: video ? "video" : "photo", frames: images.length });
-  const vision = await describeImagesAny(images, prompt);
+  const vision = await describeImagesAny(images, prompt, undefined, { fast: body.fast === true && !video });
 
   if (!vision.ok) {
     const configured = Boolean(vision.configured);
