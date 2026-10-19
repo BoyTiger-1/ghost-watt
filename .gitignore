@@ -44,3 +44,6 @@ next-env.d.ts
 
 # Playwright MCP session output
 .playwright-mcp/
+
+# model runtimes copied from node_modules by scripts/copy-runtimes.mjs
+/public/runtimes/

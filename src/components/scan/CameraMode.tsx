@@ -19,16 +19,18 @@ import {
 } from "@/lib/live";
 import { classifyRegion, getClassifier, getDetector, padBox, toPixelDetections } from "@/lib/detector";
 import { CENTER_ROI, CenterLamp, Verifier, judge, lampScore, withLamps } from "@/lib/verify";
-import { observationsToItems, readItems, type LiveItem } from "@/lib/ondevice";
+import { observationsToItems, panelOf, readItems, type LiveItem } from "@/lib/ondevice";
+import { dedupeCandidates, isLiveClass, looksLikeWindow, tooBig } from "@/lib/candidates";
+import { readStill } from "@/lib/still";
 import { analysisSquare } from "@/lib/image";
-import { LightTracker, readScene, regionSaturation, type SceneRead } from "@/lib/scene";
-import { FrameReader, KeyframeCollector, PixelReader, itemColor, recorderMime, toJpeg, type Keyframe } from "@/lib/media";
+import { LightTracker, readScene, regionSaturation, regionStats, type SceneRead } from "@/lib/scene";
+import { FrameReader, KeyframeCollector, PixelReader, itemColor, recorderMime, toCanvas, toJpeg, type Keyframe } from "@/lib/media";
 import { fmtMoney, fmtWatts } from "@/lib/energy";
 import { readTime, type GeoContext } from "@/lib/capture";
 import { nowLocal } from "@/lib/exif";
 import { useEngine } from "@/lib/engine";
 import type { WeeklySchedule } from "@/lib/schedule";
-import type { AnalysisResult, AnalyzeError, AuditSettings } from "@/lib/types";
+import type { AnalysisMode, AnalysisResult, AnalyzeError, AuditSettings } from "@/lib/types";
 import { Icon } from "./icons";
 
 /**
@@ -43,9 +45,17 @@ const MAX_RECORD_S = 60;
 
 export interface PhotoShot {
   dataUrl: string;
+  /** What was on screen: the confirmed reading of this view, or only candidates. */
   items: LiveItem[];
   scene: SceneRead | null;
+  /** True when `items` came from the strong path (confirmed), not the live candidate finder. */
+  confirmed: boolean;
+  /** Which path confirmed it, when it was. */
+  mode?: AnalysisMode;
 }
+
+/** A live item that is only a suggestion until the strong path confirms it. */
+type ViewItem = LiveItem & { candidate?: boolean };
 
 export interface VideoShot {
   url: string;
@@ -56,27 +66,29 @@ export interface VideoShot {
 type Phase = "starting" | "live" | "error";
 
 /**
- * A view the full AI audit has answered for, keyed by what it looked like.
+ * A view the strong path has confirmed, keyed by what it looked like.
  *
- * The on-device models are a fast first look; the AI is what a photo gets, and
- * it is far better at telling a ceiling light from a sunlit window. So when the
- * camera settles on a view, that frame goes to the same audit as a photo, and
- * while the camera stays there its answer replaces the on-device guesses.
+ * The live detector is a candidate finder: fast, private, and wrong often
+ * enough that nothing it says is priced. When the camera settles on a view,
+ * that frame goes through the same reading a photo gets - the cloud model in
+ * Enhanced mode, the full tiled on-device read otherwise - and while the camera
+ * stays there, the confirmed answer replaces the candidates and is what the
+ * cost pill counts.
  */
 interface AuditedView {
   id: number;
   sig: Float32Array;
-  /** Empty when the AI found nothing powered: kept so the same view is not re-sent. */
+  /** Empty when nothing powered was found: kept so the same view is not re-read. */
   items: LiveItem[];
+  mode: AnalysisMode;
 }
 
 type AiStatus =
-  | { kind: "off" }
-  | { kind: "moving" }
-  | { kind: "auditing" }
-  | { kind: "showing"; count: number }
+  | { kind: "moving"; candidates: number }
+  | { kind: "confirming"; mode: AnalysisMode }
+  | { kind: "confirmed"; count: number; mode: AnalysisMode }
   | { kind: "waiting"; seconds: number }
-  | { kind: "unavailable"; text: string };
+  | { kind: "note"; text: string };
 
 /** How many audited views to remember; older ones are re-audited if revisited. */
 const MAX_VIEWS = 24;
@@ -122,7 +134,17 @@ export function CameraMode({
   const mirroredRef = useRef(false);
   // Live AI audit. Read by the frame loop, so it lives in refs.
   const viewsRef = useRef<AuditedView[]>([]);
-  const aiRef = useRef({ enabled: true, inFlight: false, cooldown: COOLDOWN_MIN_MS, lastDone: 0, unavailable: null as string | null });
+  const aiRef = useRef({
+    inFlight: false,
+    cooldown: COOLDOWN_MIN_MS,
+    lastDone: 0,
+    /** Why the cloud model is not being used right now, if it is not. */
+    cloudNote: null as string | null,
+    /** The cloud model is not tried again before this time (ms). */
+    cloudRetryAt: 0,
+    /** Which path is confirming the current view. */
+    confirmingWith: "on-device" as AnalysisMode,
+  });
 
   const [phase, setPhase] = useState<Phase>("starting");
   const [error, setError] = useState<{ text: string; noCamera: boolean } | null>(null);
@@ -141,7 +163,8 @@ export function CameraMode({
   // Whether still views go to the cloud model follows the one app-wide mode.
   const engine = useEngine();
   const aiOn = engine.mode === "enhanced";
-  const [ai, setAi] = useState<AiStatus>({ kind: "moving" });
+  const engineModeRef = useRef(engine.mode);
+  const [ai, setAi] = useState<AiStatus>({ kind: "moving", candidates: 0 });
   const viewRef = useRef<HTMLDivElement>(null);
   // Null until mounted: the page is prerendered, and a build-time clock would not match.
   const [now, setNow] = useState<string | null>(null);
@@ -171,52 +194,75 @@ export function CameraMode({
   }, []);
 
   useEffect(() => {
-    aiRef.current.enabled = aiOn;
-  }, [aiOn]);
+    engineModeRef.current = engine.mode;
+    // Switching mode changes what "confirmed" means; earlier confirmations do not carry over.
+    viewsRef.current = [];
+  }, [engine.mode]);
 
-  /** Send the current frame through the full AI audit, the same one a photo gets. */
-  const runAudit = useCallback(async (sig: Float32Array) => {
+  /**
+   * Confirm the current view through the strong path: the same reading a photo
+   * gets. Enhanced mode sends the frame to the cloud model; if that fails, or
+   * in On-device mode, the frame gets the full tiled on-device read instead.
+   * Either way the answer is labelled with the path that produced it.
+   */
+  const confirmView = useCallback(async (sig: Float32Array) => {
     const v = videoRef.current;
     const a = aiRef.current;
     if (!v || a.inFlight) return;
     const gen = genRef.current;
-    const dataUrl = toJpeg(v, 1280, 0.85);
-    if (!dataUrl) return;
+    const still = toCanvas(v, 1280);
+    if (!still) return;
     a.inFlight = true;
     let ok = false;
+    let items: LiveItem[] | null = null;
+    let mode: AnalysisMode = "on-device";
+    const now0 = performance.now();
     try {
-      const square = await analysisSquare(dataUrl, 0.8);
-      const res = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: square.dataUrl, frame: square.frame, source: "Live view", settings: settingsRef.current }),
-      });
-      if (!res.ok) {
-        const err = (await res.json().catch(() => null)) as AnalyzeError | null;
-        if (gen !== genRef.current) return;
-        // Rate-limited or no engine: say so, and the on-device read stands.
-        a.unavailable =
-          err?.code === "rate-limited"
-            ? "Cloud limit reached · on-device only for now"
-            : err?.code === "no-engine"
-              ? "No cloud model configured · on-device only"
-              : "Cloud model did not answer · on-device only";
-        if (err?.code === "no-engine") a.cooldown = 60000;
-        return;
+      if (engineModeRef.current === "enhanced" && now0 >= a.cloudRetryAt) {
+        a.confirmingWith = "enhanced";
+        try {
+          const square = await analysisSquare(still.toDataURL("image/jpeg", 0.85), 0.8);
+          const res = await fetch("/api/analyze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image: square.dataUrl, frame: square.frame, source: "Live view", settings: settingsRef.current }),
+          });
+          if (!res.ok) {
+            const err = (await res.json().catch(() => null)) as AnalyzeError | null;
+            a.cloudNote =
+              err?.code === "rate-limited"
+                ? "Cloud limit reached · confirming on-device for now"
+                : err?.code === "no-engine"
+                  ? "No cloud model configured · confirming on-device"
+                  : "Cloud model did not answer · confirming on-device";
+            a.cloudRetryAt = performance.now() + (err?.code === "rate-limited" ? Math.min(600, err.retryAfterSeconds ?? 60) * 1000 : err?.code === "no-engine" ? 600000 : 30000);
+          } else {
+            const result = (await res.json()) as AnalysisResult;
+            items = observationsToItems(result.observations ?? [], settingsRef.current);
+            mode = "enhanced";
+            a.cloudNote = null;
+          }
+        } catch {
+          a.cloudNote = navigator.onLine ? "Cloud model unreachable · confirming on-device" : "Offline · confirming on-device";
+          a.cloudRetryAt = performance.now() + 30000;
+        }
       }
-      const result = (await res.json()) as AnalysisResult;
+      if (!items) {
+        a.confirmingWith = "on-device";
+        const read = await readStill(still, settingsRef.current);
+        items = read.items.filter((i) => i.kind !== "other");
+        mode = "on-device";
+      }
       if (gen !== genRef.current) return;
       ok = true;
-      a.unavailable = null;
-      const items = observationsToItems(result.observations ?? [], settingsRef.current);
       const id = (viewsRef.current.at(-1)?.id ?? 0) + 1;
-      viewsRef.current = [...viewsRef.current, { id, sig, items }].slice(-MAX_VIEWS);
+      viewsRef.current = [...viewsRef.current, { id, sig, items, mode }].slice(-MAX_VIEWS);
     } catch {
-      a.unavailable = navigator.onLine ? "Cloud model unreachable · on-device only" : "Offline · on-device only";
+      // The still read itself failed (detector not loaded yet, most likely): try again after the cooldown.
     } finally {
       a.inFlight = false;
       a.lastDone = performance.now();
-      if (a.cooldown !== 60000) a.cooldown = nextCooldown(a.cooldown, ok);
+      a.cooldown = nextCooldown(a.cooldown, ok);
     }
   }, []);
 
@@ -367,7 +413,7 @@ export function CameraMode({
           const a = aiRef.current;
           if (
             shouldAutoAudit({
-              enabled: a.enabled,
+              enabled: true,
               inFlight: a.inFlight,
               steadyMs: steadySince ? now - steadySince : 0,
               alreadyAudited: !!view,
@@ -375,14 +421,19 @@ export function CameraMode({
               cooldownMs: a.cooldown,
             })
           )
-            runAudit(sig);
+            confirmView(sig);
         }
       }
       if (det) {
         try {
           const ts = Math.max(now, lastTs + 1);
           lastTs = ts;
-          tracks = trackerRef.current.update(toPixelDetections(det.detectForVideo(v, ts).detections as never));
+          // Only the classes the small model is reliably good at become candidates;
+          // vehicles are kept (never drawn) so glare on them is not read as a lamp.
+          const raw = toPixelDetections(det.detectForVideo(v, ts).detections as never).filter(
+            (d) => isLiveClass(d.cls, d.score) || COCO_MAP[d.cls]?.kind === "other",
+          );
+          tracks = trackerRef.current.update(raw);
         } catch {
           // A dropped frame is not worth a visible error.
         }
@@ -413,7 +464,18 @@ export function CameraMode({
       }
       const ready = classifier !== null;
       const lampTracks = tracks.filter((t) => verifier.status(t.id, t.cls, t.score, ready) === "lamp");
-      const shown = tracks.filter((t) => verifier.status(t.id, t.cls, t.score, ready) === "show");
+      // Candidates: shown by the verifier, not the whole wall, and - for screens - not a
+      // bright flat patch, which is a window or a white wall, not a lit display.
+      const shown = tracks.filter((t) => {
+        if (verifier.status(t.id, t.cls, t.score, ready) !== "show") return false;
+        const box = frac(t);
+        if (tooBig(t.cls, box)) return false;
+        if ((t.cls === "tv" || t.cls === "laptop") && luma) {
+          const panel = panelOf(t.cls, box);
+          if (looksLikeWindow(regionStats(luma.data, luma.w, luma.h, panel), luma.rgba ? regionSaturation(luma.rgba, luma.w, luma.h, panel) : undefined)) return false;
+        }
+        return true;
+      });
 
       if (now - lastScene > 220) {
         lastScene = now;
@@ -442,17 +504,23 @@ export function CameraMode({
           sceneRef.current = { ...scene, lights, lighting: lights.length ? "on" : scene.dark ? "off" : "unclear" };
         }
       }
-      const dets = shown.map((t) => ({
-        id: t.id,
-        cls: t.cls,
-        score: t.score,
-        box: [t.box.x / sw, t.box.y / sh, (t.box.x + t.box.w) / sw, (t.box.y + t.box.h) / sh] as [number, number, number, number],
+      const dets = dedupeCandidates(
+        shown.map((t) => ({
+          id: t.id,
+          cls: t.cls,
+          score: t.score,
+          box: [t.box.x / sw, t.box.y / sh, (t.box.x + t.box.w) / sw, (t.box.y + t.box.h) / sh] as [number, number, number, number],
+        })),
+      );
+      // Candidates carry no cost: the live detector suggests, the strong path decides.
+      const candidates: ViewItem[] = readItems(dets, sceneRef.current?.lights ?? [], settingsRef.current, luma ?? undefined).map((i) => ({
+        ...i,
+        candidate: true,
       }));
-      const onDevice = readItems(dets, sceneRef.current?.lights ?? [], settingsRef.current, luma ?? undefined);
-      // On an audited view, the AI's answer replaces the on-device guesses.
-      const aiView = aiRef.current.enabled ? view : null;
-      itemsRef.current = aiView ? aiView.items : onDevice;
-      drawOverlay(canvas, sw, sh, itemsRef.current, now, mirroredRef.current, aiRef.current.inFlight);
+      // On a confirmed view, the confirmed answer replaces the candidates.
+      itemsRef.current = view ? view.items : candidates;
+      const holdProgress = view || aiRef.current.inFlight ? 0 : steadySince ? Math.min(1, (now - steadySince) / STEADY_MS) : 0;
+      drawOverlay(canvas, sw, sh, itemsRef.current, now, mirroredRef.current, aiRef.current.inFlight, holdProgress);
 
       const dt = now - lastFrame;
       lastFrame = now;
@@ -465,23 +533,21 @@ export function CameraMode({
         const a = aiRef.current;
         const wait = Math.ceil((a.cooldown - (now - a.lastDone)) / 1000);
         setAi(
-          !a.enabled
-            ? { kind: "off" }
-            : a.inFlight
-              ? { kind: "auditing" }
-              : aiView
-                ? { kind: "showing", count: aiView.items.length }
-                : a.unavailable
-                  ? { kind: "unavailable", text: a.unavailable }
-                  : wait > 0 && steadySince && now - steadySince >= STEADY_MS
-                    ? { kind: "waiting", seconds: wait }
-                    : { kind: "moving" },
+          a.inFlight
+            ? { kind: "confirming", mode: a.confirmingWith }
+            : view
+              ? { kind: "confirmed", count: view.items.filter((i) => i.kind !== "other").length, mode: view.mode }
+              : a.cloudNote && engineModeRef.current === "enhanced"
+                ? { kind: "note", text: a.cloudNote }
+                : wait > 0 && steadySince && now - steadySince >= STEADY_MS
+                  ? { kind: "waiting", seconds: wait }
+                  : { kind: "moving", candidates: candidates.filter((i) => i.kind !== "other").length },
         );
       }
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [phase, runAudit]);
+  }, [phase, confirmView]);
 
   // ---- actions -----------------------------------------------------------
 
@@ -545,7 +611,9 @@ export function CameraMode({
     if (!dataUrl) return;
     setFlash((f) => f + 1);
     navigator.vibrate?.(12);
-    onPhoto({ dataUrl, items: itemsRef.current, scene: sceneRef.current });
+    const items = itemsRef.current as ViewItem[];
+    const confirmed = items.length > 0 ? !items.some((i) => i.candidate) : ai.kind === "confirmed";
+    onPhoto({ dataUrl, items, scene: sceneRef.current, confirmed, mode: confirmed && ai.kind === "confirmed" ? ai.mode : undefined });
   }
 
   function startRecording() {
@@ -667,7 +735,7 @@ export function CameraMode({
               <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${phase === "live" ? "bg-[#ff6a5c] pulse-dot" : "bg-white/40"}`} />
               <span className="font-semibold tracking-wide">LIVE</span>
               <span className="truncate text-white/60">
-                {ai.kind === "showing" || ai.kind === "auditing" || ai.kind === "waiting" || ai.kind === "unavailable"
+                {ai.kind !== "moving"
                   ? aiLine(ai)
                   : typeof detector === "object"
                     ? `${detector.model.replace("EfficientDet-", "")} · ${detector.delegate} · ${fps} fps`
@@ -868,9 +936,21 @@ function group(items: readonly LiveItem[]): Row[] {
   return [...rows.values()].sort((a, b) => b.cost - a.cost || b.count - a.count);
 }
 
-function SummaryLine({ items, dark }: { items: readonly LiveItem[]; dark?: boolean }) {
-  const cost = items.reduce((s, i) => s + i.costPerYear, 0);
-  const n = items.filter((i) => i.kind === "device" || i.kind === "light").length;
+/** The cost pill. Confirmed readings only: candidates are suggestions, not money. */
+function SummaryLine({ items, dark }: { items: readonly ViewItem[]; dark?: boolean }) {
+  const confirmed = items.filter((i) => !i.candidate && i.kind !== "other");
+  const candidates = items.filter((i) => i.candidate && i.kind !== "other");
+  const cost = confirmed.reduce((s, i) => s + i.costPerYear, 0);
+  if (!confirmed.length) {
+    return (
+      <span className="flex min-w-0 items-baseline gap-2">
+        <span className={`text-[0.9rem] font-medium ${dark ? "text-white" : "text-fog"}`}>Hold still to confirm</span>
+        <span className={`truncate text-[0.78rem] ${dark ? "text-white/70" : "text-mist"}`}>
+          {candidates.length ? `${candidates.length} candidate${candidates.length > 1 ? "s" : ""} in view` : "point at screens, lights, appliances"}
+        </span>
+      </span>
+    );
+  }
   return (
     <span className="flex min-w-0 items-baseline gap-2">
       <span className={`font-mono text-[1.05rem] font-semibold ${dark ? "text-white" : "text-fog"}`}>
@@ -878,26 +958,26 @@ function SummaryLine({ items, dark }: { items: readonly LiveItem[]; dark?: boole
         <span className={`text-[0.72rem] font-normal ${dark ? "text-white/60" : "text-dim"}`}>/yr if left on</span>
       </span>
       <span className={`truncate text-[0.78rem] ${dark ? "text-white/70" : "text-mist"}`}>
-        {n ? `${n} powered thing${n > 1 ? "s" : ""} in view` : "point at screens, lights, appliances"}
+        {confirmed.length} confirmed in view
       </span>
     </span>
   );
 }
 
-/** One line on what the live AI audit is doing. */
+const PATH_WORD: Record<AnalysisMode, string> = { enhanced: "cloud model", "on-device": "on-device read" };
+
+/** One line on what the confirm step is doing. */
 function aiLine(ai: AiStatus): string {
   switch (ai.kind) {
-    case "off":
-      return "On-device only · nothing is uploaded";
     case "moving":
-      return "Hold still on a view and the cloud model reads it";
-    case "auditing":
-      return "Cloud model reading this view…";
-    case "showing":
-      return ai.count ? `Cloud reading of this view · ${ai.count} found` : "Cloud reading of this view · nothing powered";
+      return ai.candidates ? `${ai.candidates} candidate${ai.candidates > 1 ? "s" : ""} · hold still to confirm` : "Hold still on a view to confirm it";
+    case "confirming":
+      return `Confirming with the ${PATH_WORD[ai.mode]}…`;
+    case "confirmed":
+      return ai.count ? `Confirmed by the ${PATH_WORD[ai.mode]} · ${ai.count} found` : `Confirmed by the ${PATH_WORD[ai.mode]} · nothing powered`;
     case "waiting":
-      return `Cloud model reads this view in ${ai.seconds}s`;
-    case "unavailable":
+      return `Confirms this view in ${ai.seconds}s`;
+    case "note":
       return ai.text;
   }
 }
@@ -912,7 +992,7 @@ function LiveRead({
   onLocate,
   dark,
 }: {
-  items: readonly LiveItem[];
+  items: readonly ViewItem[];
   scene: SceneRead | null;
   ai: AiStatus;
   time: ReturnType<typeof readTime>;
@@ -921,10 +1001,14 @@ function LiveRead({
   onLocate: () => void;
   dark?: boolean;
 }) {
-  const rows = group(items);
-  const cost = items.reduce((s, i) => s + i.costPerYear, 0);
-  const typical = items.reduce((s, i) => s + i.typicalCostPerYear, 0);
-  const watts = items.reduce((s, i) => s + i.watts, 0);
+  const confirmedItems = items.filter((i) => !i.candidate);
+  const candidateItems = items.filter((i) => i.candidate);
+  const rows = group(confirmedItems);
+  const candRows = group(candidateItems);
+  const cost = confirmedItems.reduce((s, i) => s + i.costPerYear, 0);
+  const typical = confirmedItems.reduce((s, i) => s + i.typicalCostPerYear, 0);
+  const watts = confirmedItems.reduce((s, i) => s + i.watts, 0);
+  const confirmed = ai.kind === "confirmed";
   const t = dark
     ? { fog: "text-white", mist: "text-white/75", dim: "text-white/55", line: "border-white/10", chip: "bg-white/10" }
     : { fog: "text-fog", mist: "text-mist", dim: "text-dim", line: "border-line", chip: "bg-surface2" };
@@ -933,27 +1017,54 @@ function LiveRead({
     <div className="flex min-h-0 flex-1 flex-col">
       {!dark && (
         <div className="flex items-center justify-between">
-          <span className="mono-label">{ai.kind === "showing" ? "live read · cloud model" : "live read · on-device"}</span>
-          <span className="font-mono text-[0.66rem] text-dim">{ai.kind === "off" ? "nothing uploaded" : "still views go to the cloud model"}</span>
+          <span className="mono-label">{confirmed ? `confirmed · ${PATH_WORD[ai.mode]}` : "live candidates · on-device"}</span>
+          <span className="font-mono text-[0.66rem] text-dim">{confirmed ? "priced" : "not priced until confirmed"}</span>
         </div>
       )}
 
       <div className={dark ? "" : "mt-3"}>
-        <div className={`font-mono text-[2rem] font-bold leading-none ${t.fog}`}>
-          ≈{fmtMoney(cost)}
-          <span className={`ml-1 text-sm font-normal ${t.dim}`}>/yr if left on</span>
-        </div>
-        <p className={`mt-1.5 text-[0.78rem] ${t.mist}`}>
-          <span className={`font-mono font-semibold ${t.fog}`}>≈{fmtMoney(typical)}/yr</span> at typical use · {fmtWatts(watts)} drawing
-        </p>
+        {confirmed ? (
+          <>
+            <div className={`font-mono text-[2rem] font-bold leading-none ${t.fog}`}>
+              ≈{fmtMoney(cost)}
+              <span className={`ml-1 text-sm font-normal ${t.dim}`}>/yr if left on</span>
+            </div>
+            <p className={`mt-1.5 text-[0.78rem] ${t.mist}`}>
+              <span className={`font-mono font-semibold ${t.fog}`}>≈{fmtMoney(typical)}/yr</span> at typical use · {fmtWatts(watts)} drawing
+            </p>
+          </>
+        ) : (
+          <>
+            <div className={`text-[1.3rem] font-semibold leading-tight ${t.fog}`}>{ai.kind === "confirming" ? "Confirming…" : "Hold still to confirm"}</div>
+            <p className={`mt-1 text-[0.78rem] ${t.mist}`}>
+              {candRows.length
+                ? `${candidateItems.filter((i) => i.kind !== "other").length} candidate${candidateItems.length > 1 ? "s" : ""} in view. Nothing is priced until the strong read confirms it.`
+                : "Point at screens, laptops, lights or appliances."}
+            </p>
+          </>
+        )}
       </div>
 
       <ul className={`mt-3 min-h-0 flex-1 space-y-1.5 overflow-y-auto ${dark ? "" : "max-h-[300px]"}`}>
-        {rows.length === 0 && (
+        {rows.length === 0 && candRows.length === 0 && (
           <li className={`rounded-xl border border-dashed ${t.line} px-3 py-4 text-center text-[0.8rem] ${t.dim}`}>
             Nothing powered in view yet. Point at screens, laptops, lights or appliances.
           </li>
         )}
+        {!confirmed &&
+          candRows.map((r) => (
+            <li key={`c-${r.key}`} className={`flex items-center gap-2.5 rounded-xl border border-dashed ${t.line} px-2.5 py-2`}>
+              <span className="h-2.5 w-2.5 shrink-0 rounded-[3px] opacity-60" style={{ background: itemColor(r) }} />
+              <span className="min-w-0 flex-1">
+                <span className={`block truncate text-[0.84rem] font-medium ${t.fog}`}>
+                  {r.count > 1 ? `${r.count} × ` : ""}
+                  {r.label}
+                  <span className={`ml-1.5 text-[0.72rem] font-normal ${t.dim}`}>candidate</span>
+                </span>
+                <span className={`block font-mono text-[0.66rem] ${t.dim}`}>detector {Math.round(r.score * 100)}% · not priced</span>
+              </span>
+            </li>
+          ))}
         {rows.map((r) => (
           <li key={r.key} className={`flex items-center gap-2.5 rounded-xl ${t.chip} px-2.5 py-2`}>
             <span className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ background: itemColor(r) }} />
@@ -982,13 +1093,13 @@ function LiveRead({
 
       <div className={`mt-3 space-y-1.5 border-t ${t.line} pt-3 text-[0.76rem] ${t.mist}`}>
         <ContextRow icon="sparkle" dark={dark}>
-          <span className={ai.kind === "showing" ? "text-lime" : ai.kind === "unavailable" ? "text-amber" : ""}>{aiLine(ai)}</span>
+          <span className={ai.kind === "confirmed" ? "text-lime" : ai.kind === "note" ? "text-amber" : ""}>{aiLine(ai)}</span>
         </ContextRow>
         <ContextRow icon="bulb" dark={dark}>
-          {ai.kind === "showing"
+          {ai.kind === "confirmed"
             ? (() => {
-                const lit = items.filter((i) => i.kind === "light" && i.state !== "off").length;
-                return lit ? `Cloud model: ${lit} light${lit > 1 ? "s" : ""} on in this view` : "Cloud model: no lights on in this view";
+                const lit = confirmedItems.filter((i) => i.kind === "light" && i.state !== "off").length;
+                return lit ? `Confirmed: ${lit} light${lit > 1 ? "s" : ""} on in this view` : "Confirmed: no lights on in this view";
               })()
             : scene
             ? scene.outdoor
@@ -1027,7 +1138,8 @@ function LiveRead({
 
       {!dark && (
         <p className="mt-3 rounded-xl bg-surface2 px-3 py-2.5 text-[0.76rem] leading-relaxed text-mist">
-          {ai.kind !== "off" ? "Hold the camera still on a view and the cloud model reads it - the same reading a photo gets. " : "On-device only: boxes come from the detector in this browser and nothing is uploaded. "}
+          Dashed boxes are candidates from the detector in this browser; nothing is priced until you hold still and the view is confirmed by{" "}
+          {ai.kind === "confirmed" || ai.kind === "confirming" ? `the ${PATH_WORD[ai.mode]}` : "the strong read"} - the same reading a photo gets.{" "}
           <span className="font-medium text-fog">Photo</span> saves this view to your results.{" "}
           <span className="font-medium text-fog">Video</span> records a walkthrough and audits the whole clip.
         </p>
@@ -1094,8 +1206,9 @@ function bracket(ctx: CanvasRenderingContext2D, x: number, y: number, w: number,
   ctx.stroke();
 }
 
-function label(it: LiveItem): string {
+function label(it: ViewItem): string {
   if (it.kind === "person") return "person · room in use";
+  if (it.candidate) return `${it.label}? · hold still to confirm`;
   if (it.state === "off") return `${it.label} · off`;
   const state = it.why === "screen dark" ? " · dark" : it.state === "standby" ? " · standby" : it.why === "screen lit" ? " · lit" : "";
   // Typical use on the picture: the honest everyday figure. The panel adds the left-on one.
@@ -1111,10 +1224,12 @@ function drawOverlay(
   canvas: HTMLCanvasElement,
   sw: number,
   sh: number,
-  items: readonly LiveItem[],
+  items: readonly ViewItem[],
   now: number,
   mirrored: boolean,
   auditing = false,
+  /** 0-1: how long the camera has been held still, toward the confirm step. */
+  holdProgress = 0,
 ) {
   const { ctx, cw, ch } = prepare(canvas);
   if (!ctx) return;
@@ -1130,7 +1245,7 @@ function drawOverlay(
   ctx.fillStyle = g;
   ctx.fillRect(0, sweepY - 60, cw, 60);
 
-  // Centre reticle.
+  // Centre reticle, with the hold-to-confirm progress drawn as a ring around it.
   ctx.strokeStyle = "rgba(255,255,255,0.45)";
   ctx.lineWidth = 1;
   const cx = cw / 2, cy = ch / 2;
@@ -1140,6 +1255,20 @@ function drawOverlay(
   ctx.moveTo(cx, cy - 9); ctx.lineTo(cx, cy - 3);
   ctx.moveTo(cx, cy + 3); ctx.lineTo(cx, cy + 9);
   ctx.stroke();
+  if (holdProgress > 0 || auditing) {
+    ctx.beginPath();
+    ctx.strokeStyle = "rgba(255,216,77,0.35)";
+    ctx.lineWidth = 2;
+    ctx.arc(cx, cy, 18, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.strokeStyle = "#ffd84d";
+    ctx.lineWidth = 2.5;
+    const sweep = auditing ? ((now / 900) % 1) * Math.PI * 2 : holdProgress * Math.PI * 2;
+    const start = auditing ? sweep : -Math.PI / 2;
+    ctx.arc(cx, cy, 18, start, start + (auditing ? Math.PI * 0.6 : sweep));
+    ctx.stroke();
+  }
 
   // Label only the costliest few: forty chips bury the picture.
   const labelled = new Set(
@@ -1162,6 +1291,15 @@ function drawOverlay(
   for (const p of placed) {
     const { it, x, y, w, h, color } = p;
     ctx.globalAlpha = 1;
+    if (it.candidate) {
+      // A suggestion: a thin dashed outline, no fill, no cost. It firms up when confirmed.
+      ctx.setLineDash([6, 5]);
+      ctx.strokeStyle = color + "aa";
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(x + 0.5, y + 0.5, w, h);
+      ctx.setLineDash([]);
+      continue;
+    }
     if (it.kind === "light") {
       ctx.shadowColor = color;
       ctx.shadowBlur = 14;

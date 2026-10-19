@@ -10,15 +10,16 @@ import { mergeDetections, tileGrid, type FracDetection } from "./ondevice";
 import { CONFIRMS, NEEDS_CONFIRM, UNVERIFIED_MIN_SCORE, judge, passesScore, type Guess } from "./verify";
 import type { Box } from "./types";
 
-// Pinned to the installed package version: the WASM runtime and the JS that
-// drives it must match exactly, or the detector fails to start with an opaque
-// error.
-const WASM_ROOT = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.1.0/wasm";
+// Served by this app from the installed package (scripts/copy-runtimes.mjs), so
+// the WASM runtime always matches the JS that drives it, works where a CDN is
+// blocked, and can be cached for use with no signal.
+const WASM_ROOT = "/runtimes/mediapipe";
 const MODELS = "https://storage.googleapis.com/mediapipe-models/object_detector";
-// Lite2 sees at 448px and finds the far rows of a classroom that Lite0 (320px)
-// misses, but it is 12 MB and only keeps up on a GPU. Without one, Lite0.
-const GPU_MODEL = { name: "EfficientDet-Lite2", url: `${MODELS}/efficientdet_lite2/float16/1/efficientdet_lite2.tflite` };
-const CPU_MODEL = { name: "EfficientDet-Lite0", url: `${MODELS}/efficientdet_lite0/float16/1/efficientdet_lite0.tflite` };
+// Lite0 (320 px, 7 MB) on either delegate. Lite2 (448 px, 12 MB) and YOLOv8n
+// (ONNX Runtime Web, 13 MB) were measured against it on 40 labelled Open Images
+// photos of screens, laptops and appliances (docs/live-detector-benchmark.md):
+// neither found more at the same precision, and both were ~3x slower on CPU.
+const MODEL = { name: "EfficientDet-Lite0", url: `${MODELS}/efficientdet_lite0/float16/1/efficientdet_lite0.tflite` };
 
 export interface LoadedDetector {
   detector: ObjectDetector;
@@ -41,11 +42,11 @@ export function getDetector(mode: "VIDEO" | "IMAGE"): Promise<LoadedDetector> {
           maxResults: 40,
         });
       try {
-        return { detector: await make("GPU", GPU_MODEL.url), delegate: "GPU" as const, model: GPU_MODEL.name };
+        return { detector: await make("GPU", MODEL.url), delegate: "GPU" as const, model: MODEL.name };
       } catch {
         // No WebGL2 (older phones, some locked-down school laptops): CPU still
         // manages several frames a second with the small model.
-        return { detector: await make("CPU", CPU_MODEL.url), delegate: "CPU" as const, model: CPU_MODEL.name };
+        return { detector: await make("CPU", MODEL.url), delegate: "CPU" as const, model: MODEL.name };
       }
     })().catch((err) => {
       delete cache[mode];
