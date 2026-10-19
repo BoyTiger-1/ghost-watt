@@ -17,6 +17,8 @@ const COLUMNS = [
       { href: "/methodology", label: "Methodology" },
       { href: "/about", label: "About" },
       { href: "/settings", label: "Rates & regions" },
+      { href: "/privacy", label: "Privacy" },
+      { href: "/terms", label: "Terms" },
     ],
   },
 ];

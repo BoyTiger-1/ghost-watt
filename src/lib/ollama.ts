@@ -26,6 +26,47 @@ export interface PromptContext {
   hints?: string[];
 }
 
+/**
+ * The shape every engine is held to.
+ *
+ * Asking nicely for JSON gets JSON most of the time; a schema gets it every
+ * time, with the fields typed. Anthropic enforces it as a forced tool call, the
+ * OpenAI-shaped APIs as response_format, Ollama as `format`. Two fields exist
+ * purely to fight invention: "visible" (the model must assert it can see the
+ * thing) and "confidence" (so a hedge is a number the app can act on, not a
+ * silently counted device).
+ */
+export const VISION_SCHEMA = {
+  type: "object",
+  properties: {
+    items: {
+      type: "array",
+      description: "One entry per kind of electrical device actually visible in the picture. Empty if none.",
+      items: {
+        type: "object",
+        properties: {
+          device: { type: "string", description: "Device name, e.g. computer monitor, projector, overhead lights, refrigerator." },
+          count: { type: "integer", minimum: 1, description: "How many of this device are visible." },
+          state: { type: "string", enum: ["on", "standby", "off"] },
+          confidence: { type: "number", minimum: 0, maximum: 1, description: "How sure you are this is what it is and that the count is right." },
+          visible: { type: "boolean", description: "True only if the device itself is in the picture, not inferred from context." },
+          watts: { type: "number", description: "Best estimate of one unit's draw while running, W." },
+          technology: { type: "string", description: "e.g. LED, CFL, T8 fluorescent, halogen, CRT, laser projector. Omit if unsure." },
+          evidence: { type: "string", description: "A few words on what decided the state and wattage." },
+          boxes: {
+            type: "array",
+            maxItems: 8,
+            description: "Where the clearly visible units are, as [x1, y1, x2, y2] pixel coordinates in the square image.",
+            items: { type: "array", items: { type: "number" }, minItems: 4, maxItems: 4 },
+          },
+        },
+        required: ["device", "count", "state", "confidence", "visible"],
+      },
+    },
+  },
+  required: ["items"],
+} as const;
+
 const WATT_GUIDE =
   "24-inch LED monitor ~20, 27-inch ~30, old CCFL monitor ~45, CRT ~80, desktop tower idle ~60, laptop charging ~30, lamp projector ~280, laser projector ~160, 75-inch interactive panel ~200, LED troffer ~35, 4-lamp T8 fluorescent troffer ~110, LED recessed downlight ~10, LED pendant ~15, CFL/LED bulb ~10, 27-inch all-in-one computer ~70, vending machine ~400, mini fridge ~70";
 
@@ -70,17 +111,19 @@ Also give "boxes": where each unit is, as [x1, y1, x2, y2] pixel coordinates in 
 `;
 
   const example = video
-    ? `[{"device":"computer monitor","count":24,"state":"on","watts":22,"evidence":"screens lit, login page"},{"device":"overhead lights","count":12,"state":"on","watts":35,"evidence":"LED panels lit"}]`
-    : `[{"device":"computer monitor","count":12,"state":"on","watts":22,"technology":"LED","evidence":"screens lit, 24-inch LED","boxes":[[112,388,201,470],[236,392,318,468]]},{"device":"overhead lights","count":6,"state":"on","watts":35,"evidence":"LED troffers lit","boxes":[[300,20,420,60]]},{"device":"projector","count":1,"state":"standby","watts":250,"evidence":"amber standby light","boxes":[[480,90,560,140]]}]`;
+    ? `[{"device":"computer monitor","count":24,"state":"on","confidence":0.8,"visible":true,"watts":22,"evidence":"screens lit, login page"},{"device":"overhead lights","count":12,"state":"on","confidence":0.9,"visible":true,"watts":35,"evidence":"LED panels lit"}]`
+    : `[{"device":"computer monitor","count":12,"state":"on","confidence":0.85,"visible":true,"watts":22,"technology":"LED","evidence":"screens lit, 24-inch LED","boxes":[[112,388,201,470],[236,392,318,468]]},{"device":"overhead lights","count":6,"state":"on","confidence":0.9,"visible":true,"watts":35,"evidence":"LED troffers lit","boxes":[[300,20,420,60]]},{"device":"projector","count":1,"state":"standby","confidence":0.5,"visible":true,"watts":250,"evidence":"amber standby light, partly hidden","boxes":[[480,90,560,140]]}]`;
 
   return `You are auditing ${video ? "a video walkthrough" : "a photo"} of a room in a school or office, ideally taken after hours. Your job is to spot electrical devices and appliances that are left running or drawing power, and to judge how much each draws.
 
 ${layout}
 ${context.length ? "\n" + context.join("\n") + "\n" : ""}
-List every electrical device or appliance you can see. For each give:
+List only the electrical devices and appliances you can actually see in this picture. Never add a device because a room of this kind usually has one: if it is not visible, it is not listed. For each give:
 - "device": use these names where they fit: ${DEVICE_NAMES}.
-- "count": how many.
+- "count": how many you can see. Do not round up to a typical number.
 - "state": ON (lit, running, display showing something), STANDBY (dark but with an indicator light or clock), or OFF.
+- "confidence": 0 to 1, how sure you are of the device and the count. Use a low number for anything half-hidden, far away or ambiguous rather than leaving it out or guessing it is fine.
+- "visible": true. (Anything you would have to infer gets no entry at all.)
 - "watts": your best estimate of ONE unit's power draw in watts while running, judged from its visible size, age and technology. Reference points: ${WATT_GUIDE}.
 - "technology": the kind of unit if you can tell, e.g. "LED", "halogen", "incandescent", "CFL", "T8 fluorescent", "T12 fluorescent", "CRT", "CCFL LCD", "plasma", "lamp projector", "laser projector". Omit if unsure.
 - "evidence": a few words on what you saw that decided the state and wattage.
@@ -91,7 +134,7 @@ Counting rules - these are where audits go wrong:
 - Count computers and monitors even when seen from behind or at an angle; an all-in-one (like an iMac) is one device, not a monitor plus a computer. If you cannot see the screen, use STANDBY.
 - Look across the whole image, edges and background included, before answering.
 ${boxRules}
-Respond ONLY with a JSON array, no other text. Example:
+Respond ONLY with JSON of the form {"items": [...]}, no other text. Example of the items array:
 ${example}`;
 }
 
@@ -127,7 +170,8 @@ export async function describeImage(
         prompt,
         images: (Array.isArray(images) ? images : [images]).map(toBareBase64),
         stream: false,
-        options: { temperature: 0.1 },
+        format: VISION_SCHEMA,
+        options: { temperature: 0 },
       }),
     });
 

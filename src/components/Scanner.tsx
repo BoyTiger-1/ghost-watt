@@ -30,11 +30,9 @@ import { occupiedHours, unoccupiedHours, SCHEDULE_BY_ID, SCHEDULE_PRESETS } from
 import { contextForBuildingType, type UsageContext } from "@/lib/usage";
 import { EfficiencyPanel } from "./EfficiencyPanel";
 import { nowLocal } from "@/lib/exif";
-import { detectStill, verifyStill } from "@/lib/detector";
-import { withLamps } from "@/lib/verify";
-import { readScene } from "@/lib/scene";
-import { itemsToObservations, peopleIn, readItems, type LiveItem } from "@/lib/ondevice";
-import { FrameReader, annotateFrame, baseName, loadImage, readPhotoFile, toJpeg, videoFileKeyframes } from "@/lib/media";
+import { readStill, type StillRead } from "@/lib/still";
+import { itemsToObservations, peopleIn } from "@/lib/ondevice";
+import { annotateFrame, baseName, loadImage, readPhotoFile, toJpeg, videoFileKeyframes } from "@/lib/media";
 import {
   captureId,
   captureSettings,
@@ -107,22 +105,6 @@ function locate(lat: number, lon: number, sector: Sector): Promise<GeoContext | 
     );
   }
   return geoCache.get(key)!;
-}
-
-/** What the on-device detector reads in one still image. */
-async function readStill(dataUrl: string, settings: AuditSettings) {
-  const img = await loadImage(dataUrl);
-  const raw = await detectStill(img).catch(() => []);
-  const { dets, lamps } = await verifyStill(img, raw).catch(() => ({ dets: raw, lamps: [] }));
-  // A still can afford a finer read than live video: far downlights are a few pixels at 256.
-  const luma = new FrameReader(640).read(img);
-  const scene = luma ? readScene(luma.data, luma.w, luma.h, luma.rgba) : null;
-  if (scene && luma && lamps.length) {
-    scene.lights = withLamps(scene.lights, lamps.map((box) => ({ box, confidence: 0.7 })), luma);
-    if (scene.lights.length) scene.lighting = "on";
-  }
-  const items = readItems(dets, scene?.lights ?? [], settings, luma ?? undefined);
-  return { items, scene };
 }
 
 /** Several frames of one walk: per line, the counts add up, since each keyframe is a different view. */
@@ -320,10 +302,13 @@ export function Scanner() {
 
   function onPhoto(shot: PhotoShot) {
     const c = blank("photo", "camera", nextName("photo"));
+    // Only a confirmed view counts as already read; live candidates are not a reading,
+    // so an unconfirmed frame goes through the strong path like any other photo.
+    const confirmedOnDevice = shot.confirmed && shot.mode === "on-device" ? itemsToObservations(shot.items) : undefined;
     add({
       ...c,
       dataUrl: shot.dataUrl,
-      onDevice: itemsToObservations(shot.items),
+      onDevice: confirmedOnDevice,
       meta: {
         takenAt: nowLocal(),
         brightness: shot.scene?.brightness,
@@ -419,7 +404,7 @@ export function Scanner() {
           onDevice = itemsToObservations(items);
           meta = { ...meta, brightness: scene?.brightness, lighting: scene?.lighting, people: peopleIn(items) };
         } else if (!onDevice && c.kind === "video" && keyframes?.length) {
-          const reads: { items: LiveItem[]; scene: ReturnType<typeof readScene> | null }[] = [];
+          const reads: StillRead[] = [];
           for (const k of keyframes) reads.push(await readStill(k.dataUrl, s));
           keyframes = await Promise.all(keyframes.map(async (k, i) => ({ ...k, annotated: await annotateFrame(k.dataUrl, reads[i].items) })));
           onDevice = mergeObservations(reads.map((r) => itemsToObservations(r.items)));

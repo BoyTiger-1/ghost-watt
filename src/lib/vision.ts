@@ -21,7 +21,7 @@
 // Only ONE hosted key needs to be set. Whichever is present wins, in the order
 // listed in HOSTED below.
 
-import { describeImage as describeViaOllama, probeOllama, buildVisionPrompt, VISION_MODEL } from "./ollama";
+import { describeImage as describeViaOllama, probeOllama, buildVisionPrompt, VISION_MODEL, VISION_SCHEMA } from "./ollama";
 import { FULL_FRAME, type Frame } from "./boxes";
 
 export type VisionKind = "local" | "hosted" | "none";
@@ -142,6 +142,9 @@ async function callAnthropic(
   model: string,
   prompt: string,
 ): Promise<string> {
+  // The schema is enforced as a forced tool call: the model can only answer by
+  // filling in the typed fields, so there is no prose to parse and no field to
+  // forget.
   const json = (await postJson(
     "https://api.anthropic.com/v1/messages",
     { "x-api-key": key, "anthropic-version": "2023-06-01" },
@@ -149,6 +152,14 @@ async function callAnthropic(
       model,
       max_tokens: imgs.length > 1 || anthropicTuning(model).output_config ? MAX_TOKENS_LARGE : MAX_TOKENS,
       ...anthropicTuning(model),
+      tools: [
+        {
+          name: "report_devices",
+          description: "Report the electrical devices visible in the picture.",
+          input_schema: VISION_SCHEMA,
+        },
+      ],
+      tool_choice: { type: "tool", name: "report_devices" },
       messages: [
         {
           role: "user",
@@ -162,8 +173,10 @@ async function callAnthropic(
         },
       ],
     },
-  )) as { content?: { type?: string; text?: string }[] };
+  )) as { content?: { type?: string; text?: string; input?: unknown }[] };
 
+  const tool = (json.content ?? []).find((c) => c.type === "tool_use" && c.input);
+  if (tool) return JSON.stringify(tool.input);
   return (json.content ?? [])
     .filter((c) => c.type === "text")
     .map((c) => c.text ?? "")
@@ -173,25 +186,33 @@ async function callAnthropic(
 
 function openAiCompatible(endpoint: string) {
   return async (imgs: DecodedImage[], key: string, model: string, prompt: string): Promise<string> => {
-    const json = (await postJson(
-      endpoint,
-      { Authorization: `Bearer ${key}` },
-      {
-        model,
-        max_tokens: imgs.length > 1 ? MAX_TOKENS_LARGE : MAX_TOKENS,
-        temperature: 0,
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: prompt },
-              ...imgs.map((img) => ({ type: "image_url", image_url: { url: img.dataUrl } })),
-            ],
-          },
-        ],
-      },
-    )) as { choices?: { message?: { content?: string } }[] };
-
+    const body = (schema: boolean) => ({
+      model,
+      max_tokens: imgs.length > 1 ? MAX_TOKENS_LARGE : MAX_TOKENS,
+      temperature: 0,
+      ...(schema
+        ? { response_format: { type: "json_schema", json_schema: { name: "devices", schema: VISION_SCHEMA } } }
+        : { response_format: { type: "json_object" } }),
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: prompt },
+            ...imgs.map((img) => ({ type: "image_url", image_url: { url: img.dataUrl } })),
+          ],
+        },
+      ],
+    });
+    let json: { choices?: { message?: { content?: string } }[] };
+    try {
+      json = (await postJson(endpoint, { Authorization: `Bearer ${key}` }, body(true))) as typeof json;
+    } catch (err) {
+      // Not every model behind these endpoints takes a schema. A 400 about the
+      // response format falls back to plain JSON mode; anything else is real.
+      const msg = err instanceof Error ? err.message : "";
+      if (!/HTTP 400/.test(msg) || !/response_format|json_schema|schema/i.test(msg)) throw err;
+      json = (await postJson(endpoint, { Authorization: `Bearer ${key}` }, body(false))) as typeof json;
+    }
     return (json.choices?.[0]?.message?.content ?? "").trim();
   };
 }
