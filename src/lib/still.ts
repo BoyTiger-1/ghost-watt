@@ -19,20 +19,26 @@ import type { AuditSettings } from "./types";
 export interface StillRead {
   items: LiveItem[];
   scene: SceneRead | null;
+  /** How long each stage took, ms, so the UI can say and the bench can tune. */
+  timing: { detect: number; verify: number; scene: number; total: number };
 }
 
 /** Read a still (a data URL, or a canvas / image already in hand) on the device. */
 export async function readStill(src: string | HTMLCanvasElement | HTMLImageElement, settings: AuditSettings): Promise<StillRead> {
   const el = typeof src === "string" ? await loadImage(src) : src;
+  const t0 = performance.now();
   const raw = await detectStill(el).catch(() => []);
+  const t1 = performance.now();
   const { dets, lamps } = await verifyStill(el, raw).catch(() => ({ dets: raw, lamps: [] }));
+  const t2 = performance.now();
   // A still can afford a finer read than live video: far downlights are a few pixels at 256.
   const px = new FrameReader(640).read(el);
   const scene = px ? readScene(px.data, px.w, px.h, px.rgba) : null;
+  const t3 = performance.now();
   if (scene && px && lamps.length) {
     scene.lights = withLamps(scene.lights, lamps.map((box) => ({ box, confidence: 0.7 })), px);
     if (scene.lights.length) scene.lighting = "on";
   }
   const items = readItems(dets, scene?.lights ?? [], settings, px ?? undefined);
-  return { items, scene };
+  return { items, scene, timing: { detect: t1 - t0, verify: t2 - t1, scene: t3 - t2, total: performance.now() - t0 } };
 }

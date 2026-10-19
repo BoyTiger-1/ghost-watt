@@ -3,10 +3,11 @@ import { dedupeCandidates, isLiveClass, looksLikeWindow, tooBig } from "./candid
 
 describe("live candidates", () => {
   it("keeps the detector to the classes it is good at, at class-specific thresholds", () => {
-    expect(isLiveClass("tv", 0.41)).toBe(true);
-    expect(isLiveClass("tv", 0.39)).toBe(false);
+    expect(isLiveClass("tv", 0.34)).toBe(true);
+    expect(isLiveClass("tv", 0.32)).toBe(false);
     expect(isLiveClass("refrigerator", 0.45)).toBe(false);
     expect(isLiveClass("refrigerator", 0.55)).toBe(true);
+    expect(isLiveClass("oven", 0.55)).toBe(true);
     expect(isLiveClass("keyboard", 0.99)).toBe(false);
     expect(isLiveClass("clock", 0.99)).toBe(false);
   });

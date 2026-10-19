@@ -57,15 +57,36 @@ function extractCount(fragment: string): number {
 }
 
 /** Pull the first balanced JSON array out of a possibly-chatty model response. */
-function extractJsonArray(text: string): unknown[] | null {
-  // The schema answer is {"items": [...]}; take the array inside it.
-  const trimmed = text.trim();
-  if (trimmed.startsWith("{")) {
-    try {
-      const obj = JSON.parse(trimmed) as { items?: unknown };
-      if (Array.isArray(obj.items)) return obj.items;
-    } catch {
-      // Not a clean object: fall through to the array scan.
+function extractJsonArray(raw: string): unknown[] | null {
+  // Reasoning models may think out loud in <think> tags before the answer.
+  const text = raw.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/<\/?think>/gi, "").trim();
+  // The schema answer is {"items": [...]}; take the array inside it, whether the
+  // object is the whole reply or sits after a sentence of prose.
+  const objStart = text.startsWith("{") ? 0 : text.search(/\{\s*"items"/);
+  if (objStart !== -1) {
+    let depth = 0;
+    let inString = false;
+    for (let i = objStart; i < text.length; i++) {
+      const ch = text[i];
+      if (inString) {
+        if (ch === "\\") i++;
+        else if (ch === '"') inString = false;
+        continue;
+      }
+      if (ch === '"') inString = true;
+      else if (ch === "{") depth++;
+      else if (ch === "}") {
+        depth--;
+        if (depth === 0) {
+          try {
+            const obj = JSON.parse(text.slice(objStart, i + 1)) as { items?: unknown };
+            if (Array.isArray(obj.items)) return obj.items;
+          } catch {
+            // Not a clean object: fall through to the array scan.
+          }
+          break;
+        }
+      }
     }
   }
   const start = text.indexOf("[");
@@ -106,7 +127,10 @@ function fromJson(arr: unknown[], frame: Frame): CategorizedObservation[] {
         : extractCount(String(rec.count ?? "1"));
     const boxes = cleanBoxes(rec, frame);
     const watts = Number(rec.watts ?? rec.wattage ?? rec.power_w ?? rec.power);
-    const evidence = typeof rec.evidence === "string" ? rec.evidence.trim().slice(0, 120) : "";
+    const where = typeof rec.where === "string" ? rec.where.trim().slice(0, 60) : "";
+    const said = typeof rec.evidence === "string" ? rec.evidence.trim().slice(0, 120) : "";
+    // Where it is comes first: that is what a person walks to.
+    const evidence = [where, said].filter(Boolean).join(" · ");
     const techRaw = rec.technology ?? rec.tech ?? rec.type;
     const tech = typeof techRaw === "string" ? techRaw.trim().slice(0, 40) : "";
     const confRaw = Number(rec.confidence);

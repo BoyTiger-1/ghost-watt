@@ -18,14 +18,22 @@ import type { Box } from "./types";
  * the classifier double-checks them (lib/verify.ts). Everything else COCO knows
  * - keyboards, remotes, clocks, phones - is left to the photo pipeline.
  */
-export const LIVE_CLASSES = new Set(["tv", "laptop", "microwave", "refrigerator"]);
+export const LIVE_CLASSES = new Set(["tv", "laptop", "microwave", "refrigerator", "oven", "toaster"]);
 
-/** Per-class detector score needed to become a candidate. Screens are stricter than appliances. */
+/**
+ * Per-class detector score needed to become a candidate. A candidate is drawn
+ * dashed and never priced, so the bar is set for "worth a look", not "certain":
+ * the confirm step through the strong path decides. Appliances the small model
+ * invents (a door as a fridge) stay stricter and are double-checked by the
+ * classifier.
+ */
 export const CANDIDATE_MIN_SCORE: Record<string, number> = {
-  tv: 0.4,
-  laptop: 0.4,
-  microwave: 0.45,
-  refrigerator: 0.5,
+  tv: 0.33,
+  laptop: 0.33,
+  microwave: 0.42,
+  refrigerator: 0.48,
+  oven: 0.5,
+  toaster: 0.5,
 };
 export const CANDIDATE_DEFAULT_SCORE = 0.35;
 

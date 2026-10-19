@@ -10,16 +10,15 @@
 // So perception is now a chain rather than a single engine:
 //
 //   1. Ollama on this machine       free, private, nothing uploaded
-//   2. A hosted model, if a key is set on the server
-//   3. The deterministic room-profile estimate
+//   2. Every hosted model with a key on the server, in the order listed below
 //
 // Step 2 is what lets a visitor scan a real photo without installing anything or
-// signing up for anything - the deployment holds one key, and everybody uses it.
-// Step 3 still exists and still runs when both fail, so the app has never once
-// had a path that ends in an error page.
+// signing up for anything - the deployment holds the keys, and everybody uses
+// them. There is no third step: when nothing answers, the request fails with a
+// clear reason and the browser offers its own on-device reading instead. Nothing
+// is ever invented.
 //
-// Only ONE hosted key needs to be set. Whichever is present wins, in the order
-// listed in HOSTED below.
+// One hosted key is enough; more than one makes each a fallback for the last.
 
 import { describeImage as describeViaOllama, probeOllama, buildVisionPrompt, VISION_MODEL, VISION_SCHEMA } from "./ollama";
 import { FULL_FRAME, type Frame } from "./boxes";
@@ -56,6 +55,10 @@ interface HostedProvider {
    * images; guessing from names would pick a text-only model and fail anyway.
    */
   modelsUrl?: string;
+  /** Models to try, in order, when the default is retired or refuses the request. */
+  fallbacks?: string[];
+  /** The most images one request may carry. A video's frames are thinned to fit. */
+  maxImages?: number;
 }
 
 // Box coordinates roughly triple the length of a reply: a full lab at 8 boxes a
@@ -78,6 +81,11 @@ function anthropicTuning(model: string): Record<string, unknown> {
 }
 
 const TIMEOUT_MS = Number(process.env.VISION_TIMEOUT_MS ?? 45000);
+
+/** A hosted deployment has no Ollama on localhost; trying costs a refused connection, or a hang if a host is misconfigured. */
+function isServerless(): boolean {
+  return Boolean(process.env.VERCEL || process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.RENDER);
+}
 
 // ---- image handling -----------------------------------------------------
 
@@ -214,8 +222,13 @@ function openAiCompatible(endpoint: string) {
       if (!/HTTP 400/.test(msg) || !/response_format|json_schema|schema/i.test(msg)) throw err;
       json = (await postJson(endpoint, { Authorization: `Bearer ${key}` }, body(false))) as typeof json;
     }
-    return (json.choices?.[0]?.message?.content ?? "").trim();
+    return stripReasoning(json.choices?.[0]?.message?.content ?? "");
   };
+}
+
+/** Reasoning models (Qwen 3, DeepSeek) may wrap thoughts in <think> tags before the JSON. */
+export function stripReasoning(text: string): string {
+  return text.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/<\/?think>/gi, "").trim();
 }
 
 const HOSTED: HostedProvider[] = [
@@ -224,31 +237,59 @@ const HOSTED: HostedProvider[] = [
     label: "Anthropic Claude",
     env: "ANTHROPIC_API_KEY",
     model: "claude-haiku-5-5",
+    fallbacks: ["claude-sonnet-5-5", "claude-haiku-4-5"],
+    maxImages: 20,
     signup: "https://console.anthropic.com/settings/keys",
     note: "Best device recognition of the four, and cheap at Haiku size. Recommended.",
     call: callAnthropic,
   },
   {
+    id: "google",
+    label: "Google Gemini",
+    env: "GEMINI_API_KEY",
+    model: "gemini-2.5-flash",
+    fallbacks: ["gemini-2.5-flash-lite", "gemini-2.0-flash"],
+    maxImages: 16,
+    signup: "https://aistudio.google.com/apikey",
+    note: "Free tier with a generous daily quota, and very good at reading rooms. The best free option.",
+    call: openAiCompatible("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"),
+  },
+  {
     id: "groq",
     label: "Groq",
     env: "GROQ_API_KEY",
-    // Groq's vision line-up churns: Llama-4-Scout was retired, then Qwen3.6 -
-    // which this default pointed at, so live scans quietly fell back to the
-    // estimate until someone noticed. A retired default no longer breaks
-    // anything: on model_not_found the call asks Groq for a model whose
-    // input_modalities include "image" and retries with that (see
-    // discoverImageModel). GROQ_API_KEY_MODEL still overrides.
-    model: "qwen/qwen3.8-27b",
+    // Groq's vision line-up churns (Llama 3.2 Vision, then Llama 4 Scout, were
+    // each retired). The default is the vision model Groq documents today, the
+    // fallbacks are the ones it has carried recently, and on model_not_found the
+    // call also asks Groq for any model whose input_modalities include "image".
+    // GROQ_API_KEY_MODEL still overrides. Groq accepts at most 3 images (Qwen) or
+    // 5 (Llama 4) per request, so a video's frames are thinned to fit.
+    model: "qwen/qwen3.6-27b",
+    fallbacks: ["meta-llama/llama-4-scout-17b-16e-instruct", "meta-llama/llama-4-maverick-17b-128e-instruct"],
+    maxImages: 3,
     signup: "https://console.groq.com/keys",
     note: "Free tier, and by far the fastest to answer. Images cost nothing.",
     call: openAiCompatible("https://api.groq.com/openai/v1/chat/completions"),
     modelsUrl: "https://api.groq.com/openai/v1/models",
   },
   {
+    id: "mistral",
+    label: "Mistral",
+    env: "MISTRAL_API_KEY",
+    model: "mistral-small-latest",
+    fallbacks: ["pixtral-12b-latest", "pixtral-large-latest"],
+    maxImages: 8,
+    signup: "https://console.mistral.ai/api-keys",
+    note: "Free experiment tier (rate-limited). Mistral Small reads images.",
+    call: openAiCompatible("https://api.mistral.ai/v1/chat/completions"),
+  },
+  {
     id: "openai",
     label: "OpenAI",
     env: "OPENAI_API_KEY",
     model: "gpt-4o-mini",
+    fallbacks: ["gpt-4.1-mini", "gpt-4o"],
+    maxImages: 10,
     signup: "https://platform.openai.com/api-keys",
     note: "Solid and widely available. Paid only.",
     call: openAiCompatible("https://api.openai.com/v1/chat/completions"),
@@ -257,12 +298,34 @@ const HOSTED: HostedProvider[] = [
     id: "openrouter",
     label: "OpenRouter",
     env: "OPENROUTER_API_KEY",
-    model: "google/gemini-2.0-flash-001",
+    model: "google/gemini-2.5-flash",
+    fallbacks: ["google/gemini-2.0-flash-001", "qwen/qwen2.5-vl-72b-instruct", "meta-llama/llama-4-scout", "google/gemini-2.0-flash-exp:free", "qwen/qwen2.5-vl-72b-instruct:free"],
+    maxImages: 10,
     signup: "https://openrouter.ai/keys",
-    note: "One key, many models. Useful if you want to switch model without new credentials.",
+    note: "One key, many models, several of them free (the ':free' ids). Useful as a last fallback.",
     call: openAiCompatible("https://openrouter.ai/api/v1/chat/completions"),
+    modelsUrl: "https://openrouter.ai/api/v1/models",
   },
 ];
+
+/** Every hosted provider with a key, in the order they are tried. VISION_PROVIDER pins one. */
+function configuredHosted(): HostedProvider[] {
+  const forced = process.env.VISION_PROVIDER?.trim().toLowerCase();
+  if (forced && HOSTED.some((h) => h.id === forced)) {
+    const p = HOSTED.find((h) => h.id === forced)!;
+    return keyFor(p) ? [p] : [];
+  }
+  return HOSTED.filter((p) => keyFor(p));
+}
+
+/** Pick `n` frames spread evenly through a video's keyframes. */
+export function thinImages<T>(images: T[], n: number): T[] {
+  if (images.length <= n) return images;
+  if (n <= 1) return [images[0]];
+  const out: T[] = [];
+  for (let i = 0; i < n; i++) out.push(images[Math.round((i * (images.length - 1)) / (n - 1))]);
+  return out;
+}
 
 function keyFor(p: HostedProvider): string | undefined {
   const v = process.env[p.env];
@@ -273,14 +336,9 @@ function modelFor(p: HostedProvider): string {
   return process.env[`${p.env}_MODEL`]?.trim() || p.model;
 }
 
-/** The hosted provider that will actually be used, if any. */
+/** The hosted provider a scan starts with, if any. */
 function activeHosted(): HostedProvider | null {
-  const forced = process.env.VISION_PROVIDER?.trim().toLowerCase();
-  if (forced) {
-    const p = HOSTED.find((h) => h.id === forced);
-    return p && keyFor(p) ? p : null;
-  }
-  return HOSTED.find((p) => keyFor(p)) ?? null;
+  return configuredHosted()[0] ?? null;
 }
 
 // ---- the chain ----------------------------------------------------------
@@ -306,7 +364,8 @@ export async function describeImagesAny(images: string[], prompt: string, schema
   const errors: string[] = [];
   let localConfigured = false;
 
-  if (forced !== "hosted" && !HOSTED.some((h) => h.id === forced)) {
+  const localWorthTrying = forced === "ollama" || forced === "local" || !isServerless() || Boolean(process.env.OLLAMA_HOST?.trim());
+  if (forced !== "hosted" && !HOSTED.some((h) => h.id === forced) && localWorthTrying) {
     const local = await describeViaOllama(images, prompt, schema);
     if (local.ok && local.text.trim()) {
       return { ...local, provider: "Ollama (local)", kind: "local" };
@@ -318,37 +377,41 @@ export async function describeImagesAny(images: string[], prompt: string, schema
     }
   }
 
-  const hosted = activeHosted();
-  if (hosted) {
+  // Every configured hosted provider is a fallback for the one before it: one
+  // retired model or one rate limit must not end a demo. Within a provider the
+  // retired-model path tries its listed fallbacks, then whatever the provider's
+  // own model list says accepts images.
+  const providers = configuredHosted();
+  for (const hosted of providers) {
     const key = keyFor(hosted)!;
-    let model = effectiveModel(hosted);
-    try {
-      const img = images.map(decodeImage);
-      let text: string;
+    const img = thinImages(images.map(decodeImage), hosted.maxImages ?? 10);
+    const tried = new Set<string>();
+    const candidates = [effectiveModel(hosted), ...(hosted.fallbacks ?? [])];
+    for (let i = 0; i < candidates.length; i++) {
+      const model = candidates[i];
+      if (tried.has(model)) continue;
+      tried.add(model);
       try {
-        text = await callWithRetry(hosted, img, key, model, prompt, schema);
+        const text = await callWithRetry(hosted, img, key, model, prompt, schema);
+        if (text) {
+          if (i > 0) discovered.set(hosted.id, model);
+          return { ok: true, text, model, provider: `${hosted.label} (hosted)`, kind: "hosted" };
+        }
+        errors.push(`${hosted.label}: empty reply from ${model}`);
       } catch (err) {
-        const replacement = isRetiredModel(err) ? await discoverImageModel(hosted, key, model) : null;
-        if (!replacement) throw err;
-        model = replacement;
-        text = await callWithRetry(hosted, img, key, model, prompt, schema);
+        const msg = err instanceof Error ? err.message : "unknown";
+        errors.push(`${hosted.label} (${model}): ${shortError(msg)}`);
+        // Only a model that no longer exists is worth trying the next model for;
+        // an auth failure or a rate limit means move on to the next provider.
+        if (!isRetiredModel(err)) break;
+        if (i === candidates.length - 1) {
+          const found = await discoverImageModel(hosted, key, model);
+          if (found && !tried.has(found)) candidates.push(found);
+        }
       }
-      if (text) {
-        return {
-          ok: true,
-          text,
-          model,
-          provider: `${hosted.label} (hosted)`,
-          kind: "hosted",
-        };
-      }
-      errors.push(`${hosted.id}: empty response`);
-    } catch (err) {
-      errors.push(`${hosted.id}: ${err instanceof Error ? err.message : "unknown"}`);
     }
-  } else {
-    errors.push("no hosted vision key configured");
   }
+  if (!providers.length) errors.push("no hosted vision key is configured on this deployment");
 
   return {
     ok: false,
@@ -357,8 +420,15 @@ export async function describeImagesAny(images: string[], prompt: string, schema
     provider: "none",
     kind: "none",
     error: errors.join("; "),
-    configured: Boolean(hosted) || localConfigured,
+    configured: providers.length > 0 || localConfigured,
   };
+}
+
+/** The useful part of a provider's error, without the JSON envelope. */
+function shortError(msg: string): string {
+  const m = /"message"\s*:\s*"([^"]{1,160})"/.exec(msg);
+  if (m) return m[1];
+  return msg.replace(/\s+/g, " ").slice(0, 160);
 }
 
 /**
@@ -406,7 +476,7 @@ export function retryDelayMs(message: string): number {
 /** The provider said the model does not exist, or no longer does. */
 function isRetiredModel(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : "";
-  return /HTTP (404|400)/.test(msg) && /model_not_found|decommissioned|does not exist/i.test(msg);
+  return /HTTP (404|400)/.test(msg) && /model_not_found|decommissioned|does not exist|not found|no longer supported|is not a valid model|unsupported model|invalid model/i.test(msg);
 }
 
 const discovered = new Map<string, string>();
@@ -522,7 +592,7 @@ export async function probeVision(): Promise<VisionStatus> {
   return {
     ready: false,
     active: "none",
-    activeLabel: "Room-profile estimate",
+    activeLabel: "No cloud model: on-device only",
     activeModel: "none",
     local,
     hosted,

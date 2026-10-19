@@ -154,3 +154,14 @@ describe("parseModelOutput", () => {
     expect(parseModelOutput(`[{"label": "monitor", "count": 1}]`)[0].categoryId).toBe("monitor");
   });
 });
+
+describe("replies from reasoning models", () => {
+  it("ignores <think> blocks and prose before the JSON object", async () => {
+    const { parseModelOutput } = await import("./parse");
+    const text = `<think>The room has {braces} and "quotes" in my notes.</think>\nHere is the audit: {"items":[{"device":"computer monitor","count":2,"state":"on","visible":true,"where":"desk by the window"}]}`;
+    const out = parseModelOutput(text);
+    expect(out).toHaveLength(1);
+    expect(out[0].count).toBe(2);
+    expect(out[0].evidence).toBe("desk by the window");
+  });
+});
