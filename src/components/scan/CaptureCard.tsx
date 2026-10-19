@@ -14,6 +14,7 @@ export function CaptureCard({
   devices,
   schedule,
   defaultOpen,
+  compact,
   onDetails,
   onPatch,
   onReanalyze,
@@ -25,6 +26,8 @@ export function CaptureCard({
   devices: number;
   schedule?: WeeklySchedule;
   defaultOpen?: boolean;
+  /** Shown under the viewer, which already shows the picture: no thumbnail. */
+  compact?: boolean;
   onDetails: (d: Partial<CaptureDetails>) => void;
   onPatch: (p: Partial<Capture>) => void;
   onReanalyze: () => void;
@@ -42,7 +45,7 @@ export function CaptureCard({
   return (
     <motion.article layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="panel relative overflow-hidden">
       <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center gap-3 p-2.5 text-left">
-        <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-surface2">
+        <div className={`relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-surface2 ${compact ? "hidden" : ""}`}>
           {thumb ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={thumb} alt="" className="h-full w-full object-cover" />
@@ -61,7 +64,7 @@ export function CaptureCard({
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="truncate text-[0.92rem] font-medium text-fog">{c.name}</span>
+            <span className="truncate text-[0.92rem] font-medium text-fog">{compact ? "Details for this picture" : c.name}</span>
             {c.status === "done" && c.result && (
               <span
                 className={`shrink-0 rounded-full px-1.5 py-px text-[0.64rem] font-medium ${

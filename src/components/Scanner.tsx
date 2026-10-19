@@ -4,8 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { PageHeader } from "./PageHeader";
-import { OffenderCard } from "./OffenderCard";
-import { CountUp } from "./CountUp";
 import { BuildingBar } from "./BuildingBar";
 import { BudgetPlanner } from "./BudgetPlanner";
 import { GridPulse } from "./GridPulse";
@@ -19,7 +17,13 @@ import { ContributeBar } from "./ContributeBar";
 import { WeatherContext } from "./WeatherContext";
 import { EquivalenceStrip } from "./EquivalenceStrip";
 import { BenchmarkPanel, ExportBar, LoadMixPanel } from "./AuditPanels";
-import { DetectionView, type DetectionPhoto } from "./DetectionView";
+import { offenderAnchor, type DetectionPhoto } from "./DetectionView";
+import { ReportBrief, type ReportPicture } from "./ReportBrief";
+import { MediaViewer } from "./scan/MediaViewer";
+import { Summary } from "./scan/Summary";
+import { DeviceList } from "./scan/DeviceList";
+import { BillCompare, EmptyTime, MoneyOverTime } from "./scan/Visuals";
+import { listActions, rankActions } from "@/lib/actions";
 import { CameraMode, type PhotoShot, type VideoShot } from "./scan/CameraMode";
 import { UploadMode } from "./scan/UploadMode";
 import { CaptureCard } from "./scan/CaptureCard";
@@ -27,7 +31,7 @@ import { Icon } from "./scan/icons";
 import { analysisSquare } from "@/lib/image";
 import type { CategorizedObservation } from "@/lib/parse";
 import { ON_DEVICE_ENGINE, describeAnalyzeError, useEngine } from "@/lib/engine";
-import { aggregate, counted, fmtCo2, fmtKwh, fmtMoney, fmtMoneyFull } from "@/lib/energy";
+import { aggregate, counted } from "@/lib/energy";
 import { crossCheck } from "@/lib/crosscheck";
 import { costRange, RATE_SIGMA, type RateQuality } from "@/lib/estimate";
 import { regionOrDefault, regionRate } from "@/lib/grid";
@@ -54,7 +58,7 @@ import { addBuilding, currentStore, newBuilding, removeAudit, removeCalibration,
 import type { AnalysisResult, AnalyzeError, AuditSettings } from "@/lib/types";
 
 type Mode = "camera" | "upload";
-type ResultTab = "offenders" | "plan" | "grid" | "context";
+type ResultTab = "devices" | "fix" | "charts" | "report";
 
 /** The saved-scan id a capture writes to, so a re-analysis replaces rather than duplicates. */
 const auditIdFor = (captureId: string) => `scan_${captureId}`;
@@ -136,7 +140,18 @@ export function Scanner() {
   const [mode, setMode] = useState<Mode>("camera");
   const [captures, setCaptures] = useState<Capture[]>([]);
   const [showSettings, setShowSettings] = useState(false);
-  const [tab, setTab] = useState<ResultTab>("offenders");
+  const [tab, setTab] = useState<ResultTab>("devices");
+  /** The capture shown large in the viewer. */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  /** The device row opened from a box on the photo. */
+  const [openDevice, setOpenDevice] = useState<string | null>(null);
+  // /report used to be its own page; it now lands on this tab.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (new URLSearchParams(window.location.search).get("view") === "report") setTab("report");
+    }, 0);
+    return () => clearTimeout(t);
+  }, []);
   const engine = useEngine();
   const engineRef = useRef(engine);
   useEffect(() => {
@@ -304,6 +319,7 @@ export function Scanner() {
 
   const add = useCallback((c: Capture) => {
     setCaptures((prev) => [c, ...prev]);
+    setSelectedId(c.id);
   }, []);
 
   const counter = useRef({ photo: 0, video: 0 });
@@ -635,7 +651,6 @@ export function Scanner() {
       ),
     [countedOffenders, rateQuality],
   );
-  const maxCost = ranked[0]?.offender.costPerYear ?? 0;
   const hasResults = done.length > 0;
   const working = captures.some((c) => c.status === "working" || c.status === "pending");
 
@@ -724,15 +739,66 @@ export function Scanner() {
     }
   }, [priced, t]);
 
-  const basisMix = useMemo(() => {
-    const m = { measured: 0, ai: 0, catalog: 0 };
-    for (const o of countedOffenders) m[o.basis ?? "catalog"]++;
-    return m;
-  }, [countedOffenders]);
+  const actions = useMemo(() => rankActions(listActions(countedOffenders, settings)), [countedOffenders, settings]);
+  const viewerItems = useMemo(() => priced.map((p) => ({ capture: p.c, offenders: p.offenders })), [priced]);
+  const deviceLines = useMemo(
+    () =>
+      ranked.map((r) => {
+        const key = parseOffenderKey(r.offender.id);
+        const cap = key ? captures.find((c) => c.id === key.captureId) : undefined;
+        return { offender: r.offender, adjust: key ? cap?.adjust[key.categoryId] : undefined };
+      }),
+    [ranked, captures],
+  );
+
+  /** This scan as one audit, for the report tab. */
+  const currentAudit = useMemo<SavedAudit | null>(() => {
+    if (!done.length) return null;
+    const engines = [...new Set(done.map((p) => p.c.result!.engine))];
+    return {
+      id: "current",
+      buildingId: building.id,
+      at: new Date().toISOString(),
+      areas: done.map((p) => p.c.name),
+      offenders,
+      settings,
+      mode: auditMode,
+      engine: engines.length === 1 ? engines[0] : `${engines.length} engines`,
+    };
+  }, [done, building.id, offenders, settings, auditMode]);
+
+  const reportPictures = useMemo<ReportPicture[]>(
+    () =>
+      done.map((p) => {
+        const photo = detectionPhotos.find((d) => d.id === p.c.id);
+        return photo ? { id: p.c.id, name: p.c.name, photo } : { id: p.c.id, name: p.c.name, src: p.c.keyframes?.[0]?.annotated ?? p.c.dataUrl ?? undefined };
+      }),
+    [done, detectionPhotos],
+  );
+
+  const selected = captures.find((c) => c.id === selectedId) ?? captures[0];
+  const scrollBehavior: ScrollBehavior = prefs.motion === "reduce" ? "auto" : "smooth";
+
+  /** A box on the photo was tapped: open that device's row. */
+  function pickDevice(id: string) {
+    setTab("devices");
+    setOpenDevice(id);
+    setTimeout(() => document.getElementById(offenderAnchor(id))?.scrollIntoView({ behavior: scrollBehavior, block: "center" }), 60);
+  }
+
+  function goTab(next: ResultTab) {
+    setTab(next);
+    setTimeout(() => document.getElementById("scan-tabs")?.scrollIntoView({ behavior: scrollBehavior, block: "start" }), 30);
+  }
+
+  function showAssumptions() {
+    setShowSettings(true);
+    setTimeout(() => document.getElementById("assumptions")?.scrollIntoView({ behavior: scrollBehavior, block: "center" }), 30);
+  }
 
   return (
     <section id="scanner" className="relative z-10 mx-auto max-w-6xl scroll-mt-20 px-4 pb-16 pt-[4.25rem] sm:px-6 md:pt-24">
-      <div className="mb-3 flex flex-col gap-4 md:mb-6 md:flex-row md:items-end md:justify-between">
+      <div className="no-print mb-3 flex flex-col gap-4 md:mb-6 md:flex-row md:items-end md:justify-between">
         <PageHeader eyebrow={t("nav.scanner")} title={t("scan.title")} accent={t("scan.accent")} className="hidden md:block">
           {t("scan.intro")}{" "}
           <Link href="/methodology" className="text-cyan underline decoration-cyan/30 underline-offset-4 hover:decoration-cyan">
@@ -747,176 +813,167 @@ export function Scanner() {
         </div>
       </div>
 
-      {mode === "camera" ? (
-        <CameraMode
-          settings={settings}
-          schedule={building.schedule}
-          geo={deviceGeo?.geo ?? null}
-          geoBusy={geoBusy}
-          onLocate={requestLocation}
-          onPhoto={onPhoto}
-          onVideo={onVideo}
-          onUseUpload={() => setMode("upload")}
-        />
-      ) : (
-        <UploadMode onFiles={onFiles} />
-      )}
+      <div className="no-print">
+        {mode === "camera" && (
+          <CameraMode
+            settings={settings}
+            schedule={building.schedule}
+            geo={deviceGeo?.geo ?? null}
+            geoBusy={geoBusy}
+            onLocate={requestLocation}
+            onPhoto={onPhoto}
+            onVideo={onVideo}
+            onUseUpload={() => setMode("upload")}
+          />
+        )}
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
-        {/* ---- captures ---- */}
-        <div className="min-w-0 space-y-3 lg:col-start-1 lg:row-start-1">
-          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-            <span className="mono-label">{t("scan.captures")} · {captures.length}</span>
-            <div className="flex items-center gap-3">
-              {captures.length > 0 && (
-                <button onClick={() => setCaptures([])} className="text-[0.74rem] text-dim hover:text-ember">
-                  {t("scan.clear")}
-                </button>
+        {/* Nothing added yet: the drop zone (upload) or what to expect (camera). */}
+        {captures.length === 0 &&
+          (mode === "upload" ? (
+            <UploadMode onFiles={onFiles} />
+          ) : (
+            <div className="mt-6">
+              <EmptyState working={working} mode={mode} />
+            </div>
+          ))}
+
+        {/* Something added: what was found, drawn on it, beside the short version. */}
+        {captures.length > 0 && (
+          <div className={`grid gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:items-start ${mode === "camera" ? "mt-6" : ""}`}>
+            <div className="min-w-0 space-y-3">
+              <MediaViewer
+                items={viewerItems}
+                selectedId={selected?.id ?? null}
+                onSelect={setSelectedId}
+                hovered={hovered}
+                onHover={setHovered}
+                onPick={pickDevice}
+                onFiles={mode === "upload" ? onFiles : undefined}
+                onClear={() => setCaptures([])}
+              />
+              {selected && (
+                <CaptureCard
+                  key={selected.id}
+                  compact
+                  capture={selected}
+                  cost={priced.find((p) => p.c.id === selected.id)?.offenders.reduce((s, o) => s + o.costPerYear, 0) ?? 0}
+                  devices={priced.find((p) => p.c.id === selected.id)?.offenders.reduce((s, o) => s + o.count, 0) ?? 0}
+                  schedule={building.schedule}
+                  onDetails={(d) => setDetails(selected.id, d)}
+                  onPatch={(p) => patch(selected.id, p)}
+                  onReanalyze={() => patch(selected.id, { status: "pending", result: undefined, error: undefined, errorCode: undefined })}
+                  onUseOnDevice={selected.onDevice?.length ? () => adoptOnDevice(selected.id) : undefined}
+                  onRemove={() => remove(selected.id)}
+                />
+              )}
+            </div>
+            <div className="min-w-0 lg:sticky lg:top-20">
+              {hasResults ? (
+                <Summary
+                  annual={totals.annualCostPerYear}
+                  range={annualRange}
+                  wasted={totals.costPerYear}
+                  needed={Math.max(0, totals.annualCostPerYear - totals.costPerYear)}
+                  recoverable={totals.recoverableCost}
+                  actions={actions}
+                  top={totals.topOffender}
+                  co2Kg={totals.co2KgPerYear}
+                  place={place}
+                  photos={done.length}
+                  working={working}
+                  unverifiedCount={offenders.length - countedOffenders.length}
+                  rateQuality={rateQuality}
+                  onDevices={() => goTab("devices")}
+                  onFixes={() => goTab("fix")}
+                  onAccuracy={showAssumptions}
+                />
+              ) : (
+                <EmptyState working={working} mode={mode} />
               )}
             </div>
           </div>
-          {captures.length === 0 && (
-            <div className="rounded-2xl border border-dashed border-line2 px-4 py-6 text-center text-[0.84rem] leading-relaxed text-mist">
-              {mode === "camera" ? t("scan.empty.camera") : t("scan.empty.upload")}
+        )}
+      </div>
+
+      {hasResults && (
+        <div id="scan-tabs" className="mt-8 scroll-mt-20 space-y-5">
+          <div className="no-print">
+            <TabBar tab={tab} onChange={setTab} count={ranked.length} />
+          </div>
+
+          {tab === "devices" && (
+            <div className="no-print">
+              <DeviceList lines={deviceLines} hovered={hovered} onHover={setHovered} onAdjust={setAdjust} openId={openDevice} onOpen={setOpenDevice} />
             </div>
           )}
-          <AnimatePresence initial={false}>
-            {priced.map(({ c, offenders: os }) => (
-              <CaptureCard
-                key={c.id}
-                capture={c}
-                cost={os.reduce((s, o) => s + o.costPerYear, 0)}
-                devices={os.reduce((s, o) => s + o.count, 0)}
-                schedule={building.schedule}
-                defaultOpen={c.origin === "upload" && captures.length <= 2}
-                onDetails={(d) => setDetails(c.id, d)}
-                onPatch={(p) => patch(c.id, p)}
-                onReanalyze={() => patch(c.id, { status: "pending", result: undefined, error: undefined, errorCode: undefined })}
-                onUseOnDevice={c.onDevice?.length ? () => adoptOnDevice(c.id) : undefined}
-                onRemove={() => remove(c.id)}
+
+          {tab === "fix" && (
+            <div className="no-print space-y-5">
+              <ActionPlan offenders={countedOffenders} settings={settings} />
+              <BudgetPlanner offenders={countedOffenders} />
+            </div>
+          )}
+
+          {tab === "charts" && (
+            <div className="no-print space-y-5">
+              <div className="grid gap-5 md:grid-cols-2">
+                <BillCompare offenders={countedOffenders} settings={settings} />
+                <EmptyTime settings={settings} home={place === "home"} />
+              </div>
+              <MoneyOverTime offenders={countedOffenders} settings={settings} />
+              <div className="grid gap-5 md:grid-cols-2">
+                <LoadMixPanel offenders={countedOffenders} />
+                {countedOffenders.length > 0 && <EfficiencyPanel offenders={countedOffenders} settings={settings} />}
+              </div>
+              <EquivalenceStrip co2Kg={totals.co2KgPerYear} dollars={totals.costPerYear} />
+              <BenchmarkPanel offenders={countedOffenders} building={building} settings={settings} />
+              <div className="grid gap-5 md:grid-cols-2">
+                <GridPulse regionCode={building.regionCode} annualKwhWasted={totals.kwhPerYear} />
+                <WeatherContext lat={building.lat ?? deviceGeo?.lat} lon={building.lon ?? deviceGeo?.lon} offenders={countedOffenders} />
+              </div>
+              <SolarOffset
+                lat={building.lat ?? deviceGeo?.lat}
+                lon={building.lon ?? deviceGeo?.lon}
+                regionCode={building.regionCode}
+                annualKwhWasted={totals.kwhPerYear}
+                ratePerKwh={settings.ratePerKwh}
+                co2PerKwh={settings.co2PerKwh}
               />
-            ))}
-          </AnimatePresence>
-        </div>
-
-        {/* ---- results ---- */}
-        <div className="min-w-0 space-y-5 lg:col-start-2 lg:row-span-2 lg:row-start-1">
-          {hasResults ? (
-            <>
-              <TotalsHeader
-                cost={totals.costPerYear}
-                annual={totals.annualCostPerYear}
-                annualRange={annualRange}
-                rateQuality={rateQuality}
-                co2={totals.co2KgPerYear}
-                kwh={totals.kwhPerYear}
-                recoverable={totals.recoverableCost}
-                topLabel={totals.topOffender?.label ?? "-"}
-                captures={done.length}
-                basisMix={basisMix}
-                working={working}
-                typical={countedOffenders.reduce((t, o) => t + (o.typicalCostPerYear ?? 0), 0)}
-                unverified={totals.unverifiedCost}
-                unverifiedCount={offenders.length - countedOffenders.length}
-                place={place}
+              <BillCalibration
+                bill={building.bill}
+                auditKwhPerYear={totals.kwhPerYear}
+                assumedRate={settings.ratePerKwh}
+                floorAreaSqFt={building.floorAreaSqFt}
+                typeId={building.typeId}
               />
+            </div>
+          )}
 
-              <ExportBar offenders={countedOffenders} settings={settings} buildingName={building.name} savedTo={ready ? building.name : undefined} roomCount={done.length} />
-
-              <ContributeBar offenders={countedOffenders} mode={auditMode} defaultArea={done[0]?.c.name ?? building.name} />
-
-              <TabBar tab={tab} onChange={setTab} count={ranked.length} />
-
-              {tab === "offenders" && (
-                <div className="space-y-4">
-                  {countedOffenders.length > 0 && <EfficiencyPanel offenders={countedOffenders} settings={settings} />}
-                  {detectionPhotos.length > 0 && <DetectionView photos={detectionPhotos} hovered={hovered} onHover={setHovered} />}
-                  {ranked.length === 0 && (
-                    <div className="panel p-6 text-center text-[0.9rem] text-mist">
-                      Nothing left drawing power in what&apos;s been scanned so far. That&apos;s the result you want.
-                    </div>
-                  )}
-                  <AnimatePresence>
-                    {ranked.map((r, i) => {
-                      const key = parseOffenderKey(r.offender.id);
-                      const cap = key ? captures.find((c) => c.id === key.captureId) : undefined;
-                      return (
-                        <motion.div
-                          key={r.offender.id}
-                          layout
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.35, delay: Math.min(i, 8) * 0.04, ease: [0.22, 1, 0.36, 1] }}
-                        >
-                        <OffenderCard
-                          offender={r.offender}
-                          rank={i + 1}
-                          maxCost={maxCost}
-                          mode={r.mode}
-                          engine={r.engine}
-                          highlighted={hovered === r.offender.id}
-                          onHover={setHovered}
-                          adjust={key ? cap?.adjust[key.categoryId] : undefined}
-                          onAdjust={(a) => setAdjust(r.offender.id, a)}
-                        />
-                        </motion.div>
-                      );
-                    })}
-                  </AnimatePresence>
-                </div>
-              )}
-
-              {tab === "plan" && (
-                <div className="space-y-5">
-                  <ActionPlan offenders={countedOffenders} settings={settings} />
-                  <BudgetPlanner offenders={countedOffenders} />
-                </div>
-              )}
-
-              {tab === "grid" && (
-                <div className="space-y-5">
-                  <GridPulse regionCode={building.regionCode} annualKwhWasted={totals.kwhPerYear} />
-                  <WeatherContext lat={building.lat ?? deviceGeo?.lat} lon={building.lon ?? deviceGeo?.lon} offenders={countedOffenders} />
-                  <SolarOffset
-                    lat={building.lat ?? deviceGeo?.lat}
-                    lon={building.lon ?? deviceGeo?.lon}
-                    regionCode={building.regionCode}
-                    annualKwhWasted={totals.kwhPerYear}
-                    ratePerKwh={settings.ratePerKwh}
-                    co2PerKwh={settings.co2PerKwh}
-                  />
-                </div>
-              )}
-
-              {tab === "context" && (
-                <div className="space-y-5">
-                  <LoadMixPanel offenders={countedOffenders} />
-                  <EquivalenceStrip co2Kg={totals.co2KgPerYear} dollars={totals.costPerYear} />
-                  <BenchmarkPanel offenders={countedOffenders} building={building} settings={settings} />
-                  <BillCalibration
-                    bill={building.bill}
-                    auditKwhPerYear={totals.kwhPerYear}
-                    assumedRate={settings.ratePerKwh}
-                    floorAreaSqFt={building.floorAreaSqFt}
-                    typeId={building.typeId}
-                  />
-                </div>
-              )}
-            </>
-          ) : (
-            <EmptyState working={working} mode={mode} />
+          {tab === "report" && (
+            <div className="space-y-5">
+              <ReportBrief current={currentAudit} pictures={reportPictures} />
+              <div className="no-print space-y-3">
+                <ExportBar offenders={countedOffenders} settings={settings} buildingName={building.name} savedTo={ready ? building.name : undefined} roomCount={done.length} />
+                <ContributeBar offenders={countedOffenders} mode={auditMode} defaultArea={done[0]?.c.name ?? building.name} />
+              </div>
+            </div>
           )}
         </div>
+      )}
 
-        {/* ---- assumptions ---- */}
-        <div className="min-w-0 space-y-4 lg:col-start-1 lg:row-start-2">
+      {/* ---- the figures everything is priced with ---- */}
+      {captures.length > 0 && (
+        <div id="assumptions" className="no-print mt-8 grid scroll-mt-24 gap-4 lg:grid-cols-2">
           {ready && <BuildingBar building={building} buildings={store.buildings} liveRate={liveRate} onFetchRate={fetchLiveRate} />}
 
-          <div className="panel">
-            <button onClick={() => setShowSettings((s) => !s)} className="flex w-full items-center justify-between px-4 py-3.5" aria-expanded={showSettings}>
-              <span className="mono-label">Override assumptions</span>
-              <span className="font-mono text-xs text-mist">
-                {settings.ratePerKwh.toFixed(3)} $/kWh
+          <div className="panel self-start">
+            <button onClick={() => setShowSettings((s) => !s)} className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left" aria-expanded={showSettings}>
+              <span>
+                <span className="block text-[0.92rem] font-medium text-fog">Prices and hours we used</span>
+                <span className="block text-[0.76rem] text-dim">Change these if you know better. Your bill beats every estimate.</span>
+              </span>
+              <span className="shrink-0 font-mono text-xs text-mist">
+                ${settings.ratePerKwh.toFixed(2)} per kWh
                 {override.ratePerKwh === undefined && billRate !== undefined && <span className="ml-1.5 text-lime">from bill</span>}
                 <span className="ml-2 text-cyan">{showSettings ? "−" : "+"}</span>
               </span>
@@ -925,20 +982,26 @@ export function Scanner() {
               {showSettings && (
                 <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
                   <div className="space-y-4 border-t border-line px-4 py-4">
-                    <p className="text-[0.75rem] leading-relaxed text-dim">
-                      Filled in from the building above, or from where each capture was taken. Change one only if you have a figure off an
-                      actual bill - that beats every estimate, and tightens the range.
-                    </p>
-                    <Field label="electricity rate ($/kWh)" value={settings.ratePerKwh} step={0.01} onChange={(v) => setOverride((s) => ({ ...s, ratePerKwh: v }))} />
-                    <Field label="grid carbon (kg CO₂ / kWh)" value={settings.co2PerKwh} step={0.005} onChange={(v) => setOverride((s) => ({ ...s, co2PerKwh: v }))} />
                     <Field
-                      label="empty hours / year"
+                      label="Price of electricity (dollars per kWh, on your bill)"
+                      value={settings.ratePerKwh}
+                      step={0.01}
+                      onChange={(v) => setOverride((s) => ({ ...s, ratePerKwh: v }))}
+                    />
+                    <Field
+                      label="Hours a year the place is empty"
                       value={settings.unoccupiedHoursPerYear}
                       step={100}
                       onChange={(v) => setOverride((s) => ({ ...s, unoccupiedHoursPerYear: v }))}
                     />
                     <Field
-                      label="demand charge ($/kW-month, optional)"
+                      label="Carbon per kWh from your grid (kg of CO₂)"
+                      value={settings.co2PerKwh}
+                      step={0.005}
+                      onChange={(v) => setOverride((s) => ({ ...s, co2PerKwh: v }))}
+                    />
+                    <Field
+                      label="Demand charge, businesses only (dollars per kW each month, optional)"
                       value={settings.demandChargePerKw ?? 0}
                       step={0.5}
                       onChange={(v) => setOverride((s) => ({ ...s, demandChargePerKw: v }))}
@@ -948,9 +1011,9 @@ export function Scanner() {
                         setOverride({});
                         setLiveRate(null);
                       }}
-                      className="text-[0.7rem] text-dim hover:text-cyan"
+                      className="text-[0.76rem] text-dim hover:text-cyan"
                     >
-                      ↺ back to the building&apos;s own figures
+                      ↺ Back to the building&apos;s own figures
                     </button>
                   </div>
                 </motion.div>
@@ -958,7 +1021,7 @@ export function Scanner() {
             </AnimatePresence>
           </div>
         </div>
-      </div>
+      )}
 
       <AnimatePresence>
         {toast && (
@@ -1045,23 +1108,23 @@ function ModeSwitch({ mode, onChange }: { mode: Mode; onChange: (m: Mode) => voi
 function TabBar({ tab, onChange, count }: { tab: ResultTab; onChange: (t: ResultTab) => void; count: number }) {
   const t = useT();
   const tabs: { id: ResultTab; label: string; hint: string }[] = [
-    { id: "offenders", label: t("tab.offenders"), hint: "What is running" },
-    { id: "plan", label: t("tab.plan"), hint: "What to do, in order, and what it changes" },
-    { id: "grid", label: t("tab.grid"), hint: "When to burn it, and what would cancel it" },
-    { id: "context", label: t("tab.context"), hint: "What it means and how you compare" },
+    { id: "devices", label: t("tab.devices"), hint: "Everything found, most wasteful first" },
+    { id: "fix", label: t("tab.fix"), hint: "What to do, in order, and what it saves" },
+    { id: "charts", label: t("tab.charts"), hint: "Pictures of the result, and how you compare" },
+    { id: "report", label: t("tab.report"), hint: "A report to print or save as a PDF" },
   ];
   return (
     <div className="flex rounded-full bg-fog/[0.05] p-1" role="tablist">
-      {tabs.map((t) => (
+      {tabs.map((x) => (
         <button
-          key={t.id}
+          key={x.id}
           role="tab"
-          aria-selected={tab === t.id}
-          onClick={() => onChange(t.id)}
-          title={t.hint}
-          className={`relative flex-1 whitespace-nowrap rounded-full px-2 py-2 text-[0.85rem] transition-colors ${tab === t.id ? "text-fog" : "text-dim hover:text-mist"}`}
+          aria-selected={tab === x.id}
+          onClick={() => onChange(x.id)}
+          title={x.hint}
+          className={`relative flex-1 whitespace-nowrap rounded-full px-2 py-2.5 text-[0.85rem] font-medium transition-colors sm:text-[0.92rem] ${tab === x.id ? "text-fog" : "text-dim hover:text-mist"}`}
         >
-          {tab === t.id && (
+          {tab === x.id && (
             <motion.span
               layoutId="tab-pill"
               className="absolute inset-0 rounded-full bg-surface shadow-[0_1px_2px_rgba(28,27,24,0.08),0_4px_12px_-6px_rgba(28,27,24,0.2)]"
@@ -1069,159 +1132,11 @@ function TabBar({ tab, onChange, count }: { tab: ResultTab; onChange: (t: Result
             />
           )}
           <span className="relative">
-            {t.label}
-            {t.id === "offenders" && <span className="ml-1 tabular-nums text-dim">{count}</span>}
+            {x.label}
+            {x.id === "devices" && <span className="ml-1 tabular-nums text-dim">{count}</span>}
           </span>
         </button>
       ))}
-    </div>
-  );
-}
-
-const RATE_WORDS: Record<RateQuality, string> = {
-  bill: "your bill's rate",
-  utility: "your utility's rate",
-  state: "a state-average rate",
-  national: "the national-average rate",
-};
-
-function TotalsHeader({
-  cost,
-  annual,
-  annualRange,
-  rateQuality,
-  co2,
-  kwh,
-  recoverable,
-  topLabel,
-  captures,
-  basisMix,
-  working,
-  typical,
-  unverified,
-  unverifiedCount,
-  place,
-}: {
-  cost: number;
-  annual: number;
-  annualRange: ReturnType<typeof costRange>;
-  rateQuality: RateQuality;
-  co2: number;
-  kwh: number;
-  recoverable: number;
-  topLabel: string;
-  captures: number;
-  basisMix: { measured: number; ai: number; catalog: number };
-  working: boolean;
-  typical: number;
-  /** Annual cost of lines shown but not counted, and how many there are. */
-  unverified: number;
-  unverifiedCount: number;
-  place: UsageContext;
-}) {
-  const t = useT();
-  const lines = basisMix.measured + basisMix.ai + basisMix.catalog;
-  // Precision: how tight the 80% band is, as a share of the headline.
-  const precision = Math.max(0, Math.min(1, 1 - annualRange.spread));
-  const wasteShare = annual > 0 ? Math.min(1, cost / annual) : 0;
-  return (
-    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="panel ticked relative overflow-hidden p-5 sm:p-6">
-      <div
-        className="absolute inset-0 -z-10 opacity-60"
-        style={{ background: "radial-gradient(60% 120% at 100% 0%, rgba(239,157,46,0.1), transparent 60%)" }}
-      />
-      <div className="flex items-center justify-between gap-3">
-        <span className="mono-label text-cyan">{t("totals.eyebrow.run")}</span>
-        <span className="font-mono text-[0.68rem] text-dim">
-          {captures} {captures === 1 ? t("totals.capture") : t("totals.captures")}
-          {working && <span className="ml-1.5 text-sodium-deep">· {t("totals.analysing")}</span>}
-        </span>
-      </div>
-
-      <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
-        <BigStat
-          label={t("totals.run")}
-          accent
-          value={
-            annual > 0 ? (
-              <span className="whitespace-nowrap">
-                <CountUp value={annualRange.p10} format={fmtMoney} />–<CountUp value={annualRange.p90} format={fmtMoney} />
-              </span>
-            ) : (
-              "$0"
-            )
-          }
-        />
-        <BigStat label={t("totals.wasted")} value={<CountUp value={cost} format={fmtMoneyFull} />} />
-        <BigStat label={t("totals.recoverable")} value={<CountUp value={recoverable} format={fmtMoneyFull} />} />
-        <BigStat label={t("totals.co2")} value={<CountUp value={co2} format={fmtCo2} />} />
-      </div>
-
-      {annual > 0 && (
-        <div className="mt-5 border-t border-line pt-4">
-          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-            <span className="text-[0.84rem] text-fog">
-              {t("totals.best")} <span className="font-mono font-semibold">{fmtMoneyFull(annual)}</span> {t("totals.year.between")}{" "}
-              <span className="font-mono font-semibold">{fmtMoney(annualRange.p10)}</span> {t("totals.and")} <span className="font-mono font-semibold">{fmtMoney(annualRange.p90)}</span>
-            </span>
-            <span className="font-mono text-[0.72rem] text-dim">±{Math.round(annualRange.spread * 100)}% · {t("totals.range")} · {fmtKwh(kwh)} {t("totals.wasted.kwh")}</span>
-          </div>
-          {/* The year, drawn: the part spent in normal use and the part wasted after hours. */}
-          <div className="mt-2.5 flex h-2.5 overflow-hidden rounded-full bg-surface2" aria-hidden="true">
-            <motion.div className="h-full bg-cyan/70" initial={{ width: 0 }} animate={{ width: `${(1 - wasteShare) * 100}%` }} transition={{ duration: 0.6, ease: "easeOut" }} />
-            <motion.div className="h-full bg-ember" initial={{ width: 0 }} animate={{ width: `${wasteShare * 100}%` }} transition={{ duration: 0.6, ease: "easeOut", delay: 0.1 }} />
-          </div>
-          <div className="mt-1 flex justify-between text-[0.7rem] text-dim">
-            <span>{t("totals.normal.use")}</span>
-            <span className="text-ember">
-              {Math.round(wasteShare * 100)}% {t("totals.after.hours.share")}
-            </span>
-          </div>
-          <p className="mt-2.5 text-[0.74rem] leading-relaxed text-dim">
-            {lines > 0 && (
-              <>
-                {basisMix.measured > 0 && `${basisMix.measured} measured by you · `}
-                {basisMix.ai > 0 && `${basisMix.ai} wattage${basisMix.ai > 1 ? "s" : ""} read by AI · `}
-                {basisMix.catalog > 0 && `${basisMix.catalog} from published ranges · `}
-              </>
-            )}
-            priced at {RATE_WORDS[rateQuality]}. {precision < 0.75 ? "Add measured watts or a bill rate to narrow it." : ""}
-          </p>
-        </div>
-      )}
-
-      {annual > 0 && (
-        <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-surface2/60 p-3 text-[0.8rem]">
-          <div>
-            <div className="font-mono text-lg font-semibold text-fog">{fmtMoneyFull(cost)}</div>
-            <div className="leading-snug text-mist">{place === "home" ? t("totals.after.hours.explain.home") : t("totals.after.hours.explain")}</div>
-          </div>
-          <div>
-            <div className="font-mono text-lg font-semibold text-fog">{fmtMoneyFull(typical)}</div>
-            <div className="leading-snug text-mist">{t("totals.typical.explain")}</div>
-          </div>
-        </div>
-      )}
-
-      <div className="mt-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 font-mono text-[0.72rem] text-mist">
-        <span>
-          {t("totals.biggest")} <span className="text-lime">{topLabel}</span>
-        </span>
-        {unverifiedCount > 0 && (
-          <span className="text-amber" title="The cloud model reported these but the on-device detector could not back them. Confirm or delete each one on its card.">
-            + {fmtMoney(unverified)}{t("plan.yr")} · {unverifiedCount} {unverifiedCount > 1 ? t("totals.unverified.plural") : t("totals.unverified")}, {t("totals.not.counted")}
-          </span>
-        )}
-      </div>
-    </motion.div>
-  );
-}
-
-function BigStat({ label, value, accent }: { label: string; value: React.ReactNode; accent?: boolean }) {
-  return (
-    <div>
-      <div className={`font-mono text-2xl font-bold sm:text-3xl ${accent ? "grad-energy text-glow" : "text-fog"}`}>{value}</div>
-      <div className="mono-label mt-1">{label}</div>
     </div>
   );
 }

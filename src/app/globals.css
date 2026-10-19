@@ -434,6 +434,10 @@ body {
  * distinction a reader scans for, so it survives as dark red and dark green
  * that still read correctly on a mono printer.
  */
+.print-only {
+  display: none;
+}
+
 @media print {
   @page {
     margin: 10mm 12mm;
@@ -447,6 +451,10 @@ body {
 
   /* Chrome for the screen: navigation, controls, decoration. None of it means
      anything on paper and all of it costs a reader attention. */
+  .print-only {
+    display: block !important;
+  }
+
   .no-print,
   nav,
   header.site-header,
