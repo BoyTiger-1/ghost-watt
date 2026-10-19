@@ -62,19 +62,26 @@ export function CodeWindow({ files, className = "", compact = false }: { files: 
         </div>
       )}
 
-      <div className="overflow-x-auto">
-        <pre className={`py-4 font-numeric leading-[1.7] text-[#e5e5e8] ${compact ? "text-[11.5px]" : "min-w-max text-[12.5px] sm:text-[13px]"}`}>
+      <div>
+        <pre className={`py-4 font-numeric leading-[1.7] text-[#e5e5e8] ${compact ? "text-[11.5px]" : "text-[12.5px] sm:text-[13px]"}`}>
           <code>
-            {lines.map((line, i) => (
-              <div key={i} className="flex">
-                <span className={`shrink-0 select-none text-right text-[#5c5c63] ${compact ? "w-9 pr-3" : "w-12 pr-4"}`}>{start + i}</span>
-                {/* On a phone, long lines wrap at spaces with a hanging indent
-                    rather than scrolling sideways out of view. */}
-                <span className={compact ? "min-w-0 whitespace-pre-wrap pl-4 pr-4 -indent-4" : "pr-6"}>
-                  {highlight(compact ? line.trimStart() : line)}
-                </span>
-              </div>
-            ))}
+            {lines.map((line, i) => {
+              // Long lines wrap instead of scrolling sideways. A wrapped line keeps
+              // its own indent and hangs two columns further in, like an editor's
+              // soft wrap. The phone excerpt drops the indent to save width.
+              const indent = compact ? 0 : line.length - line.trimStart().length;
+              return (
+                <div key={i} className="flex">
+                  <span className={`shrink-0 select-none text-right text-[#5c5c63] ${compact ? "w-9 pr-3" : "w-12 pr-4"}`}>{start + i}</span>
+                  <span
+                    className="min-w-0 whitespace-pre-wrap break-words pr-4"
+                    style={{ paddingLeft: `${indent + 2}ch`, textIndent: "-2ch" }}
+                  >
+                    {highlight(line.trimStart())}
+                  </span>
+                </div>
+              );
+            })}
           </code>
         </pre>
       </div>

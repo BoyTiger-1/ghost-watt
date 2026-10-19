@@ -16,9 +16,8 @@ import { ThemeToggle } from "./ThemeToggle";
 
 const TABS = [
   { href: "/scan", key: "nav.scanner", icon: "scan" },
-  { href: "/portfolio", key: "nav.rooms", icon: "rooms" },
-  { href: "/report", key: "nav.brief", icon: "doc" },
-  { href: "/buildings", key: "nav.buildings", icon: "building" },
+  { href: "/places", key: "nav.places", icon: "building" },
+  { href: "/team", key: "nav.team", icon: "people" },
   { href: "/methodology", key: "nav.method", icon: "book" },
 ] as const satisfies readonly { href: string; key: Key; icon: string }[];
 
@@ -50,6 +49,7 @@ export function Nav() {
                 <Link
                   key={tab.href}
                   href={tab.href}
+                  data-tour={tab.href === "/places" ? "places" : undefined}
                   aria-current={active ? "page" : undefined}
                   className={`relative rounded-full px-3.5 py-1.5 text-[0.86rem] transition-colors duration-300 ${active ? "text-fog" : "text-mist hover:text-fog"}`}
                 >
@@ -95,13 +95,14 @@ export function Nav() {
         aria-label="Sections"
         className="app-tabbar no-print fixed inset-x-0 bottom-0 z-50 border-t border-line/80 bg-ink/85 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl backdrop-saturate-150 md:hidden"
       >
-        <ul className="mx-auto grid max-w-md grid-cols-5">
+        <ul className="mx-auto grid max-w-md grid-cols-4">
           {TABS.map((tab) => {
             const active = pathname === tab.href;
             return (
               <li key={tab.href}>
                 <Link
                   href={tab.href}
+                  data-tour={tab.href === "/places" ? "places" : undefined}
                   aria-current={active ? "page" : undefined}
                   className={`flex flex-col items-center gap-1 pb-2 pt-2.5 text-[0.68rem] font-medium transition-colors ${
                     active ? "text-fog" : "text-dim"
@@ -145,20 +146,6 @@ function Icon({ name, className }: { name: string; className?: string }) {
           <path d="M9 20v-5h6v5M8 10h1M11.5 10h1M15 10h1" {...P} />
         </>
       )}
-      {name === "rooms" && (
-        <>
-          <rect x="3.5" y="4" width="7" height="7" rx="1.2" {...P} />
-          <rect x="13.5" y="4" width="7" height="7" rx="1.2" {...P} />
-          <rect x="3.5" y="13" width="7" height="7" rx="1.2" {...P} />
-          <rect x="13.5" y="13" width="7" height="7" rx="1.2" {...P} />
-        </>
-      )}
-      {name === "doc" && (
-        <>
-          <path d="M7 3.5h7l4 4V19a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 19V5a1.5 1.5 0 0 1 1-1.5z" {...P} />
-          <path d="M14 3.5V8h4M9 12h6M9 15.5h4" {...P} />
-        </>
-      )}
       {name === "people" && (
         <>
           <circle cx="9" cy="9" r="3" {...P} />
@@ -175,7 +162,7 @@ function Icon({ name, className }: { name: string; className?: string }) {
       {name === "gear" && (
         <>
           <circle cx="12" cy="12" r="3" {...P} />
-          <path d="M12 3v2.2M12 18.8V21M3 12h2.2M18.8 12H21M5.6 5.6l1.6 1.6M16.8 16.8l1.6 1.6M5.6 18.4l1.6-1.6M16.8 7.2l1.6-1.6" {...P} />
+          <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" {...P} />
         </>
       )}
     </svg>

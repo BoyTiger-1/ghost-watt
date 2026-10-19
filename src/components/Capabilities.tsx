@@ -53,9 +53,9 @@ const CAPS = [
     stat: "exact knapsack, not greedy",
   },
   {
-    href: "/portfolio",
+    href: "/places",
     title: "Prove it worked",
-    body: "Log what got installed, re-scan later, and get a device-by-device verdict on whether the load really went away.",
+    body: "Tick off fixes as you do them, scan the room again, and see whether the waste really went away.",
     stat: "expected vs verified",
   },
   {

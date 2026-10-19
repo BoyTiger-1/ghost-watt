@@ -4,9 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { PageHeader } from "./PageHeader";
-import { OffenderCard } from "./OffenderCard";
-import { CountUp } from "./CountUp";
-import { BuildingBar } from "./BuildingBar";
 import { BudgetPlanner } from "./BudgetPlanner";
 import { GridPulse } from "./GridPulse";
 import { SolarOffset } from "./SolarOffset";
@@ -15,19 +12,32 @@ import { useT } from "@/lib/i18n";
 import { usePrefs } from "@/lib/prefs";
 import { beep, say } from "@/lib/cues";
 import { BillCalibration } from "./BillCalibration";
-import { ContributeBar } from "./ContributeBar";
+import { TeamSend } from "./scan/TeamSend";
 import { WeatherContext } from "./WeatherContext";
 import { EquivalenceStrip } from "./EquivalenceStrip";
 import { BenchmarkPanel, ExportBar, LoadMixPanel } from "./AuditPanels";
-import { DetectionView, type DetectionPhoto } from "./DetectionView";
+import { offenderAnchor, type DetectionPhoto } from "./DetectionView";
+import { ReportBrief, type ReportPicture } from "./ReportBrief";
+import { MediaViewer } from "./scan/MediaViewer";
+import { Summary } from "./scan/Summary";
+import { DeviceList } from "./scan/DeviceList";
+import { BillCompare, EmptyTime, MoneyOverTime } from "./scan/Visuals";
+import { listActions, rankActions } from "@/lib/actions";
 import { CameraMode, type PhotoShot, type VideoShot } from "./scan/CameraMode";
 import { UploadMode } from "./scan/UploadMode";
 import { CaptureCard } from "./scan/CaptureCard";
+import { ClearWorkDialog } from "./scan/ClearWorkDialog";
+import { Tour, TOUR_KEY } from "./scan/Tour";
+import { Drawer } from "./scan/Drawer";
+import { PlaceSelect } from "./scan/PlaceSelect";
+import { AddToPlace } from "./scan/AddToPlace";
+import { MoreMenu } from "./scan/MoreMenu";
+import { clearWorkspace, eraseEverything, loadWorkspace, saveWorkspace } from "@/lib/workspace";
 import { Icon } from "./scan/icons";
 import { analysisSquare } from "@/lib/image";
 import type { CategorizedObservation } from "@/lib/parse";
 import { ON_DEVICE_ENGINE, describeAnalyzeError, useEngine } from "@/lib/engine";
-import { aggregate, counted, fmtCo2, fmtKwh, fmtMoney, fmtMoneyFull } from "@/lib/energy";
+import { aggregate, counted } from "@/lib/energy";
 import { crossCheck } from "@/lib/crosscheck";
 import { costRange, RATE_SIGMA, type RateQuality } from "@/lib/estimate";
 import { regionOrDefault, regionRate } from "@/lib/grid";
@@ -50,11 +60,15 @@ import {
   type GeoContext,
 } from "@/lib/capture";
 import type { Building, SavedAudit } from "@/lib/storage";
-import { addBuilding, currentStore, newBuilding, removeAudit, removeCalibration, upsertAudit, upsertCalibration, useStore } from "@/lib/useStore";
+import { addBuilding, currentStore, newBuilding, setActiveBuilding, removeAudit, removeCalibration, upsertAudit, upsertCalibration, useStore } from "@/lib/useStore";
+import { BUILDING_TYPE_BY_ID } from "@/lib/benchmark";
 import type { AnalysisResult, AnalyzeError, AuditSettings } from "@/lib/types";
 
 type Mode = "camera" | "upload";
-type ResultTab = "offenders" | "plan" | "grid" | "context";
+type ResultTab = "devices" | "fix" | "charts" | "report";
+
+/** Rooms saved in a place: one per room name, however many times it was scanned. */
+const rollupRoomCount = (audits: SavedAudit[]) => new Set(audits.map((a) => (a.areas[0] ?? "").trim().toLowerCase())).size;
 
 /** The saved-scan id a capture writes to, so a re-analysis replaces rather than duplicates. */
 const auditIdFor = (captureId: string) => `scan_${captureId}`;
@@ -136,7 +150,27 @@ export function Scanner() {
   const [mode, setMode] = useState<Mode>("camera");
   const [captures, setCaptures] = useState<Capture[]>([]);
   const [showSettings, setShowSettings] = useState(false);
-  const [tab, setTab] = useState<ResultTab>("offenders");
+  const [tab, setTab] = useState<ResultTab>("devices");
+  /** The capture shown large in the viewer. */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  /** The device row opened from a box on the photo. */
+  const [openDevice, setOpenDevice] = useState<string | null>(null);
+  /** "Scan this room again" from My places: new pictures are saved as that room, so it gets a before and after. */
+  const [roomName, setRoomName] = useState<string | null>(null);
+  const roomRef = useRef<string | null>(null);
+  useEffect(() => {
+    roomRef.current = roomName;
+  }, [roomName]);
+  // /report used to be its own page; it now lands on this tab.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const q = new URLSearchParams(window.location.search);
+      if (q.get("view") === "report") setTab("report");
+      const room = q.get("room")?.trim();
+      if (room) setRoomName(room.slice(0, 60));
+    }, 0);
+    return () => clearTimeout(t);
+  }, []);
   const engine = useEngine();
   const engineRef = useRef(engine);
   useEffect(() => {
@@ -303,10 +337,89 @@ export function Scanner() {
   }, []);
 
   const add = useCallback((c: Capture) => {
-    setCaptures((prev) => [c, ...prev]);
+    const named = roomRef.current ? { ...c, name: roomRef.current } : c;
+    setCaptures((prev) => [named, ...prev]);
+    setSelectedId(c.id);
   }, []);
 
   const counter = useRef({ photo: 0, video: 0 });
+
+  // ---- the work in progress, kept on this device ---------------------------
+
+  /** Captures saved to a place, and the room name each was saved as. Nothing is saved until it's added. */
+  const [added, setAdded] = useState<Record<string, { buildingId: string; room: string }>>({});
+
+  /** True once the saved work has been read, so an empty first render never overwrites it. */
+  const [restored, setRestored] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    loadWorkspace().then((ws) => {
+      if (!alive) return;
+      if (ws && !capturesRef.current.length) {
+        setCaptures(ws.captures);
+        setSelectedId(ws.selectedId);
+        setAdded(ws.added);
+        // Carry on numbering where the saved work left off.
+        for (const c of ws.captures) {
+          const m = /^(Photo|Video) (\d+)$/.exec(c.name);
+          if (m) {
+            const k = m[1] === "Photo" ? "photo" : "video";
+            counter.current[k] = Math.max(counter.current[k], Number(m[2]));
+          }
+        }
+        // A picture opened in upload mode reopens there.
+        if (ws.captures.some((c) => c.origin === "upload")) setMode("upload");
+      }
+      setRestored(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!restored) return;
+    const t = setTimeout(() => saveWorkspace(captures, selectedId, added), 800);
+    return () => clearTimeout(t);
+  }, [captures, selectedId, added, restored]);
+
+  const [confirmClear, setConfirmClear] = useState(false);
+
+  const [touring, setTouring] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        if (!localStorage.getItem(TOUR_KEY)) setTouring(true);
+      } catch {
+        // Storage blocked: don't nag on every visit.
+      }
+    }, 900);
+    return () => clearTimeout(t);
+  }, []);
+  async function clearWork(everything: boolean) {
+    setConfirmClear(false);
+    for (const c of capturesRef.current) if (c.videoUrl) URL.revokeObjectURL(c.videoUrl);
+    setCaptures([]);
+    setSelectedId(null);
+    setAdded({});
+    setOverride({});
+    setTab("devices");
+    counter.current = { photo: 0, video: 0 };
+    await clearWorkspace();
+    try {
+      // The notes written on this scan's report go with it.
+      const notes = JSON.parse(localStorage.getItem("gw-report-notes") ?? "{}") as Record<string, unknown>;
+      for (const k of Object.keys(notes)) if (k.startsWith("current:")) delete notes[k];
+      localStorage.setItem("gw-report-notes", JSON.stringify(notes));
+    } catch {
+      // Nothing kept.
+    }
+    if (everything) {
+      await eraseEverything();
+      window.location.reload();
+      return;
+    }
+    setToast("Cleared. Ready for a fresh scan.");
+  }
   const nextName = (kind: "photo" | "video") =>
     `${kind === "photo" ? "Photo" : "Video"} ${String(++counter.current[kind]).padStart(2, "0")}`;
 
@@ -551,6 +664,12 @@ export function Scanner() {
     });
     // The saved room goes with it: removing a capture is saying it was not a reading to keep.
     removeAudit(auditIdFor(id));
+    setAdded((prev) => {
+      if (!(id in prev)) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
   }
 
   // ---- pricing ------------------------------------------------------------
@@ -635,7 +754,6 @@ export function Scanner() {
       ),
     [countedOffenders, rateQuality],
   );
-  const maxCost = ranked[0]?.offender.costPerYear ?? 0;
   const hasResults = done.length > 0;
   const working = captures.some((c) => c.status === "working" || c.status === "pending");
 
@@ -662,34 +780,26 @@ export function Scanner() {
   }, [done]);
 
   /**
-   * Every finished capture is saved as a room of the active building, and
-   * re-saved whenever its pricing or its name changes.
-   *
-   * Saving used to be a button, and a brief or a building roll-up that depended
-   * on someone having pressed it was a brief that usually said "nothing saved".
-   * The saved record is what the rooms page, the brief and the building total
-   * are built from, so it is written as soon as there is a reading to write.
+   * A scan is saved to My places only once it's added to a place. After that it
+   * is kept up to date there as its reading, corrections or prices change.
    */
-  const buildingIdRef = useRef(building.id);
-  useEffect(() => {
-    buildingIdRef.current = building.id;
-  }, [building.id]);
   useEffect(() => {
     if (!ready) return;
     let alive = true;
     const t = setTimeout(async () => {
       for (const p of priced) {
         const r = p.c.result;
-        if (!r || p.c.status !== "done") continue;
+        const where = added[p.c.id];
+        if (!where || !r || p.c.status !== "done") continue;
         const id = auditIdFor(p.c.id);
         const existing = currentStore().audits.find((a) => a.id === id);
         const thumb = existing?.thumb ?? (await thumbOf(p.c.dataUrl));
         if (!alive) return;
         const audit: SavedAudit = {
           id,
-          buildingId: existing?.buildingId ?? buildingIdRef.current,
+          buildingId: where.buildingId,
           at: existing?.at ?? new Date().toISOString(),
-          areas: [p.c.name],
+          areas: [where.room],
           offenders: p.offenders,
           settings: captureSettings(settings, { geo: p.c.geo ?? null }, rateQualityBase).settings,
           mode: r.mode,
@@ -707,7 +817,7 @@ export function Scanner() {
       alive = false;
       clearTimeout(t);
     };
-  }, [priced, ready, settings, rateQualityBase]);
+  }, [priced, ready, settings, rateQualityBase, added]);
 
   // A finished capture gets a tone and, if asked, a spoken summary.
   const announcedRef = useRef(new Set<string>());
@@ -724,15 +834,162 @@ export function Scanner() {
     }
   }, [priced, t]);
 
-  const basisMix = useMemo(() => {
-    const m = { measured: 0, ai: 0, catalog: 0 };
-    for (const o of countedOffenders) m[o.basis ?? "catalog"]++;
-    return m;
-  }, [countedOffenders]);
+  const actions = useMemo(() => rankActions(listActions(countedOffenders, settings)), [countedOffenders, settings]);
+  const viewerItems = useMemo(() => priced.map((p) => ({ capture: p.c, offenders: p.offenders })), [priced]);
+  const deviceLines = useMemo(
+    () =>
+      ranked.map((r) => {
+        const key = parseOffenderKey(r.offender.id);
+        const cap = key ? captures.find((c) => c.id === key.captureId) : undefined;
+        return { offender: r.offender, adjust: key ? cap?.adjust[key.categoryId] : undefined };
+      }),
+    [ranked, captures],
+  );
+
+  /** This scan as one audit, for the report tab. */
+  const currentAudit = useMemo<SavedAudit | null>(() => {
+    if (!done.length) return null;
+    const engines = [...new Set(done.map((p) => p.c.result!.engine))];
+    return {
+      id: "current",
+      buildingId: building.id,
+      at: new Date().toISOString(),
+      areas: done.map((p) => p.c.name),
+      offenders,
+      settings,
+      mode: auditMode,
+      engine: engines.length === 1 ? engines[0] : `${engines.length} engines`,
+    };
+  }, [done, building.id, offenders, settings, auditMode]);
+
+  const reportPictures = useMemo<ReportPicture[]>(
+    () =>
+      done.map((p) => {
+        const photo = detectionPhotos.find((d) => d.id === p.c.id);
+        return photo ? { id: p.c.id, name: p.c.name, photo } : { id: p.c.id, name: p.c.name, src: p.c.keyframes?.[0]?.annotated ?? p.c.dataUrl ?? undefined };
+      }),
+    [done, detectionPhotos],
+  );
+
+  const selected = captures.find((c) => c.id === selectedId) ?? captures[0];
+  const scrollBehavior: ScrollBehavior = prefs.motion === "reduce" ? "auto" : "smooth";
+
+  /** A box on the photo was tapped: open that device's row. */
+  function pickDevice(id: string) {
+    setTab("devices");
+    setOpenDevice(id);
+    setTimeout(() => document.getElementById(offenderAnchor(id))?.scrollIntoView({ behavior: scrollBehavior, block: "center" }), 60);
+  }
+
+  function goTab(next: ResultTab) {
+    setTab(next);
+    setTimeout(() => document.getElementById("scan-tabs")?.scrollIntoView({ behavior: scrollBehavior, block: "start" }), 30);
+  }
+
+  function showAssumptions() {
+    setShowSettings(true);
+  }
+
+
+  const PLACE_WORD: Record<UsageContext, string> = { home: "Home", school: "School", office: "Office" };
+  const priceChip = (
+    <button
+      onClick={() => setShowSettings(true)}
+      aria-haspopup="dialog"
+      data-tour="settings"
+      title="Building and prices"
+      className="inline-flex min-w-0 items-center gap-2 rounded-full bg-fog/[0.06] px-3.5 py-2.5 text-[0.84rem] font-medium text-mist transition-colors hover:bg-fog/[0.1] hover:text-fog"
+    >
+      <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" aria-hidden>
+        <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
+        <circle cx="16" cy="7" r="2" />
+        <circle cx="10" cy="17" r="2" />
+      </svg>
+      {PLACE_WORD[place]}
+      <span className="text-dim">·</span>
+      <span className="shrink-0 font-mono text-[0.78rem]">${settings.ratePerKwh.toFixed(2)}/kWh</span>
+    </button>
+  );
+
+  const [addOpen, setAddOpen] = useState(0);
+  const addedHere = done.filter((p) => added[p.c.id]);
+  const allAdded = done.length > 0 && addedHere.length === done.length;
+  const addedPlace = allAdded ? store.buildings.find((b) => b.id === added[done[0].c.id]?.buildingId) : undefined;
+  const addButton = hasResults && (
+    <button
+      onClick={() => setAddOpen((n) => n + 1)}
+      className={`inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-[0.92rem] font-semibold shadow-[0_8px_20px_-10px_rgba(168,97,12,0.7)] transition-transform hover:scale-[1.02] active:scale-[0.98] ${
+        allAdded ? "bg-lime text-white" : "bg-sodium text-black"
+      }`}
+    >
+      {allAdded ? (
+        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M5 12.5l4.5 4.5L19 7.5" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" aria-hidden>
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      )}
+      {allAdded ? `Saved to ${addedPlace?.name ?? "a place"}` : "Add to place"}
+    </button>
+  );
+
+  const moreMenu = (
+    <MoreMenu
+      items={[
+        { label: "Building and prices", onClick: () => setShowSettings(true) },
+        { label: "Show me around", onClick: () => setTouring(true) },
+        ...(captures.length ? [{ label: "Clear current work", danger: true, onClick: () => setConfirmClear(true) }] : []),
+      ]}
+    />
+  );
+
+  function addToPlace(target: { buildingId: string } | { newPlace: { name: string; typeId: string } }, rooms: { captureId: string; room: string }[]) {
+    let buildingId: string;
+    let name: string;
+    let typeId: string;
+    if ("newPlace" in target) {
+      const b = newBuilding(target.newPlace.name, target.newPlace.typeId, building.regionCode);
+      addBuilding(b);
+      buildingId = b.id;
+      name = b.name;
+      typeId = b.typeId;
+    } else {
+      const b = store.buildings.find((x) => x.id === target.buildingId)!;
+      setActiveBuilding(b.id);
+      buildingId = b.id;
+      name = b.name;
+      typeId = b.typeId;
+    }
+    // Prices now follow the place the rooms belong to.
+    choosePlace(contextForBuildingType(typeId));
+    setAdded((prev) => ({ ...prev, ...Object.fromEntries(rooms.map((r) => [r.captureId, { buildingId, room: r.room }])) }));
+    setCaptures((prev) => prev.map((c) => (rooms.find((r) => r.captureId === c.id) ? { ...c, name: rooms.find((r) => r.captureId === c.id)!.room } : c)));
+    setAddOpen(0);
+    setToast(`Added ${rooms.length} room${rooms.length === 1 ? "" : "s"} to ${name}. Find ${rooms.length === 1 ? "it" : "them"} in My places.`);
+  }
+
+  const roomChip = roomName && (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-cyan/10 py-1.5 pl-3.5 pr-1.5 text-[0.82rem] text-cyan">
+      Saving as <span className="font-medium">{roomName}</span>
+      <button
+        onClick={() => {
+          setRoomName(null);
+          window.history.replaceState(null, "", "/scan");
+        }}
+        aria-label="Stop saving pictures under this room name"
+        className="grid h-6 w-6 place-items-center rounded-full hover:bg-cyan/15"
+      >
+        <Icon name="close" className="h-3 w-3" />
+      </button>
+    </span>
+  );
 
   return (
     <section id="scanner" className="relative z-10 mx-auto max-w-6xl scroll-mt-20 px-4 pb-16 pt-[4.25rem] sm:px-6 md:pt-24">
-      <div className="mb-3 flex flex-col gap-4 md:mb-6 md:flex-row md:items-end md:justify-between">
+      {captures.length === 0 ? (
+      <div className="no-print mb-3 flex flex-col gap-4 md:mb-6 md:flex-row md:items-end md:justify-between">
         <PageHeader eyebrow={t("nav.scanner")} title={t("scan.title")} accent={t("scan.accent")} className="hidden md:block">
           {t("scan.intro")}{" "}
           <Link href="/methodology" className="text-cyan underline decoration-cyan/30 underline-offset-4 hover:decoration-cyan">
@@ -742,223 +999,293 @@ export function Scanner() {
         </PageHeader>
         <h1 className="sr-only">{t("nav.scanner")}</h1>
         <div className="flex items-center justify-between gap-2 md:flex-col md:items-end">
-          <ModeSwitch mode={mode} onChange={setMode} />
-          <PlacePicker place={place} onChange={choosePlace} />
+          <div data-tour="mode">
+            <ModeSwitch mode={mode} onChange={setMode} />
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {roomChip}
+            {priceChip}
+            {moreMenu}
+          </div>
         </div>
       </div>
-
-      {mode === "camera" ? (
-        <CameraMode
-          settings={settings}
-          schedule={building.schedule}
-          geo={deviceGeo?.geo ?? null}
-          geoBusy={geoBusy}
-          onLocate={requestLocation}
-          onPhoto={onPhoto}
-          onVideo={onVideo}
-          onUseUpload={() => setMode("upload")}
-        />
       ) : (
-        <UploadMode onFiles={onFiles} />
+        <div className="no-print mb-4 flex flex-wrap items-center justify-between gap-2.5">
+          <h1 className="sr-only">{t("nav.scanner")}</h1>
+          <div data-tour="mode">
+            <ModeSwitch mode={mode} onChange={setMode} />
+          </div>
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+            {roomChip}
+            {priceChip}
+            {addButton}
+            {moreMenu}
+          </div>
+        </div>
       )}
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
-        {/* ---- captures ---- */}
-        <div className="min-w-0 space-y-3 lg:col-start-1 lg:row-start-1">
-          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-            <span className="mono-label">{t("scan.captures")} · {captures.length}</span>
-            <div className="flex items-center gap-3">
-              {captures.length > 0 && (
-                <button onClick={() => setCaptures([])} className="text-[0.74rem] text-dim hover:text-ember">
-                  {t("scan.clear")}
-                </button>
-              )}
-            </div>
-          </div>
-          {captures.length === 0 && (
-            <div className="rounded-2xl border border-dashed border-line2 px-4 py-6 text-center text-[0.84rem] leading-relaxed text-mist">
-              {mode === "camera" ? t("scan.empty.camera") : t("scan.empty.upload")}
-            </div>
-          )}
-          <AnimatePresence initial={false}>
-            {priced.map(({ c, offenders: os }) => (
-              <CaptureCard
-                key={c.id}
-                capture={c}
-                cost={os.reduce((s, o) => s + o.costPerYear, 0)}
-                devices={os.reduce((s, o) => s + o.count, 0)}
-                schedule={building.schedule}
-                defaultOpen={c.origin === "upload" && captures.length <= 2}
-                onDetails={(d) => setDetails(c.id, d)}
-                onPatch={(p) => patch(c.id, p)}
-                onReanalyze={() => patch(c.id, { status: "pending", result: undefined, error: undefined, errorCode: undefined })}
-                onUseOnDevice={c.onDevice?.length ? () => adoptOnDevice(c.id) : undefined}
-                onRemove={() => remove(c.id)}
-              />
-            ))}
-          </AnimatePresence>
-        </div>
+      <div className="no-print" data-tour="add">
+        {mode === "camera" && (
+          <CameraMode
+            settings={settings}
+            schedule={building.schedule}
+            geo={deviceGeo?.geo ?? null}
+            geoBusy={geoBusy}
+            onLocate={requestLocation}
+            onPhoto={onPhoto}
+            onVideo={onVideo}
+            onUseUpload={() => setMode("upload")}
+          />
+        )}
 
-        {/* ---- results ---- */}
-        <div className="min-w-0 space-y-5 lg:col-start-2 lg:row-span-2 lg:row-start-1">
-          {hasResults ? (
-            <>
-              <TotalsHeader
-                cost={totals.costPerYear}
-                annual={totals.annualCostPerYear}
-                annualRange={annualRange}
-                rateQuality={rateQuality}
-                co2={totals.co2KgPerYear}
-                kwh={totals.kwhPerYear}
-                recoverable={totals.recoverableCost}
-                topLabel={totals.topOffender?.label ?? "-"}
-                captures={done.length}
-                basisMix={basisMix}
-                working={working}
-                typical={countedOffenders.reduce((t, o) => t + (o.typicalCostPerYear ?? 0), 0)}
-                unverified={totals.unverifiedCost}
-                unverifiedCount={offenders.length - countedOffenders.length}
-                place={place}
-              />
-
-              <ExportBar offenders={countedOffenders} settings={settings} buildingName={building.name} savedTo={ready ? building.name : undefined} roomCount={done.length} />
-
-              <ContributeBar offenders={countedOffenders} mode={auditMode} defaultArea={done[0]?.c.name ?? building.name} />
-
-              <TabBar tab={tab} onChange={setTab} count={ranked.length} />
-
-              {tab === "offenders" && (
-                <div className="space-y-4">
-                  {countedOffenders.length > 0 && <EfficiencyPanel offenders={countedOffenders} settings={settings} />}
-                  {detectionPhotos.length > 0 && <DetectionView photos={detectionPhotos} hovered={hovered} onHover={setHovered} />}
-                  {ranked.length === 0 && (
-                    <div className="panel p-6 text-center text-[0.9rem] text-mist">
-                      Nothing left drawing power in what&apos;s been scanned so far. That&apos;s the result you want.
-                    </div>
-                  )}
-                  <AnimatePresence>
-                    {ranked.map((r, i) => {
-                      const key = parseOffenderKey(r.offender.id);
-                      const cap = key ? captures.find((c) => c.id === key.captureId) : undefined;
-                      return (
-                        <motion.div
-                          key={r.offender.id}
-                          layout
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.35, delay: Math.min(i, 8) * 0.04, ease: [0.22, 1, 0.36, 1] }}
-                        >
-                        <OffenderCard
-                          offender={r.offender}
-                          rank={i + 1}
-                          maxCost={maxCost}
-                          mode={r.mode}
-                          engine={r.engine}
-                          highlighted={hovered === r.offender.id}
-                          onHover={setHovered}
-                          adjust={key ? cap?.adjust[key.categoryId] : undefined}
-                          onAdjust={(a) => setAdjust(r.offender.id, a)}
-                        />
-                        </motion.div>
-                      );
-                    })}
-                  </AnimatePresence>
-                </div>
-              )}
-
-              {tab === "plan" && (
-                <div className="space-y-5">
-                  <ActionPlan offenders={countedOffenders} settings={settings} />
-                  <BudgetPlanner offenders={countedOffenders} />
-                </div>
-              )}
-
-              {tab === "grid" && (
-                <div className="space-y-5">
-                  <GridPulse regionCode={building.regionCode} annualKwhWasted={totals.kwhPerYear} />
-                  <WeatherContext lat={building.lat ?? deviceGeo?.lat} lon={building.lon ?? deviceGeo?.lon} offenders={countedOffenders} />
-                  <SolarOffset
-                    lat={building.lat ?? deviceGeo?.lat}
-                    lon={building.lon ?? deviceGeo?.lon}
-                    regionCode={building.regionCode}
-                    annualKwhWasted={totals.kwhPerYear}
-                    ratePerKwh={settings.ratePerKwh}
-                    co2PerKwh={settings.co2PerKwh}
-                  />
-                </div>
-              )}
-
-              {tab === "context" && (
-                <div className="space-y-5">
-                  <LoadMixPanel offenders={countedOffenders} />
-                  <EquivalenceStrip co2Kg={totals.co2KgPerYear} dollars={totals.costPerYear} />
-                  <BenchmarkPanel offenders={countedOffenders} building={building} settings={settings} />
-                  <BillCalibration
-                    bill={building.bill}
-                    auditKwhPerYear={totals.kwhPerYear}
-                    assumedRate={settings.ratePerKwh}
-                    floorAreaSqFt={building.floorAreaSqFt}
-                    typeId={building.typeId}
-                  />
-                </div>
-              )}
-            </>
+        {/* Nothing added yet: the drop zone (upload) or what to expect (camera). */}
+        {captures.length === 0 &&
+          (mode === "upload" ? (
+            <UploadMode onFiles={onFiles} />
           ) : (
-            <EmptyState working={working} mode={mode} />
+            <div className="mt-6">
+              <EmptyState working={working} mode={mode} />
+            </div>
+          ))}
+
+        {/* Something added: what was found, drawn on it, beside the short version. */}
+        {captures.length > 0 && (
+          <div className={`grid gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] ${mode === "camera" ? "mt-6" : ""}`}>
+            <div className="min-w-0 space-y-3">
+              <MediaViewer
+                items={viewerItems}
+                selectedId={selected?.id ?? null}
+                onSelect={setSelectedId}
+                hovered={hovered}
+                onHover={setHovered}
+                onPick={pickDevice}
+                onFiles={mode === "upload" ? onFiles : undefined}
+                onClear={() => setConfirmClear(true)}
+                footer={
+                  selected && (
+                    <CaptureCard
+                      key={selected.id}
+                      compact
+                      capture={selected}
+                      cost={priced.find((p) => p.c.id === selected.id)?.offenders.reduce((s, o) => s + o.costPerYear, 0) ?? 0}
+                      devices={priced.find((p) => p.c.id === selected.id)?.offenders.reduce((s, o) => s + o.count, 0) ?? 0}
+                      schedule={building.schedule}
+                      onDetails={(d) => setDetails(selected.id, d)}
+                      onPatch={(p) => patch(selected.id, p)}
+                      onReanalyze={() => patch(selected.id, { status: "pending", result: undefined, error: undefined, errorCode: undefined })}
+                      onUseOnDevice={selected.onDevice?.length ? () => adoptOnDevice(selected.id) : undefined}
+                      onRemove={() => remove(selected.id)}
+                    />
+                  )
+                }
+              />
+            </div>
+            <div className="flex min-w-0 flex-col">
+              {hasResults ? (
+                <Summary
+                  annual={totals.annualCostPerYear}
+                  range={annualRange}
+                  wasted={totals.costPerYear}
+                  needed={Math.max(0, totals.annualCostPerYear - totals.costPerYear)}
+                  recoverable={totals.recoverableCost}
+                  actions={actions}
+                  top={totals.topOffender}
+                  co2Kg={totals.co2KgPerYear}
+                  place={place}
+                  photos={done.length}
+                  working={working}
+                  unverifiedCount={offenders.length - countedOffenders.length}
+                  rateQuality={rateQuality}
+                  onDevices={() => goTab("devices")}
+                  onFixes={() => goTab("fix")}
+                  onAccuracy={showAssumptions}
+                />
+              ) : (
+                <EmptyState working={working} mode={mode} />
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {hasResults && (
+        <div className="mt-5">
+          <TeamSend offenders={countedOffenders} mode={auditMode} defaultRoom={done[0]?.c.name ?? building.name} />
+        </div>
+      )}
+
+      {hasResults && (
+        <div id="scan-tabs" className="mt-8 scroll-mt-20 space-y-5">
+          <div className="no-print">
+            <TabBar tab={tab} onChange={setTab} count={ranked.length} />
+          </div>
+
+          {tab === "devices" && (
+            <div className="no-print">
+              <DeviceList lines={deviceLines} hovered={hovered} onHover={setHovered} onAdjust={setAdjust} openId={openDevice} onOpen={setOpenDevice} />
+            </div>
+          )}
+
+          {tab === "fix" && (
+            <div className="no-print space-y-5">
+              <ActionPlan offenders={countedOffenders} settings={settings} />
+              <BudgetPlanner offenders={countedOffenders} />
+            </div>
+          )}
+
+          {tab === "charts" && (
+            <div className="no-print space-y-5">
+              <div className="grid gap-5 md:grid-cols-2">
+                <BillCompare offenders={countedOffenders} settings={settings} />
+                <EmptyTime settings={settings} home={place === "home"} />
+              </div>
+              <MoneyOverTime offenders={countedOffenders} settings={settings} />
+              <div className="grid gap-5 md:grid-cols-2">
+                <LoadMixPanel offenders={countedOffenders} />
+                {countedOffenders.length > 0 && <EfficiencyPanel offenders={countedOffenders} settings={settings} />}
+              </div>
+              <EquivalenceStrip co2Kg={totals.co2KgPerYear} dollars={totals.costPerYear} />
+              <BenchmarkPanel offenders={countedOffenders} building={building} settings={settings} />
+              <div className="grid gap-5 md:grid-cols-2">
+                <GridPulse regionCode={building.regionCode} annualKwhWasted={totals.kwhPerYear} />
+                <WeatherContext lat={building.lat ?? deviceGeo?.lat} lon={building.lon ?? deviceGeo?.lon} offenders={countedOffenders} />
+              </div>
+              <SolarOffset
+                lat={building.lat ?? deviceGeo?.lat}
+                lon={building.lon ?? deviceGeo?.lon}
+                regionCode={building.regionCode}
+                annualKwhWasted={totals.kwhPerYear}
+                ratePerKwh={settings.ratePerKwh}
+                co2PerKwh={settings.co2PerKwh}
+              />
+              <BillCalibration
+                bill={building.bill}
+                auditKwhPerYear={totals.kwhPerYear}
+                assumedRate={settings.ratePerKwh}
+                floorAreaSqFt={building.floorAreaSqFt}
+                typeId={building.typeId}
+              />
+            </div>
+          )}
+
+          {tab === "report" && (
+            <div className="space-y-5">
+              <ReportBrief current={currentAudit} pictures={reportPictures} />
+              <div className="no-print space-y-3">
+                <ExportBar offenders={countedOffenders} settings={settings} buildingName={building.name} savedTo={ready ? building.name : undefined} roomCount={done.length} />
+              </div>
+            </div>
           )}
         </div>
+      )}
 
-        {/* ---- assumptions ---- */}
-        <div className="min-w-0 space-y-4 lg:col-start-1 lg:row-start-2">
-          {ready && <BuildingBar building={building} buildings={store.buildings} liveRate={liveRate} onFetchRate={fetchLiveRate} />}
-
-          <div className="panel">
-            <button onClick={() => setShowSettings((s) => !s)} className="flex w-full items-center justify-between px-4 py-3.5" aria-expanded={showSettings}>
-              <span className="mono-label">Override assumptions</span>
-              <span className="font-mono text-xs text-mist">
-                {settings.ratePerKwh.toFixed(3)} $/kWh
-                {override.ratePerKwh === undefined && billRate !== undefined && <span className="ml-1.5 text-lime">from bill</span>}
-                <span className="ml-2 text-cyan">{showSettings ? "−" : "+"}</span>
+      {/* ---- the place and the figures everything is priced with ---- */}
+      <Drawer open={showSettings} onClose={() => setShowSettings(false)} title="Building and prices" sub="What every number on this page is priced with.">
+        <div className="space-y-7">
+          {ready && (
+            <section>
+              <h3 className="text-[0.92rem] font-medium text-fog">Place</h3>
+              <p className="mt-0.5 text-[0.8rem] text-dim">Its state and opening hours set the prices below. Right-click to rename or edit it.</p>
+              <div className="mt-2.5">
+                <PlaceSelect buildings={store.buildings} activeId={building.id} />
+              </div>
+              <p className="mt-2 text-[0.78rem] text-dim">
+                {BUILDING_TYPE_BY_ID[building.typeId]?.label ?? "Place"} · {region.name}
+              </p>
+            </section>
+          )}
+          <section>
+            <h3 className="text-[0.92rem] font-medium text-fog">What kind of place is this room in?</h3>
+            <p className="mt-0.5 text-[0.8rem] text-dim">Homes and businesses pay different prices and sit empty at different times.</p>
+            <div className="mt-2.5">
+              <PlacePicker place={place} onChange={choosePlace} label={false} />
+            </div>
+          </section>
+          <a
+            href={`/places?place=${building.id}&action=bill`}
+            className="flex items-center gap-3 rounded-2xl border border-lime/30 bg-lime/[0.06] px-4 py-3.5 transition-colors hover:bg-lime/[0.1]"
+          >
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-lime/15 text-lime">
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M7 3h10v18l-2.5-1.5L12 21l-2.5-1.5L7 21zM10 8h4M10 12h4M10 16h2" />
+              </svg>
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[0.92rem] font-medium text-fog">{building.bill ? "Your bill is in use" : "Have an electric bill?"}</span>
+              <span className="block text-[0.78rem] leading-snug text-mist">
+                {building.bill ? "Every number uses the price you actually pay. Update it in My places." : "Snap a photo of it or type three numbers, and every estimate uses your real price."}
               </span>
+            </span>
+            <Icon name="chevron" className="h-4 w-4 shrink-0 -rotate-90 text-dim" />
+          </a>
+          <section className="space-y-4">
+            <div>
+              <h3 className="text-[0.92rem] font-medium text-fog">Prices and hours</h3>
+              <p className="mt-0.5 text-[0.8rem] leading-relaxed text-dim">
+                Change these if you know better. The price on your electric bill beats every estimate
+                {override.ratePerKwh === undefined && billRate !== undefined ? ", and it's already in use" : ""}.
+              </p>
+            </div>
+            <Field
+              label="Price of electricity (dollars per kWh, on your bill)"
+              value={Math.round(settings.ratePerKwh * 1000) / 1000}
+              step={0.01}
+              onChange={(v) => setOverride((s) => ({ ...s, ratePerKwh: v }))}
+            />
+            <Field
+              label="Hours a year the place is empty"
+              value={Math.round(settings.unoccupiedHoursPerYear)}
+              step={100}
+              onChange={(v) => setOverride((s) => ({ ...s, unoccupiedHoursPerYear: v }))}
+            />
+            <Field
+              label="Carbon per kWh from your grid (kg of CO₂)"
+              value={Math.round(settings.co2PerKwh * 1000) / 1000}
+              step={0.005}
+              onChange={(v) => setOverride((s) => ({ ...s, co2PerKwh: v }))}
+            />
+            <Field
+              label="Demand charge, businesses only (dollars per kW each month, optional)"
+              value={settings.demandChargePerKw ?? 0}
+              step={0.5}
+              onChange={(v) => setOverride((s) => ({ ...s, demandChargePerKw: v }))}
+            />
+            <button
+              onClick={() => {
+                setOverride({});
+                setLiveRate(null);
+              }}
+              className="text-[0.76rem] text-dim hover:text-cyan"
+            >
+              ↺ Back to the building&apos;s own figures
             </button>
-            <AnimatePresence initial={false}>
-              {showSettings && (
-                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                  <div className="space-y-4 border-t border-line px-4 py-4">
-                    <p className="text-[0.75rem] leading-relaxed text-dim">
-                      Filled in from the building above, or from where each capture was taken. Change one only if you have a figure off an
-                      actual bill - that beats every estimate, and tightens the range.
-                    </p>
-                    <Field label="electricity rate ($/kWh)" value={settings.ratePerKwh} step={0.01} onChange={(v) => setOverride((s) => ({ ...s, ratePerKwh: v }))} />
-                    <Field label="grid carbon (kg CO₂ / kWh)" value={settings.co2PerKwh} step={0.005} onChange={(v) => setOverride((s) => ({ ...s, co2PerKwh: v }))} />
-                    <Field
-                      label="empty hours / year"
-                      value={settings.unoccupiedHoursPerYear}
-                      step={100}
-                      onChange={(v) => setOverride((s) => ({ ...s, unoccupiedHoursPerYear: v }))}
-                    />
-                    <Field
-                      label="demand charge ($/kW-month, optional)"
-                      value={settings.demandChargePerKw ?? 0}
-                      step={0.5}
-                      onChange={(v) => setOverride((s) => ({ ...s, demandChargePerKw: v }))}
-                    />
-                    <button
-                      onClick={() => {
-                        setOverride({});
-                        setLiveRate(null);
-                      }}
-                      className="text-[0.7rem] text-dim hover:text-cyan"
-                    >
-                      ↺ back to the building&apos;s own figures
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+            <button onClick={fetchLiveRate} className="block w-full rounded-xl border border-line px-3.5 py-2.5 text-left text-[0.84rem] text-mist transition-colors hover:border-fog/40 hover:text-fog">
+              {liveRate ? `Published price for this state: $${liveRate.ratePerKwh.toFixed(3)} per kWh` : "Look up the latest published price for this state"}
+              {liveRate && <span className="mt-0.5 block text-[0.74rem] text-dim">{liveRate.source}</span>}
+            </button>
+          </section>
         </div>
-      </div>
+      </Drawer>
+
+      <AddToPlace
+        key={addOpen}
+        open={addOpen > 0}
+        onClose={() => setAddOpen(0)}
+        buildings={store.buildings}
+        activeId={building.id}
+        roomCounts={Object.fromEntries(store.buildings.map((b) => [b.id, rollupRoomCount(store.audits.filter((x) => x.buildingId === b.id))]))}
+        items={done.map((p) => ({
+          captureId: p.c.id,
+          name: p.c.name,
+          thumb: p.c.keyframes?.[0]?.annotated ?? p.c.dataUrl ?? undefined,
+          wastePerYear: counted(p.offenders).reduce((t, o) => t + o.costPerYear, 0),
+          savedIn: added[p.c.id],
+        }))}
+        onAdd={addToPlace}
+      />
+
+      <Tour open={touring} onClose={() => setTouring(false)} />
+      <ClearWorkDialog open={confirmClear} count={captures.length} onCancel={() => setConfirmClear(false)} onConfirm={clearWork} />
 
       <AnimatePresence>
         {toast && (
@@ -980,7 +1307,7 @@ export function Scanner() {
 // ---- subcomponents -----------------------------------------------------
 
 /** Where the scan is. Sets typical hours, empty hours and the price sector. */
-function PlacePicker({ place, onChange }: { place: UsageContext; onChange: (p: UsageContext) => void }) {
+function PlacePicker({ place, onChange, label = true }: { place: UsageContext; onChange: (p: UsageContext) => void; label?: boolean }) {
   const t = useT();
   const opts: { id: UsageContext; label: string }[] = [
     { id: "home", label: t("scan.home") },
@@ -988,8 +1315,8 @@ function PlacePicker({ place, onChange }: { place: UsageContext; onChange: (p: U
     { id: "office", label: t("scan.office") },
   ];
   return (
-    <div className="flex shrink-0 items-center justify-end gap-3">
-      <span className="hidden text-[0.78rem] text-dim sm:inline">{t("scan.scanning")}</span>
+    <div className="flex shrink-0 items-center gap-3">
+      {label && <span className="hidden text-[0.78rem] text-dim sm:inline">{t("scan.scanning")}</span>}
       <div className="flex rounded-full bg-fog/[0.06] p-0.5" role="radiogroup" aria-label="Where you are scanning">
         {opts.map((o) => (
           <button
@@ -1045,23 +1372,23 @@ function ModeSwitch({ mode, onChange }: { mode: Mode; onChange: (m: Mode) => voi
 function TabBar({ tab, onChange, count }: { tab: ResultTab; onChange: (t: ResultTab) => void; count: number }) {
   const t = useT();
   const tabs: { id: ResultTab; label: string; hint: string }[] = [
-    { id: "offenders", label: t("tab.offenders"), hint: "What is running" },
-    { id: "plan", label: t("tab.plan"), hint: "What to do, in order, and what it changes" },
-    { id: "grid", label: t("tab.grid"), hint: "When to burn it, and what would cancel it" },
-    { id: "context", label: t("tab.context"), hint: "What it means and how you compare" },
+    { id: "devices", label: t("tab.devices"), hint: "Everything found, most wasteful first" },
+    { id: "fix", label: t("tab.fix"), hint: "What to do, in order, and what it saves" },
+    { id: "charts", label: t("tab.charts"), hint: "Pictures of the result, and how you compare" },
+    { id: "report", label: t("tab.report"), hint: "A report to print or save as a PDF" },
   ];
   return (
     <div className="flex rounded-full bg-fog/[0.05] p-1" role="tablist">
-      {tabs.map((t) => (
+      {tabs.map((x) => (
         <button
-          key={t.id}
+          key={x.id}
           role="tab"
-          aria-selected={tab === t.id}
-          onClick={() => onChange(t.id)}
-          title={t.hint}
-          className={`relative flex-1 whitespace-nowrap rounded-full px-2 py-2 text-[0.85rem] transition-colors ${tab === t.id ? "text-fog" : "text-dim hover:text-mist"}`}
+          aria-selected={tab === x.id}
+          onClick={() => onChange(x.id)}
+          title={x.hint}
+          className={`relative flex-1 whitespace-nowrap rounded-full px-2 py-2.5 text-[0.85rem] font-medium transition-colors sm:text-[0.92rem] ${tab === x.id ? "text-fog" : "text-dim hover:text-mist"}`}
         >
-          {tab === t.id && (
+          {tab === x.id && (
             <motion.span
               layoutId="tab-pill"
               className="absolute inset-0 rounded-full bg-surface shadow-[0_1px_2px_rgba(28,27,24,0.08),0_4px_12px_-6px_rgba(28,27,24,0.2)]"
@@ -1069,159 +1396,11 @@ function TabBar({ tab, onChange, count }: { tab: ResultTab; onChange: (t: Result
             />
           )}
           <span className="relative">
-            {t.label}
-            {t.id === "offenders" && <span className="ml-1 tabular-nums text-dim">{count}</span>}
+            {x.label}
+            {x.id === "devices" && <span className="ml-1 tabular-nums text-dim">{count}</span>}
           </span>
         </button>
       ))}
-    </div>
-  );
-}
-
-const RATE_WORDS: Record<RateQuality, string> = {
-  bill: "your bill's rate",
-  utility: "your utility's rate",
-  state: "a state-average rate",
-  national: "the national-average rate",
-};
-
-function TotalsHeader({
-  cost,
-  annual,
-  annualRange,
-  rateQuality,
-  co2,
-  kwh,
-  recoverable,
-  topLabel,
-  captures,
-  basisMix,
-  working,
-  typical,
-  unverified,
-  unverifiedCount,
-  place,
-}: {
-  cost: number;
-  annual: number;
-  annualRange: ReturnType<typeof costRange>;
-  rateQuality: RateQuality;
-  co2: number;
-  kwh: number;
-  recoverable: number;
-  topLabel: string;
-  captures: number;
-  basisMix: { measured: number; ai: number; catalog: number };
-  working: boolean;
-  typical: number;
-  /** Annual cost of lines shown but not counted, and how many there are. */
-  unverified: number;
-  unverifiedCount: number;
-  place: UsageContext;
-}) {
-  const t = useT();
-  const lines = basisMix.measured + basisMix.ai + basisMix.catalog;
-  // Precision: how tight the 80% band is, as a share of the headline.
-  const precision = Math.max(0, Math.min(1, 1 - annualRange.spread));
-  const wasteShare = annual > 0 ? Math.min(1, cost / annual) : 0;
-  return (
-    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="panel ticked relative overflow-hidden p-5 sm:p-6">
-      <div
-        className="absolute inset-0 -z-10 opacity-60"
-        style={{ background: "radial-gradient(60% 120% at 100% 0%, rgba(239,157,46,0.1), transparent 60%)" }}
-      />
-      <div className="flex items-center justify-between gap-3">
-        <span className="mono-label text-cyan">{t("totals.eyebrow.run")}</span>
-        <span className="font-mono text-[0.68rem] text-dim">
-          {captures} {captures === 1 ? t("totals.capture") : t("totals.captures")}
-          {working && <span className="ml-1.5 text-sodium-deep">· {t("totals.analysing")}</span>}
-        </span>
-      </div>
-
-      <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
-        <BigStat
-          label={t("totals.run")}
-          accent
-          value={
-            annual > 0 ? (
-              <span className="whitespace-nowrap">
-                <CountUp value={annualRange.p10} format={fmtMoney} />–<CountUp value={annualRange.p90} format={fmtMoney} />
-              </span>
-            ) : (
-              "$0"
-            )
-          }
-        />
-        <BigStat label={t("totals.wasted")} value={<CountUp value={cost} format={fmtMoneyFull} />} />
-        <BigStat label={t("totals.recoverable")} value={<CountUp value={recoverable} format={fmtMoneyFull} />} />
-        <BigStat label={t("totals.co2")} value={<CountUp value={co2} format={fmtCo2} />} />
-      </div>
-
-      {annual > 0 && (
-        <div className="mt-5 border-t border-line pt-4">
-          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-            <span className="text-[0.84rem] text-fog">
-              {t("totals.best")} <span className="font-mono font-semibold">{fmtMoneyFull(annual)}</span> {t("totals.year.between")}{" "}
-              <span className="font-mono font-semibold">{fmtMoney(annualRange.p10)}</span> {t("totals.and")} <span className="font-mono font-semibold">{fmtMoney(annualRange.p90)}</span>
-            </span>
-            <span className="font-mono text-[0.72rem] text-dim">±{Math.round(annualRange.spread * 100)}% · {t("totals.range")} · {fmtKwh(kwh)} {t("totals.wasted.kwh")}</span>
-          </div>
-          {/* The year, drawn: the part spent in normal use and the part wasted after hours. */}
-          <div className="mt-2.5 flex h-2.5 overflow-hidden rounded-full bg-surface2" aria-hidden="true">
-            <motion.div className="h-full bg-cyan/70" initial={{ width: 0 }} animate={{ width: `${(1 - wasteShare) * 100}%` }} transition={{ duration: 0.6, ease: "easeOut" }} />
-            <motion.div className="h-full bg-ember" initial={{ width: 0 }} animate={{ width: `${wasteShare * 100}%` }} transition={{ duration: 0.6, ease: "easeOut", delay: 0.1 }} />
-          </div>
-          <div className="mt-1 flex justify-between text-[0.7rem] text-dim">
-            <span>{t("totals.normal.use")}</span>
-            <span className="text-ember">
-              {Math.round(wasteShare * 100)}% {t("totals.after.hours.share")}
-            </span>
-          </div>
-          <p className="mt-2.5 text-[0.74rem] leading-relaxed text-dim">
-            {lines > 0 && (
-              <>
-                {basisMix.measured > 0 && `${basisMix.measured} measured by you · `}
-                {basisMix.ai > 0 && `${basisMix.ai} wattage${basisMix.ai > 1 ? "s" : ""} read by AI · `}
-                {basisMix.catalog > 0 && `${basisMix.catalog} from published ranges · `}
-              </>
-            )}
-            priced at {RATE_WORDS[rateQuality]}. {precision < 0.75 ? "Add measured watts or a bill rate to narrow it." : ""}
-          </p>
-        </div>
-      )}
-
-      {annual > 0 && (
-        <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-surface2/60 p-3 text-[0.8rem]">
-          <div>
-            <div className="font-mono text-lg font-semibold text-fog">{fmtMoneyFull(cost)}</div>
-            <div className="leading-snug text-mist">{place === "home" ? t("totals.after.hours.explain.home") : t("totals.after.hours.explain")}</div>
-          </div>
-          <div>
-            <div className="font-mono text-lg font-semibold text-fog">{fmtMoneyFull(typical)}</div>
-            <div className="leading-snug text-mist">{t("totals.typical.explain")}</div>
-          </div>
-        </div>
-      )}
-
-      <div className="mt-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 font-mono text-[0.72rem] text-mist">
-        <span>
-          {t("totals.biggest")} <span className="text-lime">{topLabel}</span>
-        </span>
-        {unverifiedCount > 0 && (
-          <span className="text-amber" title="The cloud model reported these but the on-device detector could not back them. Confirm or delete each one on its card.">
-            + {fmtMoney(unverified)}{t("plan.yr")} · {unverifiedCount} {unverifiedCount > 1 ? t("totals.unverified.plural") : t("totals.unverified")}, {t("totals.not.counted")}
-          </span>
-        )}
-      </div>
-    </motion.div>
-  );
-}
-
-function BigStat({ label, value, accent }: { label: string; value: React.ReactNode; accent?: boolean }) {
-  return (
-    <div>
-      <div className={`font-mono text-2xl font-bold sm:text-3xl ${accent ? "grad-energy text-glow" : "text-fog"}`}>{value}</div>
-      <div className="mono-label mt-1">{label}</div>
     </div>
   );
 }

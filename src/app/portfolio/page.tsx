@@ -1,12 +1,6 @@
-import type { Metadata } from "next";
-import { Portfolio } from "@/components/Portfolio";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "Portfolio - Ghost Watt",
-  description:
-    "Track buildings over time: saved audits, installed fixes, and a device-by-device before-and-after that shows whether the phantom load actually went away.",
-};
-
+// Rooms and buildings are one page now: My places.
 export default function PortfolioPage() {
-  return <Portfolio />;
+  redirect("/places");
 }

@@ -1,34 +1,41 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useId } from "react";
 
 const LINKS = [
   { href: "#see", label: "How it works" },
   { href: "#count", label: "The math" },
   { href: "#everywhere", label: "Devices" },
-  { href: "#class", label: "Classrooms" },
+  { href: "#class", label: "Team scan" },
   { href: "#method", label: "Methodology" },
 ];
 
-/** A window with the light left on. */
-export function Mark({ className = "h-7 w-7" }: { className?: string }) {
+// The mark: a ghost with a bolt in it, the thing left running after everyone
+// has gone. The body takes the text colour so it follows the theme; the bolt
+// stays amber, with a thin gap cut around it so it reads at any size.
+export function Mark({ className = "h-7 w-[1.33rem]" }: { className?: string }) {
+  const id = useId().replace(/:/g, "");
   return (
-    <svg viewBox="0 0 28 28" className={className} aria-hidden="true">
-      <rect x="1" y="1" width="26" height="26" rx="8" fill="#1c1b18" />
-      <rect x="7" y="7" width="6" height="6" rx="1.6" fill="#3a4462" />
-      <rect x="15" y="7" width="6" height="6" rx="1.6" fill="#3a4462" />
-      <rect x="7" y="15" width="6" height="6" rx="1.6" fill="#3a4462" />
-      <rect x="15" y="15" width="6" height="6" rx="1.6" fill="#ffb54a" />
-      <rect x="15" y="15" width="6" height="6" rx="1.6" fill="#ffb54a" opacity="0.5" filter="url(#mk)" />
+    <svg viewBox="7.5 5.5 17 22.5" className={`${className} text-fog`} aria-hidden="true">
       <defs>
-        <filter id="mk" x="-1" y="-1" width="3" height="3">
-          <feGaussianBlur stdDeviation="2" />
-        </filter>
+        <linearGradient id={`${id}g`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#ffc35a" />
+          <stop offset="1" stopColor="#f28a1d" />
+        </linearGradient>
+        <mask id={`${id}m`}>
+          <rect x="0" y="0" width="32" height="32" fill="#fff" />
+          <path d={BOLT} fill="#000" stroke="#000" strokeWidth="2.2" strokeLinejoin="round" />
+        </mask>
       </defs>
+      <path d={GHOST} fill="currentColor" mask={`url(#${id}m)`} />
+      <path d={BOLT} fill={`url(#${id}g)`} stroke={`url(#${id}g)`} strokeWidth="0.6" strokeLinejoin="round" />
     </svg>
   );
 }
+
+const GHOST = "M8.5 24.6V14a7.5 7.5 0 0 1 15 0v10.6a2.5 2.1 0 0 1-5 0a2.5 2.1 0 0 1-5 0a2.5 2.1 0 0 1-5 0Z";
+const BOLT = "M17.2 9.6 12.6 16.3h3.6l-1.4 5.5 4.8-6.9h-3.6Z";
 
 export function HomeNav() {
   const [scrolled, setScrolled] = useState(false);

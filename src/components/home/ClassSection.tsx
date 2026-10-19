@@ -1,7 +1,7 @@
 "use client";
 
-// Thirty phones, one building. A floor plan fills in room by room as students
-// send their scans, which is what class mode looks like from the teacher's desk.
+// Thirty phones, one building. A floor plan fills in room by room as people
+// send their scans, which is what a team scan looks like on the screen that started it.
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -52,16 +52,16 @@ export function ClassSection() {
             </span>
           </h2>
           <p className="mt-6 text-[1.05rem] leading-[1.65] text-stone">
-            Start a class session and share a six-letter code. Each student scans their own
-            corridor, and the map on the teacher&apos;s screen fills in as the results arrive.
+            Start a team scan and share the link. Everyone scans the rooms they&apos;re in on
+            their own phone, and the total for the whole place fills in as the results arrive.
           </p>
           <p className="mt-4 text-[1.05rem] leading-[1.65] text-stone">
             No accounts, no logins, no email addresses. Photos stay on the phone that took
             them; only the device counts travel.
           </p>
-          <Link href="/buildings" className="group mt-8 inline-flex items-center gap-2 text-[0.95rem] text-graphite">
+          <Link href="/team" className="group mt-8 inline-flex items-center gap-2 text-[0.95rem] text-graphite">
             <span className="underline decoration-graphite/25 underline-offset-[6px] group-hover:decoration-graphite">
-              Start a class session
+              Start a team scan
             </span>
             <Arrow className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
           </Link>
