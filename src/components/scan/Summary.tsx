@@ -82,7 +82,7 @@ export function Summary({
   }
 
   return (
-    <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="panel relative overflow-hidden p-5 sm:p-6" aria-label="Summary">
+    <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="panel relative flex flex-1 flex-col overflow-hidden p-5 sm:p-6" aria-label="Summary">
       <div
         aria-hidden
         className="absolute inset-0 -z-10 opacity-70"
@@ -148,7 +148,7 @@ export function Summary({
       </div>
 
       {/* the biggest one, and what the waste is like */}
-      <ul className="mt-4 space-y-2.5 border-t border-line pt-4 text-[0.86rem] leading-snug text-mist">
+      <ul className="mb-4 mt-4 space-y-2.5 border-t border-line pt-4 text-[0.86rem] leading-snug text-mist">
         {top && top.costPerYear > 0 && (
           <li className="flex items-start gap-2.5">
             <span className="mt-px grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-ember/10 text-ember">
@@ -186,7 +186,7 @@ export function Summary({
       </ul>
 
       {/* how sure */}
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-surface2/70 px-3 py-2 text-[0.76rem] text-mist">
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-2 rounded-xl bg-surface2/70 px-3 py-2 text-[0.76rem] text-mist">
         <span>
           <span className="font-medium text-fog">{sure}</span> · priced at {RATE_WORDS[rateQuality]}
           {unverifiedCount > 0 && <span className="text-amber"> · {unverifiedCount} unsure item{unverifiedCount > 1 ? "s" : ""} left out</span>}

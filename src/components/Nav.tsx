@@ -16,8 +16,8 @@ import { ThemeToggle } from "./ThemeToggle";
 
 const TABS = [
   { href: "/scan", key: "nav.scanner", icon: "scan" },
-  { href: "/portfolio", key: "nav.rooms", icon: "rooms" },
-  { href: "/buildings", key: "nav.buildings", icon: "building" },
+  { href: "/places", key: "nav.places", icon: "building" },
+  { href: "/team", key: "nav.team", icon: "people" },
   { href: "/methodology", key: "nav.method", icon: "book" },
 ] as const satisfies readonly { href: string; key: Key; icon: string }[];
 
@@ -49,6 +49,7 @@ export function Nav() {
                 <Link
                   key={tab.href}
                   href={tab.href}
+                  data-tour={tab.href === "/places" ? "places" : undefined}
                   aria-current={active ? "page" : undefined}
                   className={`relative rounded-full px-3.5 py-1.5 text-[0.86rem] transition-colors duration-300 ${active ? "text-fog" : "text-mist hover:text-fog"}`}
                 >
@@ -101,6 +102,7 @@ export function Nav() {
               <li key={tab.href}>
                 <Link
                   href={tab.href}
+                  data-tour={tab.href === "/places" ? "places" : undefined}
                   aria-current={active ? "page" : undefined}
                   className={`flex flex-col items-center gap-1 pb-2 pt-2.5 text-[0.68rem] font-medium transition-colors ${
                     active ? "text-fog" : "text-dim"
@@ -142,20 +144,6 @@ function Icon({ name, className }: { name: string; className?: string }) {
         <>
           <path d="M4 20V8l8-4 8 4v12" {...P} />
           <path d="M9 20v-5h6v5M8 10h1M11.5 10h1M15 10h1" {...P} />
-        </>
-      )}
-      {name === "rooms" && (
-        <>
-          <rect x="3.5" y="4" width="7" height="7" rx="1.2" {...P} />
-          <rect x="13.5" y="4" width="7" height="7" rx="1.2" {...P} />
-          <rect x="3.5" y="13" width="7" height="7" rx="1.2" {...P} />
-          <rect x="13.5" y="13" width="7" height="7" rx="1.2" {...P} />
-        </>
-      )}
-      {name === "doc" && (
-        <>
-          <path d="M7 3.5h7l4 4V19a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 19V5a1.5 1.5 0 0 1 1-1.5z" {...P} />
-          <path d="M14 3.5V8h4M9 12h6M9 15.5h4" {...P} />
         </>
       )}
       {name === "people" && (

@@ -31,6 +31,7 @@ export function MediaViewer({
   onPick,
   onFiles,
   onClear,
+  footer,
 }: {
   items: ViewerItem[];
   selectedId: string | null;
@@ -42,6 +43,8 @@ export function MediaViewer({
   /** Present in upload mode: drop, paste and the Add tile feed it. */
   onFiles?: (files: File[]) => void;
   onClear: () => void;
+  /** Shown at the foot of the panel: the selected picture's details. */
+  footer?: React.ReactNode;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
@@ -226,6 +229,8 @@ export function MediaViewer({
           Clear all
         </button>
       </div>
+
+      {footer}
 
       {onFiles && (
         <input
