@@ -222,8 +222,13 @@ function openAiCompatible(endpoint: string) {
       if (!/HTTP 400/.test(msg) || !/response_format|json_schema|schema/i.test(msg)) throw err;
       json = (await postJson(endpoint, { Authorization: `Bearer ${key}` }, body(false))) as typeof json;
     }
-    return (json.choices?.[0]?.message?.content ?? "").trim();
+    return stripReasoning(json.choices?.[0]?.message?.content ?? "");
   };
+}
+
+/** Reasoning models (Qwen 3, DeepSeek) may wrap thoughts in <think> tags before the JSON. */
+export function stripReasoning(text: string): string {
+  return text.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/<\/?think>/gi, "").trim();
 }
 
 const HOSTED: HostedProvider[] = [
@@ -237,6 +242,17 @@ const HOSTED: HostedProvider[] = [
     signup: "https://console.anthropic.com/settings/keys",
     note: "Best device recognition of the four, and cheap at Haiku size. Recommended.",
     call: callAnthropic,
+  },
+  {
+    id: "google",
+    label: "Google Gemini",
+    env: "GEMINI_API_KEY",
+    model: "gemini-2.5-flash",
+    fallbacks: ["gemini-2.5-flash-lite", "gemini-2.0-flash"],
+    maxImages: 16,
+    signup: "https://aistudio.google.com/apikey",
+    note: "Free tier with a generous daily quota, and very good at reading rooms. The best free option.",
+    call: openAiCompatible("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"),
   },
   {
     id: "groq",
@@ -257,6 +273,17 @@ const HOSTED: HostedProvider[] = [
     modelsUrl: "https://api.groq.com/openai/v1/models",
   },
   {
+    id: "mistral",
+    label: "Mistral",
+    env: "MISTRAL_API_KEY",
+    model: "mistral-small-latest",
+    fallbacks: ["pixtral-12b-latest", "pixtral-large-latest"],
+    maxImages: 8,
+    signup: "https://console.mistral.ai/api-keys",
+    note: "Free experiment tier (rate-limited). Mistral Small reads images.",
+    call: openAiCompatible("https://api.mistral.ai/v1/chat/completions"),
+  },
+  {
     id: "openai",
     label: "OpenAI",
     env: "OPENAI_API_KEY",
@@ -272,10 +299,10 @@ const HOSTED: HostedProvider[] = [
     label: "OpenRouter",
     env: "OPENROUTER_API_KEY",
     model: "google/gemini-2.5-flash",
-    fallbacks: ["google/gemini-2.0-flash-001", "qwen/qwen2.5-vl-72b-instruct", "meta-llama/llama-4-scout"],
+    fallbacks: ["google/gemini-2.0-flash-001", "qwen/qwen2.5-vl-72b-instruct", "meta-llama/llama-4-scout", "google/gemini-2.0-flash-exp:free", "qwen/qwen2.5-vl-72b-instruct:free"],
     maxImages: 10,
     signup: "https://openrouter.ai/keys",
-    note: "One key, many models. Useful if you want to switch model without new credentials.",
+    note: "One key, many models, several of them free (the ':free' ids). Useful as a last fallback.",
     call: openAiCompatible("https://openrouter.ai/api/v1/chat/completions"),
     modelsUrl: "https://openrouter.ai/api/v1/models",
   },
