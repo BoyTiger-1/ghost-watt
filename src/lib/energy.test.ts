@@ -346,3 +346,27 @@ describe("breakdowns", () => {
     expect(Number.isFinite(concentration([], 3))).toBe(true);
   });
 });
+
+describe("unverified lines", () => {
+  const settings = { ratePerKwh: 0.15, co2PerKwh: 0.4, unoccupiedHoursPerYear: 1000 };
+  it("are ranked separately from counted lines of the same kind and left out of the total", () => {
+    const os = rankObservations(
+      [
+        { device: "monitor", count: 2, state: "on", categoryId: "monitor" },
+        { device: "monitor", count: 10, state: "on", categoryId: "monitor", verification: "unverified", confidence: 0.4 },
+      ],
+      settings,
+      "Lab",
+    );
+    expect(os).toHaveLength(2);
+    const sure = os.find((o) => !o.unverified)!;
+    const unsure = os.find((o) => o.unverified)!;
+    expect(sure.count).toBe(2);
+    expect(unsure.count).toBe(10);
+    expect(unsure.modelConfidence).toBe(0.4);
+    const t = aggregate(os);
+    expect(t.costPerYear).toBeCloseTo(sure.costPerYear);
+    expect(t.unverifiedCost).toBeCloseTo(unsure.costPerYear);
+    expect(t.topOffender?.id).toBe(sure.id);
+  });
+});

@@ -21,6 +21,7 @@
 // means a clean audit produces a short caveat list and a shaky one produces a long
 // one - and the reader can tell the difference.
 
+import { counted } from "./energy";
 import type { Offender } from "./types";
 import type { SavedAudit, Building } from "./storage";
 
@@ -237,7 +238,9 @@ function buildCaveats(
  * anything generated from the transient contents of a tab is not.
  */
 export function buildBrief(audit: SavedAudit, building?: Building): Brief {
-  const items = mergeItems(audit.offenders);
+  // Unverified lines are left out of a document someone will act on.
+  const offenders = counted(audit.offenders);
+  const items = mergeItems(offenders);
 
   const free = group(items.filter((i) => i.fixCost <= 0));
   const capital = group(items.filter((i) => i.fixCost > 0));
@@ -254,9 +257,9 @@ export function buildBrief(audit: SavedAudit, building?: Building): Brief {
     engine: audit.engine,
 
     annualWaste,
-    annualWasteLow: audit.offenders.reduce((s, o) => s + o.costLowPerYear, 0),
-    annualWasteHigh: audit.offenders.reduce((s, o) => s + o.costHighPerYear, 0),
-    co2KgPerYear: audit.offenders.reduce((s, o) => s + o.co2KgPerYear, 0),
+    annualWasteLow: offenders.reduce((s, o) => s + o.costLowPerYear, 0),
+    annualWasteHigh: offenders.reduce((s, o) => s + o.costHighPerYear, 0),
+    co2KgPerYear: offenders.reduce((s, o) => s + o.co2KgPerYear, 0),
 
     free,
     capital,

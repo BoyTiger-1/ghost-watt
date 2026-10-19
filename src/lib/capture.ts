@@ -8,6 +8,7 @@
 
 import type { CategorizedObservation } from "./parse";
 import { rankObservations } from "./energy";
+import { CATALOG_BY_ID } from "./devices";
 import { localClock, type PhotoMeta } from "./exif";
 import { isOccupiedAt, type WeeklySchedule } from "./schedule";
 import type { RateQuality } from "./estimate";
@@ -43,6 +44,12 @@ export interface DeviceAdjust {
   count?: number;
   watts?: number;
   hoursPerDay?: number;
+  /** The user looked and says it is real: an unverified line becomes counted. */
+  confirmed?: boolean;
+  /** The user says it is not there. */
+  deleted?: boolean;
+  /** The user says the model named the wrong kind of device. */
+  categoryId?: string;
 }
 
 export type CaptureStatus = "pending" | "working" | "done" | "error";
@@ -128,10 +135,23 @@ export function applyInputs(
   for (const o of out) {
     const a = adjust[o.categoryId];
     if (!a) continue;
+    if (a.deleted) {
+      o.count = 0;
+      continue;
+    }
     if (a.count !== undefined && a.count >= 0) o.count = Math.round(a.count);
     if (a.watts !== undefined && a.watts > 0) o.userWatts = a.watts;
     const h = hours(a.hoursPerDay);
     if (h !== undefined) o.hoursPerYear = h;
+    if (a.confirmed) o.verification = "confirmed";
+    if (a.categoryId && CATALOG_BY_ID[a.categoryId] && a.categoryId !== o.categoryId) {
+      o.categoryId = a.categoryId;
+      o.device = CATALOG_BY_ID[a.categoryId].label;
+      // A device the user re-identified is a device the user looked at.
+      o.verification = "confirmed";
+      // The model's wattage read was for the thing it thought it saw.
+      delete o.wattsHint;
+    }
   }
   return out.filter((o) => o.count > 0);
 }
@@ -145,13 +165,17 @@ export function baseObservations(c: Capture): CategorizedObservation[] {
 export function costCapture(c: Capture, settings: AuditSettings): Offender[] {
   if (!c.result) return [];
   const obs = applyInputs(baseObservations(c), c.details, c.adjust, settings);
-  return rankObservations(obs, settings, c.name).map((o) => ({ ...o, id: offenderKey(c.id, o.categoryId) }));
+  return rankObservations(obs, settings, c.name).map((o) => ({ ...o, id: offenderKey(c.id, o.categoryId, o.unverified) }));
 }
 
-export const offenderKey = (captureId: string, categoryId: string) => `${captureId}::${categoryId}`;
+export const offenderKey = (captureId: string, categoryId: string, unverified?: boolean) =>
+  `${captureId}::${categoryId}${unverified ? "::?" : ""}`;
 export function parseOffenderKey(id: string): { captureId: string; categoryId: string } | null {
   const i = id.indexOf("::");
-  return i > 0 ? { captureId: id.slice(0, i), categoryId: id.slice(i + 2) } : null;
+  if (i <= 0) return null;
+  const rest = id.slice(i + 2);
+  const j = rest.indexOf("::");
+  return { captureId: id.slice(0, i), categoryId: j === -1 ? rest : rest.slice(0, j) };
 }
 
 // ---- context for the model --------------------------------------------------

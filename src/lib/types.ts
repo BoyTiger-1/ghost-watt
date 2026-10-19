@@ -30,6 +30,14 @@ export interface DeviceObservation {
   evidence?: string;
   /** Technology as read by the vision model, e.g. "LED", "T8 fluorescent", "CRT". */
   tech?: string;
+  /** The model's own 0-1 confidence in the device and its count, when it gave one. */
+  confidence?: number;
+  /**
+   * Cross-check verdict. "unverified": the model's claim could not be backed by
+   * the on-device detector (or the model itself was unsure), so it is shown but
+   * not counted until the user confirms it. "confirmed": the user said it is real.
+   */
+  verification?: "verified" | "unverified" | "confirmed";
 }
 
 /**
@@ -171,6 +179,10 @@ export interface Offender {
   boxes?: Box[];
   /** Where the per-unit wattage came from: a measurement, the AI's read blended with the catalog, or the catalog. */
   basis?: "measured" | "ai" | "catalog";
+  /** Shown but not counted: the reading could not be cross-checked and the user has not confirmed it. */
+  unverified?: boolean;
+  /** The model's confidence, 0-1, when it gave one. */
+  modelConfidence?: number;
   /** Hours a year this line is costed for. */
   hoursPerYear?: number;
   /** True when the hours came from the user rather than the building schedule. */

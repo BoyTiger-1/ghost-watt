@@ -10,6 +10,7 @@ import type { DeviceAdjust } from "@/lib/capture";
 import { assessEfficiency } from "@/lib/efficiency";
 import { GRADE_COLOR } from "./EfficiencyPanel";
 import type { AnalysisMode, Offender } from "@/lib/types";
+import { DEVICE_CATALOG } from "@/lib/devices";
 
 const STATE_LABEL: Record<Offender["state"], string> = {
   on: "Powered on",
@@ -75,8 +76,27 @@ export function OffenderCard({
       onMouseLeave={onHover && o.boxes?.length ? () => onHover(null) : undefined}
       className={`panel panel-hover ticked relative scroll-mt-24 overflow-hidden p-4 transition-shadow sm:p-5 ${
         highlighted ? "shadow-[inset_0_0_0_1px_var(--color-cyan)]" : ""
-      }`}
+      } ${o.unverified ? "border-dashed border-amber/60" : ""}`}
     >
+      {o.unverified && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-amber/[0.09] px-3 py-2 text-[0.8rem] text-amber" role="status">
+          <span className="font-medium">Unverified · not counted.</span>
+          <span className="text-mist">
+            The cloud model reported this{o.modelConfidence !== undefined ? ` (${Math.round(o.modelConfidence * 100)}% sure)` : ""}, but the
+            on-device detector could not back it. Look at the photo and decide.
+          </span>
+          {onAdjust && (
+            <span className="ml-auto flex gap-2">
+              <button onClick={() => onAdjust({ ...adjust, confirmed: true })} className="rounded-full bg-fog px-3 py-1 text-[0.76rem] font-medium text-ink">
+                It&apos;s there
+              </button>
+              <button onClick={() => onAdjust({ ...adjust, deleted: true })} className="rounded-full border border-line px-3 py-1 text-[0.76rem] text-mist hover:border-ember hover:text-ember">
+                Not there
+              </button>
+            </span>
+          )}
+        </div>
+      )}
       {/* rank watermark */}
       <span className="pointer-events-none absolute -right-2 -top-5 hidden select-none">
         {String(rank).padStart(2, "0")}
@@ -211,7 +231,23 @@ export function OffenderCard({
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <div className="mt-4 grid grid-cols-3 gap-2">
+            <label className="mt-4 block">
+              <span className="text-[0.7rem] text-dim">Device type</span>
+              <select
+                value={adjust?.categoryId ?? o.categoryId}
+                onChange={(e) => onAdjust({ ...adjust, categoryId: e.target.value === o.categoryId && !adjust?.categoryId ? undefined : e.target.value })}
+                className="mt-1 w-full rounded-xl border border-line bg-surface px-2.5 py-2 text-base text-fog outline-none focus:border-cyan sm:text-sm"
+              >
+                {DEVICE_CATALOG.slice()
+                  .sort((a, b) => a.label.localeCompare(b.label))
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.label}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <div className="mt-2 grid grid-cols-3 gap-2">
               <AdjustField label="Count" value={adjust?.count} placeholder={String(o.count)} onChange={(v) => onAdjust({ ...adjust, count: v })} step={1} />
               <AdjustField
                 label="Watts each"
@@ -227,9 +263,12 @@ export function OffenderCard({
                 onChange={(v) => onAdjust({ ...adjust, hoursPerDay: v })}
               />
             </div>
-            <p className="mt-1.5 text-[0.72rem] text-dim">
-              Off a nameplate or a plug-in meter beats any estimate. Clear a field to go back to ours.
-            </p>
+            <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-2">
+              <p className="text-[0.72rem] text-dim">Off a nameplate or a plug-in meter beats any estimate. Clear a field to go back to ours.</p>
+              <button onClick={() => onAdjust({ ...adjust, deleted: true })} className="text-[0.74rem] text-dim underline-offset-4 hover:text-ember hover:underline">
+                Not in this room: delete
+              </button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

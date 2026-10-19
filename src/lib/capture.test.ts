@@ -87,3 +87,31 @@ describe("readTime", () => {
     expect(readTime(undefined, school)).toBeNull();
   });
 });
+
+describe("confirm, delete and re-identify", () => {
+  const unsure: CategorizedObservation[] = [
+    { device: "monitor", count: 6, state: "on", categoryId: "monitor", confidence: 0.9, verification: "unverified" },
+    { device: "projector", count: 1, state: "on", categoryId: "projector", verification: "verified" },
+  ];
+
+  it("keeps an unverified line out of the totals but in the list, until confirmed", () => {
+    const c = capture({ result: { mode: "enhanced", engine: "t", source: "Lab", offenders: [], observations: unsure } });
+    const os = costCapture(c, DEFAULT_SETTINGS);
+    expect(os.find((o) => o.categoryId === "monitor")?.unverified).toBe(true);
+    expect(os.find((o) => o.categoryId === "monitor")?.id).toBe("c1::monitor::?");
+    expect(parseOffenderKey("c1::monitor::?")).toEqual({ captureId: "c1", categoryId: "monitor" });
+    const confirmed = costCapture(capture({ result: c.result, adjust: { monitor: { confirmed: true } } }), DEFAULT_SETTINGS);
+    expect(confirmed.find((o) => o.categoryId === "monitor")?.unverified).toBeUndefined();
+  });
+
+  it("deletes a line the user says is not there", () => {
+    const out = applyInputs(unsure, {}, { monitor: { deleted: true } }, DEFAULT_SETTINGS);
+    expect(out.map((o) => o.categoryId)).toEqual(["projector"]);
+  });
+
+  it("re-identifies a device, which also counts as confirming it and drops the old wattage read", () => {
+    const out = applyInputs([{ ...unsure[0], wattsHint: 22 }], {}, { monitor: { categoryId: "tv" } }, DEFAULT_SETTINGS);
+    expect(out[0]).toMatchObject({ categoryId: "tv", device: "TV / large display", verification: "confirmed" });
+    expect(out[0].wattsHint).toBeUndefined();
+  });
+});

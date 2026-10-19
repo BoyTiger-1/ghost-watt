@@ -58,6 +58,16 @@ function extractCount(fragment: string): number {
 
 /** Pull the first balanced JSON array out of a possibly-chatty model response. */
 function extractJsonArray(text: string): unknown[] | null {
+  // The schema answer is {"items": [...]}; take the array inside it.
+  const trimmed = text.trim();
+  if (trimmed.startsWith("{")) {
+    try {
+      const obj = JSON.parse(trimmed) as { items?: unknown };
+      if (Array.isArray(obj.items)) return obj.items;
+    } catch {
+      // Not a clean object: fall through to the array scan.
+    }
+  }
   const start = text.indexOf("[");
   if (start === -1) return null;
   let depth = 0;
@@ -85,6 +95,9 @@ function fromJson(arr: unknown[], frame: Frame): CategorizedObservation[] {
     const rec = item as Record<string, unknown>;
     const label = String(rec.device ?? rec.name ?? rec.label ?? "");
     if (!label) continue;
+    // The model was asked to assert it can see the thing. "visible": false is an
+    // inference about the room, not a reading of the picture, and is dropped.
+    if (rec.visible === false) continue;
     const categoryId = matchCategory(label);
     if (!categoryId) continue;
     const count =
@@ -96,6 +109,8 @@ function fromJson(arr: unknown[], frame: Frame): CategorizedObservation[] {
     const evidence = typeof rec.evidence === "string" ? rec.evidence.trim().slice(0, 120) : "";
     const techRaw = rec.technology ?? rec.tech ?? rec.type;
     const tech = typeof techRaw === "string" ? techRaw.trim().slice(0, 40) : "";
+    const confRaw = Number(rec.confidence);
+    const confidence = Number.isFinite(confRaw) ? Math.max(0, Math.min(1, confRaw > 1 ? confRaw / 100 : confRaw)) : undefined;
     out.push({
       device: label,
       // A model that boxed more units than it counted has told us its count was low.
@@ -106,6 +121,7 @@ function fromJson(arr: unknown[], frame: Frame): CategorizedObservation[] {
       ...(Number.isFinite(watts) && watts > 0 ? { wattsHint: watts } : {}),
       ...(evidence ? { evidence } : {}),
       ...(tech ? { tech } : {}),
+      ...(confidence !== undefined ? { confidence } : {}),
     });
   }
   return out;
