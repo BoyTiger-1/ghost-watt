@@ -82,14 +82,35 @@ export function scoreObservation(
   if (!cat) return null;
 
   const count = Math.max(1, Math.round(obs.count || 1));
-  const unit = estimateUnitWatts(cat, obs.state, { aiWatts: obs.wattsHint, userWatts: obs.userWatts });
+
+  // The state this device is in through the building's empty hours. What was seen
+  // is the answer when the picture was taken after hours (or the time is unknown);
+  // a device seen running during the day is assumed to drop to standby at night
+  // unless the user says it is left on. Thermostatic devices cycle regardless.
+  let afterHoursState: DeviceState = obs.state;
+  let afterHoursBasis: Offender["afterHoursBasis"] = "observed";
+  if (obs.afterHours && !cat.thermostatic) {
+    afterHoursState = obs.afterHours;
+    afterHoursBasis = "user";
+  } else if (settings.capturedAfterHours === false && obs.state === "on" && !cat.thermostatic) {
+    afterHoursState = "standby";
+    afterHoursBasis = "assumed-standby";
+  }
+
+  // A user's wattage is the draw in the observed state; it only applies after hours
+  // if the after-hours state is that same state.
+  const userWatts = afterHoursState === obs.state ? obs.userWatts : undefined;
+  const unit = estimateUnitWatts(cat, afterHoursState, { aiWatts: obs.wattsHint, userWatts });
   const perUnitWatts = unit.mid;
   const totalWatts = perUnitWatts * count;
-  if (totalWatts <= 0) return null;
+  // Seen on, off at night, draws nothing in standby: nothing to cost after hours.
+  // The device is still reported (typical use is real) with zero waste.
+  const standbyUnit = estimateUnitWatts(cat, "standby", {});
 
   const hoursKnown = obs.hoursPerYear !== undefined && Number.isFinite(obs.hoursPerYear) && obs.hoursPerYear >= 0;
   const hours = hoursKnown ? Math.min(8760, obs.hoursPerYear!) : settings.unoccupiedHoursPerYear;
   const kwhPerYear = (totalWatts / 1000) * hours;
+  const standbyCostPerYear = ((standbyUnit.mid * count) / 1000) * settings.unoccupiedHoursPerYear * settings.ratePerKwh;
   const costPerYear = kwhPerYear * settings.ratePerKwh;
   const co2KgPerYear = kwhPerYear * settings.co2PerKwh;
 
@@ -101,15 +122,20 @@ export function scoreObservation(
   const paybackMonths =
     fixCost > 0 && annualSavings > 0 ? (fixCost / annualSavings) * 12 : null;
 
-  // Typical use, for contrast with "left on": hours in use where it is, standby
-  // the rest. The user's own hours win when given.
+  // Typical use, for contrast with after-hours waste: hours in use where it is,
+  // standby the rest. The user's own hours win when given.
   const active = estimateUnitWatts(cat, "on", { aiWatts: obs.wattsHint, userWatts: obs.state === "on" ? obs.userWatts : undefined }).mid;
   const typical = typicalUse(
     cat,
     active,
     settings.usageContext ?? "school",
     settings.occupiedHoursPerYear ?? Math.max(0, 8760 - settings.unoccupiedHoursPerYear),
+    settings.roomType,
   );
+  // Seen switched off: not an offender (it is drawn on the photo as a sighting).
+  // Seen on but asleep after hours still gets a line: its typical use is real,
+  // and its after-hours waste is honestly the standby figure.
+  if (obs.state === "off" && !cat.thermostatic) return null;
   const typicalHoursPerDay = hoursKnown && !cat.thermostatic ? hours / 365 : typical.hoursPerDay;
   const typicalKwhPerUnit = hoursKnown && !cat.thermostatic
     ? (hours * active + (8760 - hours) * cat.wattsStandby) / 1000
@@ -140,11 +166,15 @@ export function scoreObservation(
     basis: unit.basis,
     hoursPerYear: hours,
     hoursKnown,
+    afterHoursState,
+    afterHoursBasis,
+    standbyCostPerYear,
     activeWattsPerUnit: active,
     typicalHoursPerDay,
     typicalKwhPerYear,
     typicalCostPerYear: typicalKwhPerYear * settings.ratePerKwh,
     usageBasis: hoursKnown && !cat.thermostatic ? "Your hours" : typical.basis,
+    usageSource: hoursKnown && !cat.thermostatic ? "user" : typical.source,
     ...(obs.tech ? { tech: obs.tech } : {}),
     ...(obs.evidence ? { evidence: obs.evidence } : {}),
     ...(obs.boxes?.length ? { boxes: obs.boxes } : {}),
@@ -180,6 +210,7 @@ export function rankObservations(
       existing.annualSavings += o.annualSavings;
       existing.typicalKwhPerYear = (existing.typicalKwhPerYear ?? 0) + (o.typicalKwhPerYear ?? 0);
       existing.typicalCostPerYear = (existing.typicalCostPerYear ?? 0) + (o.typicalCostPerYear ?? 0);
+      existing.standbyCostPerYear = (existing.standbyCostPerYear ?? 0) + (o.standbyCostPerYear ?? 0);
       if (o.boxes?.length) existing.boxes = [...(existing.boxes ?? []), ...o.boxes];
       existing.paybackMonths =
         existing.fixCost > 0 && existing.annualSavings > 0

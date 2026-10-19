@@ -37,6 +37,14 @@ export interface CaptureDetails {
   hoursPerDay?: number;
   /** Free text, passed to the model: "Dell monitors, lab is closed weekends". */
   note?: string;
+  /** Kind of room, for the typical-use hours. */
+  roomType?: string;
+  /**
+   * What happens here after hours, for every device seen on: it stays on as seen
+   * ("on"), or goes to standby. Default: what was seen if the picture was taken
+   * after hours, standby if it was taken during open hours.
+   */
+  afterHours?: "on" | "standby";
 }
 
 /** Per-device corrections, keyed by catalog category. */
@@ -50,6 +58,8 @@ export interface DeviceAdjust {
   deleted?: boolean;
   /** The user says the model named the wrong kind of device. */
   categoryId?: string;
+  /** The state this device is in after hours, when the user knows: left on, asleep, or switched off. */
+  afterHours?: "on" | "standby" | "off";
 }
 
 export type CaptureStatus = "pending" | "working" | "done" | "error";
@@ -99,9 +109,11 @@ export const captureId = () => `c${Date.now().toString(36)}${(n++).toString(36)}
 export function captureSettings(
   base: AuditSettings,
   c: Pick<Capture, "geo">,
-  rateOverridden: boolean,
+  baseQuality: RateQuality | boolean,
 ): { settings: AuditSettings; rateQuality: RateQuality } {
-  if (rateOverridden) return { settings: base, rateQuality: "bill" };
+  // A bill or a typed rate is the building's own price; nothing looked up beats it.
+  if (baseQuality === true || baseQuality === "bill") return { settings: base, rateQuality: "bill" };
+  if (baseQuality === "utility") return { settings: base, rateQuality: "utility" };
   if (c.geo) {
     return {
       settings: { ...base, ratePerKwh: c.geo.ratePerKwh, co2PerKwh: c.geo.co2PerKwh },
@@ -123,6 +135,7 @@ export function applyInputs(
 
   const captureHours = hours(details.hoursPerDay);
   if (captureHours !== undefined) for (const o of out) o.hoursPerYear = captureHours;
+  if (details.afterHours) for (const o of out) if (o.state === "on") o.afterHours = details.afterHours;
 
   // The capture-level wattage belongs to its main device: the one costing most.
   if (details.watts && details.watts > 0 && out.length) {
@@ -144,6 +157,7 @@ export function applyInputs(
     const h = hours(a.hoursPerDay);
     if (h !== undefined) o.hoursPerYear = h;
     if (a.confirmed) o.verification = "confirmed";
+    if (a.afterHours) o.afterHours = a.afterHours;
     if (a.categoryId && CATALOG_BY_ID[a.categoryId] && a.categoryId !== o.categoryId) {
       o.categoryId = a.categoryId;
       o.device = CATALOG_BY_ID[a.categoryId].label;
@@ -161,11 +175,22 @@ export function baseObservations(c: Capture): CategorizedObservation[] {
   return c.result?.observations ?? [];
 }
 
-/** A capture's offenders, priced with its own location and the user's inputs. */
-export function costCapture(c: Capture, settings: AuditSettings): Offender[] {
+/** The settings one capture is priced with: its room type and whether it was taken after hours. */
+export function captureContext(c: Pick<Capture, "meta" | "details" | "roomType">, settings: AuditSettings, schedule?: WeeklySchedule): AuditSettings {
+  const time = readTime(c.meta.takenAt, schedule);
+  return {
+    ...settings,
+    roomType: c.details.roomType ?? (c.roomType !== "unknown" ? c.roomType : undefined),
+    capturedAfterHours: time ? time.afterHours : null,
+  };
+}
+
+/** A capture's offenders, priced with its own location, room and the user's inputs. */
+export function costCapture(c: Capture, settings: AuditSettings, schedule?: WeeklySchedule): Offender[] {
   if (!c.result) return [];
-  const obs = applyInputs(baseObservations(c), c.details, c.adjust, settings);
-  return rankObservations(obs, settings, c.name).map((o) => ({ ...o, id: offenderKey(c.id, o.categoryId, o.unverified) }));
+  const s = captureContext(c, settings, schedule);
+  const obs = applyInputs(baseObservations(c), c.details, c.adjust, s);
+  return rankObservations(obs, s, c.name).map((o) => ({ ...o, id: offenderKey(c.id, o.categoryId, o.unverified) }));
 }
 
 export const offenderKey = (captureId: string, categoryId: string, unverified?: boolean) =>

@@ -46,8 +46,8 @@ import {
   type GeoContext,
 } from "@/lib/capture";
 import type { Building, SavedAudit } from "@/lib/storage";
-import { addBuilding, currentStore, newBuilding, removeAudit, upsertAudit, useStore } from "@/lib/useStore";
-import type { AnalysisResult, AnalyzeError, AuditSettings, Offender } from "@/lib/types";
+import { addBuilding, currentStore, newBuilding, removeAudit, removeCalibration, upsertAudit, upsertCalibration, useStore } from "@/lib/useStore";
+import type { AnalysisResult, AnalyzeError, AuditSettings } from "@/lib/types";
 
 type Mode = "camera" | "upload";
 type ResultTab = "offenders" | "plan" | "grid" | "context";
@@ -192,9 +192,11 @@ export function Scanner() {
   const sector: Sector = place === "home" ? "residential" : "commercial";
   const schedule =
     place === contextForBuildingType(building.typeId) ? building.schedule : SCHEDULE_BY_ID[place].schedule;
+  // A real bill beats every lookup: dollars ÷ kWh off the paper is the price this building pays.
+  const billRate = building.bill && building.bill.kwh > 0 && building.bill.dollars > 0 ? building.bill.dollars / building.bill.kwh : undefined;
   const settings: AuditSettings = useMemo(
     () => ({
-      ratePerKwh: override.ratePerKwh ?? liveRate?.ratePerKwh ?? regionRate(region, sector),
+      ratePerKwh: override.ratePerKwh ?? billRate ?? liveRate?.ratePerKwh ?? regionRate(region, sector),
       co2PerKwh: override.co2PerKwh ?? region.co2PerKwh,
       unoccupiedHoursPerYear: override.unoccupiedHoursPerYear ?? unoccupiedHours(schedule),
       occupiedHoursPerYear: occupiedHours(schedule),
@@ -204,7 +206,7 @@ export function Scanner() {
       floorAreaSqFt: building.floorAreaSqFt,
       demandChargePerKw: override.demandChargePerKw,
     }),
-    [override, liveRate, region, building, place, sector, schedule],
+    [override, billRate, liveRate, region, building, place, sector, schedule],
   );
   const sectorRef = useRef(sector);
   useEffect(() => {
@@ -214,7 +216,8 @@ export function Scanner() {
   useEffect(() => {
     settingsRef.current = settings;
   }, [settings]);
-  const rateOverridden = override.ratePerKwh !== undefined || liveRate !== null;
+  // How well the price is known: a bill or a typed figure is exact, a utility lookup close, a state table loose.
+  const rateQualityBase: RateQuality = override.ratePerKwh !== undefined || billRate !== undefined ? "bill" : liveRate ? "utility" : "state";
 
   useEffect(() => {
     if (!toast) return;
@@ -505,14 +508,6 @@ export function Scanner() {
     setCaptures((prev) => prev.map((c) => (c.id === id ? { ...c, details: { ...c.details, ...d } } : c)));
   };
 
-  const setAdjust = (offenderId: string, a: DeviceAdjust) => {
-    const key = parseOffenderKey(offenderId);
-    if (!key) return;
-    setCaptures((prev) =>
-      prev.map((c) => (c.id === key.captureId ? { ...c, adjust: { ...c.adjust, [key.categoryId]: a } } : c)),
-    );
-  };
-
   function remove(id: string) {
     setCaptures((prev) => {
       const c = prev.find((x) => x.id === id);
@@ -530,20 +525,51 @@ export function Scanner() {
       captures.map((c) => {
         // A location looked up for the other sector is not this capture's price.
         const geo = c.geo && (c.geo.sector ?? sector) === sector ? c.geo : null;
-        const { settings: s, rateQuality } = captureSettings(settings, { geo }, rateOverridden);
-        return { c, offenders: costCapture(c, s), rateQuality };
+        const { settings: s, rateQuality } = captureSettings(settings, { geo }, rateQualityBase);
+        return { c, offenders: costCapture(c, s, schedule), rateQuality };
       }),
-    [captures, settings, rateOverridden, sector],
+    [captures, settings, rateQualityBase, sector, schedule],
   );
 
-  const ranked = useMemo(() => {
-    const flat: { offender: Offender; mode: AnalysisResult["mode"]; engine: string }[] = [];
-    for (const p of priced) {
-      if (!p.c.result) continue;
-      for (const o of p.offenders) flat.push({ offender: o, mode: p.c.result.mode, engine: p.c.result.engine });
+  const ranked = useMemo(
+    () =>
+      priced
+        .flatMap((p) => {
+          const r = p.c.result;
+          return r ? p.offenders.map((offender) => ({ offender, mode: r.mode, engine: r.engine })) : [];
+        })
+        .sort((a, b) => b.offender.costPerYear - a.offender.costPerYear),
+    [priced],
+  );
+
+  const setAdjust = (offenderId: string, a: DeviceAdjust) => {
+    const key = parseOffenderKey(offenderId);
+    if (!key) return;
+    // A measured wattage is the one accuracy figure the app can later show: record
+    // what it had estimated for this device before the meter reading replaced it.
+    const line = ranked.find((r) => r.offender.id === offenderId)?.offender;
+    const calId = `cal_${key.captureId}_${key.categoryId}`;
+    if (a.watts !== undefined && a.watts > 0 && line && ready) {
+      const estimated = line.basis === "measured" ? currentStore().calibrations.find((c) => c.id === calId)?.estimatedWatts : line.activeWattsPerUnit ?? line.perUnitWatts;
+      if (estimated && estimated > 0) {
+        upsertCalibration({
+          id: calId,
+          buildingId: building.id,
+          categoryId: key.categoryId,
+          label: line.label,
+          estimatedWatts: estimated,
+          estimateBasis: line.basis === "ai" ? "ai" : "catalog",
+          measuredWatts: a.watts,
+          at: new Date().toISOString(),
+        });
+      }
+    } else if (a.watts === undefined) {
+      removeCalibration(calId);
     }
-    return flat.sort((a, b) => b.offender.costPerYear - a.offender.costPerYear);
-  }, [priced]);
+    setCaptures((prev) =>
+      prev.map((c) => (c.id === key.captureId ? { ...c, adjust: { ...c.adjust, [key.categoryId]: a } } : c)),
+    );
+  };
 
   /** Every line, unverified ones included, for the list. */
   const offenders = useMemo(() => ranked.map((r) => r.offender), [ranked]);
@@ -613,7 +639,7 @@ export function Scanner() {
           at: existing?.at ?? new Date().toISOString(),
           areas: [p.c.name],
           offenders: p.offenders,
-          settings: captureSettings(settings, { geo: p.c.geo ?? null }, rateOverridden).settings,
+          settings: captureSettings(settings, { geo: p.c.geo ?? null }, rateQualityBase).settings,
           mode: r.mode,
           engine: r.engine,
           roomType: p.c.roomType,
@@ -629,7 +655,7 @@ export function Scanner() {
       alive = false;
       clearTimeout(t);
     };
-  }, [priced, ready, settings, rateOverridden]);
+  }, [priced, ready, settings, rateQualityBase]);
 
   const basisMix = useMemo(() => {
     const m = { measured: 0, ai: 0, catalog: 0 };
@@ -813,6 +839,7 @@ export function Scanner() {
               <span className="mono-label">Override assumptions</span>
               <span className="font-mono text-xs text-mist">
                 {settings.ratePerKwh.toFixed(3)} $/kWh
+                {override.ratePerKwh === undefined && billRate !== undefined && <span className="ml-1.5 text-lime">from bill</span>}
                 <span className="ml-2 text-cyan">{showSettings ? "−" : "+"}</span>
               </span>
             </button>
@@ -1019,7 +1046,7 @@ function TotalsHeader({
         style={{ background: "radial-gradient(60% 120% at 100% 0%, rgba(239,157,46,0.1), transparent 60%)" }}
       />
       <div className="flex items-center justify-between gap-3">
-        <span className="mono-label text-cyan">bleeding while you sleep</span>
+        <span className="mono-label text-cyan">after-hours waste</span>
         <span className="font-mono text-[0.68rem] text-dim">
           {captures} capture{captures === 1 ? "" : "s"}
           {working && <span className="ml-1.5 text-sodium-deep">· analysing…</span>}
@@ -1027,7 +1054,19 @@ function TotalsHeader({
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
-        <BigStat label="/ yr if left on" accent value={<CountUp value={cost} format={fmtMoneyFull} />} />
+        <BigStat
+          label="/ yr wasted after hours"
+          accent
+          value={
+            cost > 0 ? (
+              <span className="whitespace-nowrap">
+                <CountUp value={range.p10} format={fmtMoney} />–<CountUp value={range.p90} format={fmtMoney} />
+              </span>
+            ) : (
+              "$0"
+            )
+          }
+        />
         <BigStat label="CO₂ / year" value={<CountUp value={co2} format={fmtCo2} />} />
         <BigStat label="energy / year" value={<CountUp value={kwh} format={fmtKwh} />} />
         <BigStat label="recoverable / yr" value={<CountUp value={recoverable} format={fmtMoneyFull} />} />
@@ -1037,7 +1076,8 @@ function TotalsHeader({
         <div className="mt-5 border-t border-line pt-4">
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
             <span className="text-[0.84rem] text-fog">
-              Likely <span className="font-mono font-semibold">{fmtMoney(range.p10)}</span> – <span className="font-mono font-semibold">{fmtMoney(range.p90)}</span> a year
+              Best estimate <span className="font-mono font-semibold">{fmtMoneyFull(cost)}</span> a year; likely between{" "}
+              <span className="font-mono font-semibold">{fmtMoney(range.p10)}</span> and <span className="font-mono font-semibold">{fmtMoney(range.p90)}</span>
             </span>
             <span className="font-mono text-[0.72rem] text-dim">±{Math.round(range.spread * 100)}% · 80% range</span>
           </div>
@@ -1067,12 +1107,13 @@ function TotalsHeader({
           <div>
             <div className="font-mono text-lg font-semibold text-fog">{fmtMoneyFull(cost)}</div>
             <div className="leading-snug text-mist">
-              if left on whenever the {place === "home" ? "house is empty or asleep" : "building is empty"}
+              wasted after hours: what the devices draw through the hours the {place === "home" ? "house is empty or asleep" : "building is empty"}, in the state they
+              are in then
             </div>
           </div>
           <div>
             <div className="font-mono text-lg font-semibold text-fog">{fmtMoneyFull(typical)}</div>
-            <div className="leading-snug text-mist">at typical use: hours actually in use, standby otherwise</div>
+            <div className="leading-snug text-mist">at typical use for this kind of room: hours actually in use, standby the rest</div>
           </div>
         </div>
       )}

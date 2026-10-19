@@ -5,13 +5,14 @@
 // in West Virginia running on coal get wildly different carbon numbers off the same
 // photo, and their electricity bills differ by a factor of two.
 //
-// Prices are EIA's published state averages for 2026 so far (Electric Power
-// Monthly, Table 5.6.B, January-July 2026 year to date), for both sectors: a
-// house pays the residential price, a school or office the commercial one, and
-// the two differ by up to 2x in the same state. Carbon is EPA eGRID-derived
-// generation intensity. Every figure is still editable in the app, and when the
-// building's location is known, providers.ts looks up the serving utility's own
-// current tariff instead.
+// Prices are EIA state averages for both sectors: a house pays the residential
+// price, a school or office the commercial one, and the two differ by up to 2x
+// in the same state. The Washington row was verified against EIA's 2024 annual
+// Table 4 for this release; the other rows are the compiled table and should be
+// treated as approximate until checked the same way. Carbon is the EPA eGRID
+// state output emission rate. Every figure is editable in the app, a bill
+// replaces the price, and when the building's location is known providers.ts
+// looks up the serving utility's own current tariff instead.
 
 export interface RegionProfile {
   code: string;
@@ -74,7 +75,9 @@ export const REGIONS: RegionProfile[] = [
   { code: "UT", name: "Utah", ratePerKwh: 0.104, residentialPerKwh: 0.132, co2PerKwh: 0.63, subregion: "NWPP" },
   { code: "VT", name: "Vermont", ratePerKwh: 0.209, residentialPerKwh: 0.239, co2PerKwh: 0.02, subregion: "NEWE" },
   { code: "VA", name: "Virginia", ratePerKwh: 0.112, residentialPerKwh: 0.168, co2PerKwh: 0.28, subregion: "SRVC" },
-  { code: "WA", name: "Washington", ratePerKwh: 0.119, residentialPerKwh: 0.144, co2PerKwh: 0.09, subregion: "NWPP" },
+  // Verified against EIA Table 4 (2024 annual: 9.99 ¢ commercial, 11.90 ¢ residential) and the
+  // eGRID state output rate (~0.10 kg CO2/kWh; Washington is mostly hydro, NWPP as a whole is 0.29).
+  { code: "WA", name: "Washington", ratePerKwh: 0.0999, residentialPerKwh: 0.119, co2PerKwh: 0.1, subregion: "NWPP" },
   { code: "WV", name: "West Virginia", ratePerKwh: 0.116, residentialPerKwh: 0.155, co2PerKwh: 0.79, subregion: "RFCW" },
   { code: "WI", name: "Wisconsin", ratePerKwh: 0.137, residentialPerKwh: 0.190, co2PerKwh: 0.44, subregion: "MROW" },
   { code: "WY", name: "Wyoming", ratePerKwh: 0.098, residentialPerKwh: 0.140, co2PerKwh: 0.72, subregion: "RMPA" },
@@ -88,9 +91,10 @@ export const REGION_BY_CODE: Record<string, RegionProfile> = Object.fromEntries(
 export const US_AVERAGE: RegionProfile = {
   code: "US",
   name: "United States (average)",
-  ratePerKwh: 0.140,
-  residentialPerKwh: 0.182,
-  co2PerKwh: 0.385,
+  ratePerKwh: 0.13,
+  residentialPerKwh: 0.165,
+  // eGRID2023 U.S. average output emission rate, 767 lb CO2/MWh.
+  co2PerKwh: 0.35,
   subregion: "US",
 };
 
@@ -106,7 +110,7 @@ export function gridExtremes(): { cleanest: RegionProfile; dirtiest: RegionProfi
 }
 
 /** Where the price tables come from, for the methodology page and the UI. */
-export const RATE_TABLE_SOURCE = "EIA Electric Power Monthly, Table 5.6.B (2026 year to date, through July)";
+export const RATE_TABLE_SOURCE = "EIA average retail price by state and sector (Washington row verified against the 2024 annual Table 4)";
 
 /** The state average a building of this kind pays: residential for a home, commercial otherwise. */
 export function regionRate(region: RegionProfile, sector: "residential" | "commercial"): number {
