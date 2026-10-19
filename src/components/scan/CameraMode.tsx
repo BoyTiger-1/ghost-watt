@@ -22,6 +22,8 @@ import { CENTER_ROI, CenterLamp, Verifier, judge, lampScore, withLamps } from "@
 import { observationsToItems, panelOf, readItems, type LiveItem } from "@/lib/ondevice";
 import { dedupeCandidates, isLiveClass, looksLikeWindow, tooBig } from "@/lib/candidates";
 import { useT } from "@/lib/i18n";
+import { usePrefs } from "@/lib/prefs";
+import { beep, buzz } from "@/lib/cues";
 import { readStill } from "@/lib/still";
 import { analysisSquare } from "@/lib/image";
 import { LightTracker, readScene, regionSaturation, regionStats, type SceneRead } from "@/lib/scene";
@@ -167,6 +169,13 @@ export function CameraMode({
   const aiOn = engine.mode === "enhanced";
   const engineModeRef = useRef(engine.mode);
   const [ai, setAi] = useState<AiStatus>({ kind: "moving", candidates: 0 });
+  const prefs = usePrefs();
+  const prefsRef = useRef(prefs);
+  useEffect(() => {
+    prefsRef.current = prefs;
+  }, [prefs]);
+  /** Set by the Confirm button or the C key: the next steady frame is sent whatever the gates say. */
+  const manualRef = useRef(false);
   const viewRef = useRef<HTMLDivElement>(null);
   // Null until mounted: the page is prerendered, and a build-time clock would not match.
   const [now, setNow] = useState<string | null>(null);
@@ -259,6 +268,8 @@ export function CameraMode({
       ok = true;
       const id = (viewsRef.current.at(-1)?.id ?? 0) + 1;
       viewsRef.current = [...viewsRef.current, { id, sig, items, mode }].slice(-MAX_VIEWS);
+      beep(prefsRef.current, "confirmed");
+      buzz(prefsRef.current, [8, 30, 8]);
     } catch {
       // The still read itself failed (detector not loaded yet, most likely): try again after the cooldown.
     } finally {
@@ -413,7 +424,14 @@ export function CameraMode({
           steadySince = still ? steadySince || now : 0;
           view = nearestView(sig, viewsRef.current)?.view ?? null;
           const a = aiRef.current;
-          if (
+          const wanted = manualRef.current;
+          if (wanted && !a.inFlight) {
+            manualRef.current = false;
+            viewsRef.current = viewsRef.current.filter((x) => x.sig !== view?.sig);
+            view = null;
+            confirmView(sig);
+          } else if (
+            !prefsRef.current.manualConfirm &&
             shouldAutoAudit({
               enabled: true,
               inFlight: a.inFlight,
@@ -522,7 +540,7 @@ export function CameraMode({
       // On a confirmed view, the confirmed answer replaces the candidates.
       itemsRef.current = view ? view.items : candidates;
       const holdProgress = view || aiRef.current.inFlight ? 0 : steadySince ? Math.min(1, (now - steadySince) / STEADY_MS) : 0;
-      drawOverlay(canvas, sw, sh, itemsRef.current, now, mirroredRef.current, aiRef.current.inFlight, holdProgress);
+      drawOverlay(canvas, sw, sh, itemsRef.current, now, mirroredRef.current, aiRef.current.inFlight, holdProgress, prefsRef.current.minimalOverlay);
 
       const dt = now - lastFrame;
       lastFrame = now;
@@ -612,7 +630,7 @@ export function CameraMode({
     const dataUrl = toJpeg(v, 1280, 0.86);
     if (!dataUrl) return;
     setFlash((f) => f + 1);
-    navigator.vibrate?.(12);
+    buzz(prefsRef.current, 12);
     const items = itemsRef.current as ViewItem[];
     const confirmed = items.length > 0 ? !items.some((i) => i.candidate) : ai.kind === "confirmed";
     onPhoto({ dataUrl, items, scene: sceneRef.current, confirmed, mode: confirmed && ai.kind === "confirmed" ? ai.mode : undefined });
@@ -640,7 +658,7 @@ export function CameraMode({
     setRecording(true);
     setRecSeconds(0);
     setSheetOpen(false);
-    navigator.vibrate?.(20);
+    buzz(prefsRef.current, 20);
   }
 
   const stopRecording = useCallback(() => {
@@ -648,7 +666,7 @@ export function CameraMode({
     recRef.current = null;
     setRecording(false);
     if (r && r.rec.state !== "inactive") r.rec.stop();
-    navigator.vibrate?.([10, 40, 10]);
+    buzz(prefsRef.current, [10, 40, 10]);
   }, []);
 
   useEffect(() => {
@@ -681,6 +699,30 @@ export function CameraMode({
     start(next);
   }
 
+  // Keyboard: Space photo, V video, F flip, C confirm. Never while typing in a field.
+  useEffect(() => {
+    if (!prefs.shortcuts) return;
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (k === " ") {
+        e.preventDefault();
+        shoot();
+      } else if (k === "v") {
+        if (recRef.current) stopRecording();
+        else startRecording();
+      } else if (k === "f") {
+        if (canFlip) flip();
+      } else if (k === "c") {
+        manualRef.current = true;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
   const time = useMemo(() => (now ? readTime(now, schedule) : null), [now, schedule]);
   const mirrored = facing === "user";
   useEffect(() => {
@@ -695,7 +737,7 @@ export function CameraMode({
         className={`overflow-hidden bg-[#07090c] text-white ${
           full
             ? "fixed inset-0 z-[200] h-[100dvh] w-screen"
-            : "relative h-[calc(100svh-12rem-env(safe-area-inset-bottom))] min-h-[420px] rounded-[1.5rem] shadow-[0_30px_80px_-40px_rgba(0,0,0,0.6)] lg:h-auto lg:min-h-0 lg:aspect-[4/3]"
+            : "relative h-[calc(100svh-10.5rem-env(safe-area-inset-bottom))] min-h-[440px] rounded-[1.5rem] shadow-[0_30px_80px_-40px_rgba(0,0,0,0.6)] lg:h-auto lg:min-h-0 lg:aspect-[4/3]"
         }`}
       >
         <video
@@ -722,7 +764,7 @@ export function CameraMode({
 
         {/* top bar */}
         <div
-          className={`absolute inset-x-0 top-0 flex items-start justify-between gap-2 bg-gradient-to-b from-black/70 to-transparent p-3 pb-10 sm:p-4 ${
+          className={`cam-topbar absolute inset-x-0 top-0 flex items-start justify-between gap-2 bg-gradient-to-b from-black/70 to-transparent p-3 pb-10 sm:p-4 ${
             full ? "pt-[max(0.75rem,env(safe-area-inset-top))]" : ""
           }`}
         >
@@ -736,7 +778,8 @@ export function CameraMode({
             <div className="flex min-w-0 items-center gap-2 rounded-full bg-black/45 px-3 py-1.5 font-mono text-[0.68rem] backdrop-blur-md">
               <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${phase === "live" ? "bg-[#ff6a5c] pulse-dot" : "bg-white/40"}`} />
               <span className="font-semibold tracking-wide">LIVE</span>
-              <span className="truncate text-white/60">
+              {/* The detail line is for a wide screen; a phone keeps the chip to one word and says the rest in the sheet. */}
+              <span className="hidden truncate text-white/60 sm:inline">
                 {ai.kind !== "moving"
                   ? aiLine(ai)
                   : typeof detector === "object"
@@ -824,7 +867,7 @@ export function CameraMode({
               aria-expanded={sheetOpen}
               className="flex w-full items-center justify-between gap-3 rounded-full bg-black/55 py-2 pl-4 pr-3 text-left backdrop-blur-xl"
             >
-              <SummaryLine items={items} dark />
+              <SummaryLine items={items} dark ai={ai} />
               <Icon name="chevron" className={`h-4 w-4 shrink-0 text-white/70 transition-transform ${sheetOpen ? "rotate-180" : ""}`} />
             </button>
           </div>
@@ -836,7 +879,20 @@ export function CameraMode({
             full ? "pb-[max(1.5rem,env(safe-area-inset-bottom))]" : "pb-5"
           }`}
         >
-          <div className="mx-auto flex max-w-sm items-center justify-between">
+          {prefs.manualConfirm && phase === "live" && !recording && (
+            <div className="mb-3 flex justify-center">
+              <button
+                type="button"
+                onClick={() => {
+                  manualRef.current = true;
+                }}
+                className="rounded-full bg-white/90 px-4 py-1.5 text-[0.8rem] font-medium text-black backdrop-blur-md"
+              >
+                {t("cam.confirm.now")}
+              </button>
+            </div>
+          )}
+          <div className="cam-controls mx-auto flex max-w-sm items-center justify-between">
             <div className="flex w-16 justify-center">
               <button
                 onClick={recording ? stopRecording : startRecording}
@@ -939,15 +995,16 @@ function group(items: readonly LiveItem[]): Row[] {
 }
 
 /** The cost pill. Confirmed readings only: candidates are suggestions, not money. */
-function SummaryLine({ items, dark }: { items: readonly ViewItem[]; dark?: boolean }) {
+function SummaryLine({ items, dark, ai }: { items: readonly ViewItem[]; dark?: boolean; ai?: AiStatus }) {
   const t = useT();
   const confirmed = items.filter((i) => !i.candidate && i.kind !== "other");
   const candidates = items.filter((i) => i.candidate && i.kind !== "other");
   const cost = confirmed.reduce((s, i) => s + i.costPerYear, 0);
   if (!confirmed.length) {
+    const confirming = ai?.kind === "confirming";
     return (
       <span className="flex min-w-0 items-baseline gap-2">
-        <span className={`text-[0.9rem] font-medium ${dark ? "text-white" : "text-fog"}`}>{t("cam.hold")}</span>
+        <span className={`text-[0.9rem] font-medium ${dark ? "text-white" : "text-fog"}`}>{confirming ? t("cam.confirming") : t("cam.hold")}</span>
         <span className={`truncate text-[0.78rem] ${dark ? "text-white/70" : "text-mist"}`}>
           {candidates.length ? `${candidates.length} ${candidates.length > 1 ? t("cam.candidates.in.view") : t("cam.candidate.in.view")}` : t("cam.point.short")}
         </span>
@@ -1069,8 +1126,14 @@ function LiveRead({
               </span>
             </li>
           ))}
-        {rows.map((r) => (
-          <li key={r.key} className={`flex items-center gap-2.5 rounded-xl ${t.chip} px-2.5 py-2`}>
+        {rows.map((r, i) => (
+          <motion.li
+            key={r.key}
+            initial={{ opacity: 0, x: -6 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.3, delay: Math.min(i, 6) * 0.04 }}
+            className={`flex items-center gap-2.5 rounded-xl ${t.chip} px-2.5 py-2`}
+          >
             <span className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ background: itemColor(r) }} />
             <span className="min-w-0 flex-1">
               <span className={`block truncate text-[0.84rem] font-medium ${t.fog}`}>
@@ -1091,7 +1154,7 @@ function LiveRead({
                 <span className={`block font-mono text-[0.64rem] ${t.dim}`}>{fmtMoney(r.typical)} typ</span>
               </span>
             )}
-          </li>
+          </motion.li>
         ))}
       </ul>
 
@@ -1234,11 +1297,17 @@ function drawOverlay(
   auditing = false,
   /** 0-1: how long the camera has been held still, toward the confirm step. */
   holdProgress = 0,
+  /** Boxes only: no sweep, reticle or labels. */
+  minimal = false,
 ) {
   const { ctx, cw, ch } = prepare(canvas);
   if (!ctx) return;
   const r = coverRect(sw, sh, cw, ch);
   const small = cw < 520;
+  if (minimal) {
+    drawBoxesOnly(ctx, r, items, mirrored);
+    return;
+  }
 
   // Slow sweep: reads as "scanning" without hiding anything. Faster and brighter
   // while the AI is reading the view.
@@ -1350,6 +1419,22 @@ function drawOverlay(
     ctx.fillStyle = "#fff";
     ctx.fillText(text, lx + 8, ly + th / 2 + 0.5);
   }
+}
+
+/** The minimal overlay: one plain box per item, solid for confirmed and dashed for candidates. */
+function drawBoxesOnly(ctx: CanvasRenderingContext2D, r: ReturnType<typeof coverRect>, items: readonly ViewItem[], mirrored: boolean) {
+  for (const it of items) {
+    if (it.kind === "other") continue;
+    const [bx1, y1, bx2, y2] = it.box;
+    const x1 = mirrored ? 1 - bx2 : bx1;
+    const x2 = mirrored ? 1 - bx1 : bx2;
+    const x = r.x + x1 * r.w, y = r.y + y1 * r.h, w = (x2 - x1) * r.w, h = (y2 - y1) * r.h;
+    ctx.setLineDash(it.candidate ? [6, 5] : []);
+    ctx.strokeStyle = itemColor(it);
+    ctx.lineWidth = it.candidate ? 1.5 : 2.5;
+    ctx.strokeRect(x + 0.5, y + 0.5, w, h);
+  }
+  ctx.setLineDash([]);
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {

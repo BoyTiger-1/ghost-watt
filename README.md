@@ -118,9 +118,12 @@ npm run dev
 
 Open http://localhost:3000. With no keys at all the app runs in **On-device** mode: the
 scanner, costs, plan, rooms, buildings and brief all work, and the pill in the header says
-so. To turn on **Enhanced (cloud)** reading, add one vision key to `.env.local`
-(`ANTHROPIC_API_KEY`, `GROQ_API_KEY`, `OPENAI_API_KEY` or `OPENROUTER_API_KEY`), or run a
-local Ollama vision model (`ollama pull moondream`), and restart.
+so. To turn on **Enhanced (cloud)** reading, add one or more vision keys to `.env.local`
+(`ANTHROPIC_API_KEY`, `GROQ_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`; each is a
+fallback for the one before it), or run a local Ollama vision model
+(`ollama pull moondream`), and restart. On Vercel, add the same variables under Settings →
+Environment Variables. Defaults per provider: `claude-haiku-5-5`, `qwen/qwen3.6-27b`,
+`gpt-4o-mini`, `google/gemini-2.5-flash`; override any with `<KEY NAME>_MODEL`.
 
 ## Running the live model
 
@@ -237,11 +240,16 @@ and formula is laid out on the Methodology page.
 
 ## Accessibility
 
-Ten settings under Settings → Display & accessibility, stored on the device: theme (system,
-light, dark), text size, high contrast, reduce motion (which also disables every animation),
-a colour-blind-safe palette, English or Spanish for the core flow, underlined links, bigger
-touch targets, wider letter spacing and an always-visible focus ring. Screen-reader labels,
-keyboard navigation with a skip link and live regions for results are always on.
+Twenty-four settings under Settings → Display & accessibility, stored on the device and
+applied before first paint. Seeing: theme (system, light, dark), text size, high contrast,
+colour-blind-safe palette, greyscale, large pointer, always-visible focus ring, lite visuals
+(no 3D or decorative motion). Reading: English or Spanish for the core flow, plain font,
+bold text, wider letter spacing, taller lines, underlined links, a reading guide that follows
+the pointer, and results read aloud. Motion, sound and touch: reduce motion (also disables
+every animation), bigger touch targets, sound cues, vibration cues. Scanner: confirm only on
+request, minimal camera overlay, keyboard shortcuts (Space photo, V video, F flip, C confirm)
+and left-handed controls. Screen-reader labels, keyboard navigation with a skip link and live
+regions for results are always on.
 
 ## Project layout
 

@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { useState } from "react";
 import { Arrow } from "./HomeNav";
 import { useMediaQuery } from "./useMediaQuery";
+import { usePrefs } from "@/lib/prefs";
 
 const SchoolScene = dynamic(() => import("./SchoolScene").then((m) => m.SchoolScene), {
   ssr: false,
@@ -24,16 +25,18 @@ const rise = {
 
 export function HomeHero() {
   const [ready, setReady] = useState(false);
-  // Phones get a card made for the screen instead of a WebGL scene.
-  const wide = useMediaQuery("(min-width: 768px)");
+  // Phones, and anyone who asked for lite visuals, get a card made for the
+  // screen instead of a WebGL scene.
+  const { lite } = usePrefs();
+  const wide = useMediaQuery("(min-width: 768px)") && !lite;
 
   return (
     <section className="relative isolate overflow-hidden">
       {/* the sky at about 7pm: haze up top, a low warm sun, paper underneath */}
       <div className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,#e4e6f1_0%,#eeebef_32%,#f5f0e8_62%,var(--color-paper)_100%)]" />
-        <div className="absolute right-[8%] top-[22%] h-[38rem] w-[38rem] rounded-full bg-[radial-gradient(circle,rgba(255,196,128,0.55),rgba(255,196,128,0)_65%)] blur-2xl" />
-        <div className="absolute -left-[10%] top-[-10%] h-[34rem] w-[44rem] rounded-full bg-[radial-gradient(circle,rgba(182,192,230,0.5),rgba(182,192,230,0)_70%)] blur-2xl" />
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,var(--home-sky-1)_0%,var(--home-sky-2)_32%,var(--home-sky-3)_62%,var(--color-paper)_100%)]" />
+        <div className="absolute right-[8%] top-[22%] h-[38rem] w-[38rem] rounded-full bg-[radial-gradient(circle,var(--home-sun),transparent_65%)] blur-2xl" />
+        <div className="absolute -left-[10%] top-[-10%] h-[34rem] w-[44rem] rounded-full bg-[radial-gradient(circle,var(--home-haze),transparent_70%)] blur-2xl" />
       </div>
 
       <div className="relative mx-auto grid max-w-[84rem] grid-rows-[auto_1fr] px-5 pb-14 pt-24 sm:px-8 md:min-h-[calc(100svh-4.5rem)] md:pb-0 md:pt-28 lg:block lg:pt-0">

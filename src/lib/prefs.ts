@@ -15,6 +15,8 @@ export type Motion = "system" | "reduce";
 export type Palette = "default" | "safe";
 export type Lang = "en" | "es";
 
+export type Font = "default" | "plain";
+
 export interface Prefs {
   theme: Theme;
   text: TextSize;
@@ -26,6 +28,32 @@ export interface Prefs {
   targets: boolean;
   spacing: boolean;
   focus: boolean;
+  /** A plain sans-serif everywhere, no display serif. */
+  font: Font;
+  bold: boolean;
+  /** Taller lines and more space between paragraphs. */
+  lineheight: boolean;
+  grayscale: boolean;
+  /** A horizontal band that follows the pointer, for keeping one's place. */
+  guide: boolean;
+  /** A large pointer. */
+  cursor: boolean;
+  /** No 3D scenes or decorative animation; still pictures instead. */
+  lite: boolean;
+  /** The live view never confirms on its own; a button does it. */
+  manualConfirm: boolean;
+  /** A short tone when a view is confirmed or a photo is read. */
+  sound: boolean;
+  /** A short vibration on the shutter and on a confirmed view. */
+  haptics: boolean;
+  /** Space takes a photo, V records, F flips, in the scanner. */
+  shortcuts: boolean;
+  /** Camera controls mirrored for the left thumb. */
+  leftHand: boolean;
+  /** Boxes only on the live view; no labels, no sweep, no reticle. */
+  minimalOverlay: boolean;
+  /** Read each scan's result aloud when it finishes. */
+  speak: boolean;
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -39,7 +67,23 @@ export const DEFAULT_PREFS: Prefs = {
   targets: false,
   spacing: false,
   focus: false,
+  font: "default",
+  bold: false,
+  lineheight: false,
+  grayscale: false,
+  guide: false,
+  cursor: false,
+  lite: false,
+  manualConfirm: false,
+  sound: false,
+  haptics: true,
+  shortcuts: true,
+  leftHand: false,
+  minimalOverlay: false,
+  speak: false,
 };
+
+
 
 export { PREFS_KEY } from "./prefs-boot";
 import { PREFS_KEY } from "./prefs-boot";
@@ -69,11 +113,14 @@ export function applyPrefs(p: Prefs) {
   d.setAttribute("data-text", p.text);
   d.setAttribute("data-motion", p.motion);
   d.setAttribute("data-palette", p.palette);
+  d.setAttribute("data-font", p.font);
   d.lang = p.lang;
-  for (const k of ["contrast", "underline", "targets", "spacing", "focus"] as const) {
+  for (const k of ["contrast", "underline", "targets", "spacing", "focus", "bold", "lineheight", "grayscale", "cursor", "lite"] as const) {
     if (p[k]) d.setAttribute(`data-${k}`, "");
     else d.removeAttribute(`data-${k}`);
   }
+  if (p.leftHand) d.setAttribute("data-lefthand", "");
+  else d.removeAttribute("data-lefthand");
 }
 
 function ensureLoaded() {
