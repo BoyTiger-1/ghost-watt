@@ -35,14 +35,22 @@ Zero config — this is a stock Next.js App Router project.
 ### Environment variables
 
 None of these are required. The app is built to degrade honestly: every missing key
-disables one feature and says so on `/settings` rather than erroring. Add them in
-whatever order you find useful.
+disables one feature and says so on `/settings` rather than erroring. Vision keys are
+tried in the order Anthropic, Gemini, Groq, Mistral, OpenAI, OpenRouter, each a
+fallback for the one before it, so two free ones (Gemini and Groq) cover a demo well.
+After adding or changing a variable in Vercel, redeploy: functions read the
+environment at build time.
 
 | Variable | Buys | Where |
 | --- | --- | --- |
 | `EIA_API_KEY` | State electricity prices, and the hourly fuel mix that live grid carbon is computed from. One key, both features. | [eia.gov/opendata/register](https://www.eia.gov/opendata/register.php) |
 | `OPENWEATHER_API_KEY` | Outdoor conditions and degree days, used to weight HVAC and heater findings. | [openweathermap.org/api](https://openweathermap.org/api) |
-| `GROQ_API_KEY` (or `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`) | Enhanced (cloud) reading: a scan or a bill photo is read by a hosted vision model. Without any of these the app runs in On-device mode only and the header pill says so. **Billable — see the note below.** | [console.groq.com/keys](https://console.groq.com/keys) |
+| `GEMINI_API_KEY` | Enhanced (cloud) reading on Google's free tier: the best free vision model for rooms. Tried after Anthropic, before Groq. | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
+| `GROQ_API_KEY` | Enhanced reading, free tier, fastest to answer; at most 3 images per request. | [console.groq.com/keys](https://console.groq.com/keys) |
+| `MISTRAL_API_KEY` | Enhanced reading on Mistral's free experiment tier; a further fallback. | [console.mistral.ai/api-keys](https://console.mistral.ai/api-keys) |
+| `OPENROUTER_API_KEY` | One key, many models, some free (`:free` ids); the last fallback. | [openrouter.ai/keys](https://openrouter.ai/keys) |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | Paid providers with the best recognition; tried first / fifth. **Billable.** | [console.anthropic.com](https://console.anthropic.com/settings/keys) · [platform.openai.com](https://platform.openai.com/api-keys) |
+| `OPENEI_API_KEY` | The serving utility's published tariff from a photo's location (same api.data.gov key as NREL works). | [openei.org/services/api/signup](https://openei.org/services/api/signup) |
 | `UPSTASH_REDIS_REST_URL` | Class mode across more than one machine. Without it, sessions live in a single instance's memory and two students may land on different instances and never see each other. | [console.upstash.com](https://console.upstash.com/) |
 | `UPSTASH_REDIS_REST_TOKEN` | The token half of the pair above. | same |
 | `NREL_API_KEY` | The specific utility serving an address and its commercial rate. Optional — works unkeyed on a shared demo key at a much lower rate limit. | [api.data.gov/signup](https://api.data.gov/signup/) |
