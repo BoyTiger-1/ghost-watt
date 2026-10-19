@@ -12,6 +12,7 @@ import { motion } from "framer-motion";
 import { EngineIndicator } from "./EngineIndicator";
 import { Mark } from "./home/HomeNav";
 import { useT, type Key } from "@/lib/i18n";
+import { ThemeToggle } from "./ThemeToggle";
 
 const TABS = [
   { href: "/scan", key: "nav.scanner", icon: "scan" },
@@ -73,17 +74,11 @@ export function Nav() {
             <div className="sm:hidden">
               <EngineIndicator compact />
             </div>
-            <Link
-              href="/settings#accessibility"
-              aria-label={t("nav.accessibility")}
-              title={t("nav.accessibility")}
-              className="grid h-9 w-9 place-items-center rounded-full text-mist transition-colors hover:bg-fog/[0.06] hover:text-fog"
-            >
-              <Icon name="a11y" className="h-[1.2rem] w-[1.2rem]" />
-            </Link>
+            <ThemeToggle />
             <Link
               href="/settings"
               aria-label={t("nav.settings")}
+              title={t("nav.settings")}
               aria-current={pathname === "/settings" ? "page" : undefined}
               className={`grid h-9 w-9 place-items-center rounded-full transition-colors ${
                 pathname === "/settings" ? "bg-fog text-ink" : "text-mist hover:bg-fog/[0.06] hover:text-fog"
@@ -138,12 +133,6 @@ const P = { fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLineca
 function Icon({ name, className }: { name: string; className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-      {name === "a11y" && (
-        <>
-          <circle cx="12" cy="4.5" r="1.6" {...P} />
-          <path d="M5 8.5c4.7 1.2 9.3 1.2 14 0M12 9.5v4.5l-2.8 6M12 14l2.8 6" {...P} />
-        </>
-      )}
       {name === "scan" && (
         <>
           <path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2" {...P} />
