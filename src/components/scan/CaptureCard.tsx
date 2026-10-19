@@ -4,6 +4,7 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { readTime, type Capture, type CaptureDetails } from "@/lib/capture";
 import { fmtMoney } from "@/lib/energy";
+import { ROOM_TYPES } from "@/lib/rooms";
 import type { WeeklySchedule } from "@/lib/schedule";
 import { Icon } from "./icons";
 
@@ -131,6 +132,33 @@ export function CaptureCard({
                   <span className="text-[0.68rem] text-dim">re-prices instantly</span>
                 </div>
                 <div className="mt-2 grid grid-cols-2 gap-2">
+                  <label className="block">
+                    <span className="text-[0.72rem] text-dim">Kind of room</span>
+                    <select
+                      value={c.details.roomType ?? ""}
+                      onChange={(e) => onDetails({ roomType: e.target.value || undefined })}
+                      className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-base text-fog outline-none focus:border-cyan sm:text-[0.9rem]"
+                    >
+                      <option value="">Not set: building default</option>
+                      {ROOM_TYPES.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="text-[0.72rem] text-dim">After hours, things seen on</span>
+                    <select
+                      value={c.details.afterHours ?? ""}
+                      onChange={(e) => onDetails({ afterHours: (e.target.value || undefined) as "on" | "standby" | undefined })}
+                      className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-base text-fog outline-none focus:border-cyan sm:text-[0.9rem]"
+                    >
+                      <option value="">{time?.afterHours === false ? "Default: go to standby (seen in open hours)" : "Default: stay as seen"}</option>
+                      <option value="on">stay on</option>
+                      <option value="standby">go to standby</option>
+                    </select>
+                  </label>
                   <NumberField
                     label="Watts, main device"
                     suffix="W"
@@ -158,8 +186,8 @@ export function CaptureCard({
                   />
                 </label>
                 <p className="mt-1.5 text-[0.72rem] leading-relaxed text-dim">
-                  Leave these blank and the AI reads each device&apos;s wattage from what it can see, blended with published ranges, the
-                  time it was taken and where.
+                  The room sets how many hours a day each device is typically in use. Leave the rest blank and the model reads each device&apos;s
+                  wattage from what it can see, blended with published ranges, the time it was taken and where.
                 </p>
               </div>
 

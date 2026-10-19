@@ -17,6 +17,7 @@ import { BUILDING_TYPES } from "@/lib/benchmark";
 import { useStore, updateBuilding, setActiveBuilding, replaceStore } from "@/lib/useStore";
 import { exportStore, importStore, downloadText } from "@/lib/export";
 import { EMPTY_STORE, type Building } from "@/lib/storage";
+import { BillScan } from "./BillScan";
 
 interface KeyInfo {
   env: string;
@@ -704,9 +705,13 @@ function BillField({ building }: { building: Building }) {
 
       <p className="mt-2 text-[0.76rem] leading-relaxed text-dim">
         Use the totals printed on the bill, including delivery and taxes - the blended figure is
-        what a savings estimate actually needs. Stored in this browser with the rest of the
-        building record and never sent anywhere.
+        what a savings estimate actually needs. The figures are stored in this browser with the
+        rest of the building record and never sent anywhere.
       </p>
+
+      <div className="mt-3">
+        <BillScan onAccept={(b) => updateBuilding(building.id, { bill: b })} />
+      </div>
     </div>
   );
 }

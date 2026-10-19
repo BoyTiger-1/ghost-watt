@@ -139,26 +139,38 @@ export function OffenderCard({
                 {o.hoursKnown ? `${Math.round(o.hoursPerYear / 365)} h/day, yours` : `${Math.round(o.hoursPerYear).toLocaleString()} empty h/yr`}
               </span>
             )}
-            <span className="text-dim">
-              {fmtMoney(o.costLowPerYear)}–{fmtMoney(o.costHighPerYear)}
-            </span>
+            {o.afterHoursBasis && o.state !== "off" && (
+              <span
+                className={`rounded-full px-2 py-px font-medium ${o.afterHoursBasis === "assumed-standby" ? "bg-amber/10 text-amber" : "bg-surface2 text-mist"}`}
+                title={
+                  o.afterHoursBasis === "observed"
+                    ? "Seen like this after hours (or the time is unknown), so it is priced as staying this way through the empty hours."
+                    : o.afterHoursBasis === "assumed-standby"
+                      ? "Seen running during open hours. Assumed to go to standby after hours unless you say it is left on."
+                      : "You said what it does after hours."
+                }
+              >
+                after hours: {o.afterHoursState === "on" ? "stays on" : o.afterHoursState === "standby" ? "standby" : "off"}
+                {o.afterHoursBasis === "assumed-standby" ? " (assumed)" : o.afterHoursBasis === "user" ? " (yours)" : ""}
+              </span>
+            )}
           </div>
           {o.evidence && <p className="mt-1.5 text-[0.78rem] italic leading-snug text-mist">&ldquo;{o.evidence}&rdquo;</p>}
         </div>
 
         <div className="shrink-0 text-right">
-          <div className="font-mono text-2xl font-bold text-fog sm:text-3xl">
-            {fmtMoneyFull(o.costPerYear)}
+          <div className="font-mono text-xl font-bold text-fog sm:text-2xl" title={`Best estimate ${fmtMoneyFull(o.costPerYear)} a year; the band is the published wattage range for this kind of device.`}>
+            {o.costPerYear > 0 ? `${fmtMoney(o.costLowPerYear)}–${fmtMoney(o.costHighPerYear)}` : "$0"}
           </div>
-          <div className="mono-label" title="Priced for every hour the space is empty">
-            a year if left on
+          <div className="mono-label" title="What this draws through the hours the space is empty, in its after-hours state">
+            a year after hours
           </div>
           {o.typicalCostPerYear !== undefined && (
             <div
               className="mt-1 font-mono text-[0.78rem] text-mist"
               title={`Typical use: ${o.typicalHoursPerDay?.toFixed(1)} h/day in use, standby otherwise. ${o.usageBasis ?? ""}`}
             >
-              {fmtMoney(o.typicalCostPerYear)}/yr typical
+              {fmtMoney(o.typicalCostPerYear)}/yr in normal use
             </div>
           )}
         </div>
@@ -196,7 +208,7 @@ export function OffenderCard({
           <p className="mt-0.5 text-[0.8rem] leading-relaxed text-mist">{eff.detail}</p>
           {o.typicalHoursPerDay !== undefined && (
             <p className="mt-1 text-[0.72rem] text-dim">
-              Typical use here: {o.typicalHoursPerDay < 1 ? `${Math.round(o.typicalHoursPerDay * 60)} min` : `${o.typicalHoursPerDay.toFixed(1)} h`}/day
+              In use {o.typicalHoursPerDay < 1 ? `${Math.round(o.typicalHoursPerDay * 60)} min` : `${o.typicalHoursPerDay.toFixed(1)} h`}/day
               {o.usageBasis ? ` · ${o.usageBasis}` : ""}
               {eff.assumed ? " · graded on a typical unit" : ""}
             </p>
@@ -263,6 +275,29 @@ export function OffenderCard({
                 onChange={(v) => onAdjust({ ...adjust, hoursPerDay: v })}
               />
             </div>
+            {o.state !== "off" && !o.hoursKnown && (
+              <fieldset className="mt-2">
+                <legend className="text-[0.7rem] text-dim">After hours this device</legend>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {(["on", "standby", "off"] as const).map((st) => {
+                    const current = adjust?.afterHours ?? o.afterHoursState;
+                    return (
+                      <button
+                        key={st}
+                        type="button"
+                        onClick={() => onAdjust({ ...adjust, afterHours: st })}
+                        aria-pressed={current === st}
+                        className={`rounded-full border px-3 py-1 text-[0.76rem] transition-colors ${
+                          current === st ? "border-fog bg-fog text-ink" : "border-line text-mist hover:border-line2"
+                        }`}
+                      >
+                        {st === "on" ? "stays on" : st === "standby" ? "goes to standby" : "is switched off"}
+                      </button>
+                    );
+                  })}
+                </div>
+              </fieldset>
+            )}
             <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-2">
               <p className="text-[0.72rem] text-dim">Off a nameplate or a plug-in meter beats any estimate. Clear a field to go back to ours.</p>
               <button onClick={() => onAdjust({ ...adjust, deleted: true })} className="text-[0.74rem] text-dim underline-offset-4 hover:text-ember hover:underline">

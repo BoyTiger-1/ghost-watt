@@ -49,7 +49,7 @@ interface HostedProvider {
   model: string;
   signup: string;
   note: string;
-  call: (images: DecodedImage[], key: string, model: string, prompt: string) => Promise<string>;
+  call: (images: DecodedImage[], key: string, model: string, prompt: string, schema: object) => Promise<string>;
   /**
    * Where to list this provider's models, for recovering when the default model
    * is retired. Only set for providers whose model list says which models take
@@ -141,6 +141,7 @@ async function callAnthropic(
   key: string,
   model: string,
   prompt: string,
+  schema: object,
 ): Promise<string> {
   // The schema is enforced as a forced tool call: the model can only answer by
   // filling in the typed fields, so there is no prose to parse and no field to
@@ -154,12 +155,12 @@ async function callAnthropic(
       ...anthropicTuning(model),
       tools: [
         {
-          name: "report_devices",
-          description: "Report the electrical devices visible in the picture.",
-          input_schema: VISION_SCHEMA,
+          name: "report",
+          description: "Report what the picture shows, in the required shape.",
+          input_schema: schema,
         },
       ],
-      tool_choice: { type: "tool", name: "report_devices" },
+      tool_choice: { type: "tool", name: "report" },
       messages: [
         {
           role: "user",
@@ -185,13 +186,13 @@ async function callAnthropic(
 }
 
 function openAiCompatible(endpoint: string) {
-  return async (imgs: DecodedImage[], key: string, model: string, prompt: string): Promise<string> => {
-    const body = (schema: boolean) => ({
+  return async (imgs: DecodedImage[], key: string, model: string, prompt: string, schema: object): Promise<string> => {
+    const body = (strict: boolean) => ({
       model,
       max_tokens: imgs.length > 1 ? MAX_TOKENS_LARGE : MAX_TOKENS,
       temperature: 0,
-      ...(schema
-        ? { response_format: { type: "json_schema", json_schema: { name: "devices", schema: VISION_SCHEMA } } }
+      ...(strict
+        ? { response_format: { type: "json_schema", json_schema: { name: "report", schema } } }
         : { response_format: { type: "json_object" } }),
       messages: [
         {
@@ -299,14 +300,14 @@ export async function describeImageAny(
   return describeImagesAny([image], buildVisionPrompt(frame));
 }
 
-/** The same chain over one or more images (a video's keyframes) and a prompt. */
-export async function describeImagesAny(images: string[], prompt: string): Promise<VisionResult> {
+/** The same chain over one or more images (a video's keyframes), a prompt and the JSON shape the answer must take. */
+export async function describeImagesAny(images: string[], prompt: string, schema: object = VISION_SCHEMA): Promise<VisionResult> {
   const forced = process.env.VISION_PROVIDER?.trim().toLowerCase();
   const errors: string[] = [];
   let localConfigured = false;
 
   if (forced !== "hosted" && !HOSTED.some((h) => h.id === forced)) {
-    const local = await describeViaOllama(images, prompt);
+    const local = await describeViaOllama(images, prompt, schema);
     if (local.ok && local.text.trim()) {
       return { ...local, provider: "Ollama (local)", kind: "local" };
     }
@@ -325,12 +326,12 @@ export async function describeImagesAny(images: string[], prompt: string): Promi
       const img = images.map(decodeImage);
       let text: string;
       try {
-        text = await callWithRetry(hosted, img, key, model, prompt);
+        text = await callWithRetry(hosted, img, key, model, prompt, schema);
       } catch (err) {
         const replacement = isRetiredModel(err) ? await discoverImageModel(hosted, key, model) : null;
         if (!replacement) throw err;
         model = replacement;
-        text = await callWithRetry(hosted, img, key, model, prompt);
+        text = await callWithRetry(hosted, img, key, model, prompt, schema);
       }
       if (text) {
         return {
@@ -377,14 +378,15 @@ async function callWithRetry(
   key: string,
   model: string,
   prompt: string,
+  schema: object,
 ): Promise<string> {
   try {
-    return await p.call(img, key, model, prompt);
+    return await p.call(img, key, model, prompt, schema);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "";
     if (!/HTTP (429|5\d\d)/.test(msg)) throw err;
     await new Promise((r) => setTimeout(r, retryDelayMs(msg)));
-    return await p.call(img, key, model, prompt);
+    return await p.call(img, key, model, prompt, schema);
   }
 }
 

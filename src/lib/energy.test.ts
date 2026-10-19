@@ -40,7 +40,7 @@ describe("effectiveWatts", () => {
 
   it("uses the standby figure, not a fraction of the running figure", () => {
     expect(effectiveWatts(monitor, "standby")).toBe(monitor.wattsStandby);
-    expect(effectiveWatts(monitor, "standby")).toBe(0.5);
+    expect(effectiveWatts(monitor, "standby")).toBe(1.4);
   });
 
   it("returns zero for a device that is off", () => {
@@ -368,5 +368,48 @@ describe("unverified lines", () => {
     expect(t.costPerYear).toBeCloseTo(sure.costPerYear);
     expect(t.unverifiedCost).toBeCloseTo(unsure.costPerYear);
     expect(t.topOffender?.id).toBe(sure.id);
+  });
+});
+
+describe("after hours vs typical use", () => {
+  const base = { ratePerKwh: 0.1, co2PerKwh: 0.1, unoccupiedHoursPerYear: 5000, occupiedHoursPerYear: 3760, usageContext: "home" as const };
+  const on = { device: "monitor", count: 1, state: "on" as const, categoryId: "monitor" };
+
+  it("prices a device seen on after hours as staying on", () => {
+    const o = scoreObservation(on, { ...base, capturedAfterHours: true }, "r", 0)!;
+    expect(o.afterHoursState).toBe("on");
+    expect(o.afterHoursBasis).toBe("observed");
+    expect(o.costPerYear).toBeCloseTo((30 / 1000) * 5000 * 0.1);
+  });
+
+  it("assumes a device seen on during open hours sleeps after hours, unless the user says otherwise", () => {
+    const day = scoreObservation(on, { ...base, capturedAfterHours: false }, "r", 0)!;
+    expect(day.afterHoursState).toBe("standby");
+    expect(day.afterHoursBasis).toBe("assumed-standby");
+    expect(day.costPerYear).toBeCloseTo((1.4 / 1000) * 5000 * 0.1);
+    const leftOn = scoreObservation({ ...on, afterHours: "on" }, { ...base, capturedAfterHours: false }, "r", 0)!;
+    expect(leftOn.afterHoursBasis).toBe("user");
+    expect(leftOn.costPerYear).toBeGreaterThan(day.costPerYear);
+    const off = scoreObservation({ ...on, afterHours: "off" }, { ...base, capturedAfterHours: true }, "r", 0)!;
+    expect(off.costPerYear).toBe(0);
+    expect(off.typicalCostPerYear).toBeGreaterThan(0);
+  });
+
+  it("keeps the observed state when the time is unknown, and always reports the standby floor", () => {
+    const o = scoreObservation(on, base, "r", 0)!;
+    expect(o.afterHoursBasis).toBe("observed");
+    expect(o.standbyCostPerYear).toBeCloseTo((1.4 / 1000) * 5000 * 0.1);
+  });
+
+  it("uses the room type's hours for typical use and names the source", () => {
+    const office = scoreObservation(on, { ...base, roomType: "office" }, "r", 0)!;
+    const bedroom = scoreObservation(on, { ...base, roomType: "bedroom" }, "r", 0)!;
+    expect(office.typicalHoursPerDay).toBe(8.4);
+    expect(office.usageSource).toBe("energystar-displays");
+    expect(bedroom.typicalHoursPerDay).toBe(3);
+    expect(bedroom.usageSource).toBe("estimate");
+    const light = scoreObservation({ device: "lamp", count: 2, state: "on", categoryId: "downlight" }, { ...base, roomType: "kitchen" }, "r", 0)!;
+    expect(light.typicalHoursPerDay).toBe(2.3);
+    expect(light.usageSource).toBe("pnnl-22182");
   });
 });

@@ -145,6 +145,7 @@ export function importStore(text: string): ImportResult {
         buildings: parsed.buildings,
         audits: parsed.audits,
         fixes: Array.isArray(parsed.fixes) ? parsed.fixes : [],
+        calibrations: Array.isArray(parsed.calibrations) ? parsed.calibrations : [],
         activeBuildingId: parsed.activeBuildingId ?? null,
       },
     };

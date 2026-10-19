@@ -26,6 +26,11 @@ export interface DeviceObservation {
   userWatts?: number;
   /** Hours a year this device is costed for, when the user said how long it runs. */
   hoursPerYear?: number;
+  /**
+   * The state assumed through the building's empty hours, when it is not simply the
+   * observed one: set by the user ("it is left on overnight" / "it goes to sleep").
+   */
+  afterHours?: DeviceState;
   /** One short phrase on why the engine judged it this way, e.g. "screen lit, login page". */
   evidence?: string;
   /** Technology as read by the vision model, e.g. "LED", "T8 fluorescent", "CRT". */
@@ -144,6 +149,15 @@ export interface AuditSettings {
   usageContext?: "home" | "school" | "office";
   /** Hours a year the space is occupied, for school and office usage profiles. */
   occupiedHoursPerYear?: number;
+  /** Kind of room (lib/rooms.ts): refines the typical in-use hours per device. */
+  roomType?: string;
+  /**
+   * Whether the picture was taken while the building was meant to be empty.
+   * True: what was seen on is what runs after hours. False: a device seen on during
+   * the day is assumed to go to standby after hours unless the user says otherwise.
+   * Null or absent: unknown, so the observed state is assumed to persist.
+   */
+  capturedAfterHours?: boolean | null;
 }
 
 /** A single ranked offender after the energy math is applied. */
@@ -187,6 +201,11 @@ export interface Offender {
   hoursPerYear?: number;
   /** True when the hours came from the user rather than the building schedule. */
   hoursKnown?: boolean;
+  /** The state this line is costed in through the empty hours, and why. */
+  afterHoursState?: DeviceState;
+  afterHoursBasis?: "observed" | "assumed-standby" | "user";
+  /** What this line would cost if it only ever drew standby power through the empty hours. */
+  standbyCostPerYear?: number;
   evidence?: string;
   tech?: string;
   /** One unit's draw while in use, W (the on-state figure, whatever state it was seen in). */
@@ -195,8 +214,10 @@ export interface Offender {
   typicalHoursPerDay?: number;
   typicalKwhPerYear?: number;
   typicalCostPerYear?: number;
-  /** Where the typical hours come from. */
+  /** Where the typical hours come from, in words. */
   usageBasis?: string;
+  /** Source id (lib/sources.ts) behind the typical hours, or "estimate". */
+  usageSource?: string;
 }
 
 export interface AnalysisResult {
@@ -231,8 +252,13 @@ export interface Sighting {
   boxes: Box[];
 }
 
+/**
+ * Used only when nothing better is known. Price is the EIA 2024 U.S. average
+ * commercial rate; carbon is the eGRID2023 U.S. average output rate (767
+ * lb/MWh). A building with a state set never sees these.
+ */
 export const DEFAULT_SETTINGS: AuditSettings = {
-  ratePerKwh: 0.15,
-  co2PerKwh: 0.385,
+  ratePerKwh: 0.13,
+  co2PerKwh: 0.35,
   unoccupiedHoursPerYear: 6800,
 };

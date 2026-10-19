@@ -144,16 +144,35 @@ function highlight(line: string) {
 export const ENERGY_TS: CodeFile = {
   name: "energy.ts",
   path: "src/lib",
-  startLine: 84,
-  code: `  const count = Math.max(1, Math.round(obs.count || 1));
-  const unit = estimateUnitWatts(cat, obs.state, { aiWatts: obs.wattsHint, userWatts: obs.userWatts });
+  startLine: 86,
+  code: `  // The state this device is in through the building's empty hours. What was seen
+  // is the answer when the picture was taken after hours (or the time is unknown);
+  // a device seen running during the day is assumed to drop to standby at night
+  // unless the user says it is left on. Thermostatic devices cycle regardless.
+  let afterHoursState: DeviceState = obs.state;
+  let afterHoursBasis: Offender["afterHoursBasis"] = "observed";
+  if (obs.afterHours && !cat.thermostatic) {
+    afterHoursState = obs.afterHours;
+    afterHoursBasis = "user";
+  } else if (settings.capturedAfterHours === false && obs.state === "on" && !cat.thermostatic) {
+    afterHoursState = "standby";
+    afterHoursBasis = "assumed-standby";
+  }
+
+  // A user's wattage is the draw in the observed state; it only applies after hours
+  // if the after-hours state is that same state.
+  const userWatts = afterHoursState === obs.state ? obs.userWatts : undefined;
+  const unit = estimateUnitWatts(cat, afterHoursState, { aiWatts: obs.wattsHint, userWatts });
   const perUnitWatts = unit.mid;
   const totalWatts = perUnitWatts * count;
-  if (totalWatts <= 0) return null;
+  // Seen on, off at night, draws nothing in standby: nothing to cost after hours.
+  // The device is still reported (typical use is real) with zero waste.
+  const standbyUnit = estimateUnitWatts(cat, "standby", {});
 
   const hoursKnown = obs.hoursPerYear !== undefined && Number.isFinite(obs.hoursPerYear) && obs.hoursPerYear >= 0;
   const hours = hoursKnown ? Math.min(8760, obs.hoursPerYear!) : settings.unoccupiedHoursPerYear;
   const kwhPerYear = (totalWatts / 1000) * hours;
+  const standbyCostPerYear = ((standbyUnit.mid * count) / 1000) * settings.unoccupiedHoursPerYear * settings.ratePerKwh;
   const costPerYear = kwhPerYear * settings.ratePerKwh;
   const co2KgPerYear = kwhPerYear * settings.co2PerKwh;
 
@@ -196,9 +215,10 @@ export const DEVICES_TS: CodeFile = {
 export const ENERGY_TS_SHORT: CodeFile = {
   name: "energy.ts",
   path: "src/lib",
-  startLine: 91,
-  code: `  const hours = hoursKnown ? Math.min(8760, obs.hoursPerYear!) : settings.unoccupiedHoursPerYear;
+  startLine: 110,
+  code: `  const hoursKnown = obs.hoursPerYear !== undefined && Number.isFinite(obs.hoursPerYear) && obs.hoursPerYear >= 0;
+  const hours = hoursKnown ? Math.min(8760, obs.hoursPerYear!) : settings.unoccupiedHoursPerYear;
   const kwhPerYear = (totalWatts / 1000) * hours;
-  const costPerYear = kwhPerYear * settings.ratePerKwh;
-  const co2KgPerYear = kwhPerYear * settings.co2PerKwh;`,
+  const standbyCostPerYear = ((standbyUnit.mid * count) / 1000) * settings.unoccupiedHoursPerYear * settings.ratePerKwh;
+  const costPerYear = kwhPerYear * settings.ratePerKwh;`,
 };

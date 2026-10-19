@@ -95,11 +95,33 @@ export interface Building {
   bill?: UtilityBill;
 }
 
+/**
+ * One meter reading against one estimate.
+ *
+ * Written whenever a user types a measured wattage for a device. Together these
+ * are the only honest accuracy figure the app can show: how far its estimates
+ * were from meters on the devices someone actually checked.
+ */
+export interface CalibrationRecord {
+  id: string;
+  buildingId: string;
+  categoryId: string;
+  label: string;
+  /** The app's per-unit estimate before the reading, W, and where it came from. */
+  estimatedWatts: number;
+  estimateBasis: "ai" | "catalog";
+  /** What the meter said, W per unit. */
+  measuredWatts: number;
+  /** ISO timestamp. */
+  at: string;
+}
+
 export interface Store {
   version: number;
   buildings: Building[];
   audits: SavedAudit[];
   fixes: FixRecord[];
+  calibrations: CalibrationRecord[];
   activeBuildingId: string | null;
 }
 
@@ -108,6 +130,7 @@ export const EMPTY_STORE: Store = {
   buildings: [],
   audits: [],
   fixes: [],
+  calibrations: [],
   activeBuildingId: null,
 };
 
@@ -127,6 +150,7 @@ export function loadStore(): Store {
       buildings: Array.isArray(parsed.buildings) ? parsed.buildings : [],
       audits: Array.isArray(parsed.audits) ? parsed.audits : [],
       fixes: Array.isArray(parsed.fixes) ? parsed.fixes : [],
+      calibrations: Array.isArray(parsed.calibrations) ? parsed.calibrations : [],
       activeBuildingId: parsed.activeBuildingId ?? null,
     });
   } catch {
@@ -154,9 +178,10 @@ export function migrate(store: Store): Store {
       return mode === a.mode ? a : { ...a, mode };
     });
   const fixes = store.fixes.filter((f) => !isSample(f.buildingId));
+  const calibrations = (store.calibrations ?? []).filter((c) => !isSample(c.buildingId));
   const activeBuildingId =
     store.activeBuildingId && buildings.some((b) => b.id === store.activeBuildingId) ? store.activeBuildingId : (buildings[0]?.id ?? null);
-  return { ...store, buildings, audits, fixes, activeBuildingId };
+  return { ...store, buildings, audits, fixes, calibrations, activeBuildingId };
 }
 
 export function saveStore(store: Store): boolean {

@@ -157,6 +157,7 @@ function toBareBase64(image: string): string {
 export async function describeImage(
   images: string | string[],
   prompt: string = VISION_PROMPT,
+  schema: object = VISION_SCHEMA,
 ): Promise<OllamaVisionResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -170,7 +171,7 @@ export async function describeImage(
         prompt,
         images: (Array.isArray(images) ? images : [images]).map(toBareBase64),
         stream: false,
-        format: VISION_SCHEMA,
+        format: schema,
         options: { temperature: 0 },
       }),
     });
