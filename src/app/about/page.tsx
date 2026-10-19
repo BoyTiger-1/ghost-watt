@@ -24,6 +24,56 @@ const STEPS = [
   },
 ];
 
+const BELIEFS = [
+  {
+    title: "What you can't see, nobody fixes",
+    body: "Nobody is careless on purpose. A projector humming at midnight is just invisible. Show people where the waste is and most of it gets switched off.",
+  },
+  {
+    title: "Plain words, not jargon",
+    body: "You shouldn't need to know what a kilowatt-hour is to save money. Every number here comes in dollars, hours and things you can picture.",
+  },
+  {
+    title: "Show the math",
+    body: "Estimates come with a range and the reason behind them. Every wattage and formula is published, so anyone can check our work.",
+  },
+  {
+    title: "Cheapest fixes first",
+    body: "Changing a habit or setting a timer often beats buying new equipment. We rank fixes by what each dollar gets back, and free ones lead.",
+  },
+  {
+    title: "Your photos are yours",
+    body: "No accounts and no tracking. Pictures can be read right on your device, and team scans share device lists, never photos.",
+  },
+];
+
+const TEAM = [
+  {
+    name: "Shaurya Sahdev",
+    initials: "SS",
+    roles: ["Live mode", "Frontend & design"],
+    body: "Built the live camera mode that boxes and prices devices as you point at them, and designed much of how the app looks and feels.",
+  },
+  {
+    name: "Ronit Agarwal",
+    initials: "RA",
+    roles: ["AI models & training", "Backend"],
+    body: "Trains and tunes the vision models that find devices in a picture, and built the server side that reads photos and looks up prices.",
+  },
+  {
+    name: "Vyom Joshi",
+    initials: "VJ",
+    roles: ["Frontend", "Testing"],
+    body: "Builds the screens people use every day and puts them through their paces, making sure they hold up on real phones in real rooms.",
+  },
+  {
+    name: "Rayan Alam",
+    initials: "RA",
+    roles: ["Backend & data", "Testing"],
+    body: "Works on the data and services behind the numbers, from electricity prices to saved places, and tests that they add up.",
+  },
+];
+
 const NOTES = [
   {
     q: "Why hasn't this been done?",
@@ -51,8 +101,80 @@ export default function AboutPage() {
         </PageHeader>
       </Reveal>
 
+      {/* why we built it */}
+      <section className="mt-20 grid gap-10 sm:mt-28 lg:grid-cols-[1fr_1.4fr] lg:gap-20">
+        <Reveal>
+          <h2 className="font-editorial text-[2rem] leading-[1.08] text-fog sm:text-[2.6rem]">
+            Why we built it.
+          </h2>
+        </Reveal>
+        <Reveal delay={0.06}>
+          <div className="space-y-4 text-[1.05rem] leading-relaxed text-mist">
+            <p>
+              We noticed it walking through school after the bell: rooms full of screens still glowing, lights on in empty halls, machines humming for
+              nobody. Every one of them was costing money and putting carbon into the air, and nobody knew how much.
+            </p>
+            <p>
+              Energy audits are expensive and rare, and the tools that exist assume you already speak the language of kilowatts. We wanted something anyone
+              could pick up: point a phone at a room, see what&apos;s wasting power, and know exactly what to do about it, starting with what&apos;s free.
+            </p>
+          </div>
+        </Reveal>
+      </section>
+
+      {/* what we believe */}
+      <section className="mt-16 sm:mt-20">
+        <Reveal>
+          <h2 className="font-editorial text-[2rem] leading-[1.08] text-fog sm:text-[2.6rem]">What we believe.</h2>
+        </Reveal>
+        <ul className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {BELIEFS.map((b, i) => (
+            <Reveal key={b.title} delay={i * 0.05}>
+              <li className="panel h-full p-6">
+                <h3 className="text-[1.05rem] font-semibold text-fog">{b.title}</h3>
+                <p className="mt-2 text-[0.95rem] leading-relaxed text-mist">{b.body}</p>
+              </li>
+            </Reveal>
+          ))}
+        </ul>
+      </section>
+
+      {/* the team */}
+      <section className="mt-20 border-t border-line pt-14 sm:mt-28">
+        <Reveal>
+          <h2 className="font-editorial text-[2rem] leading-[1.08] text-fog sm:text-[2.6rem]">
+            The team. <span className="italic text-cyan">Four of us.</span>
+          </h2>
+        </Reveal>
+        <ul className="mt-10 grid gap-4 sm:grid-cols-2">
+          {TEAM.map((m, i) => (
+            <Reveal key={m.name} delay={i * 0.06}>
+              <li className="panel flex h-full gap-5 p-6">
+                <span
+                  aria-hidden
+                  className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-fog font-editorial text-[1.5rem] text-ink"
+                >
+                  {m.initials}
+                </span>
+                <div className="min-w-0">
+                  <h3 className="text-[1.15rem] font-semibold text-fog">{m.name}</h3>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {m.roles.map((r) => (
+                      <span key={r} className="rounded-full bg-fog/[0.06] px-2.5 py-0.5 text-[0.78rem] font-medium text-mist">
+                        {r}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-[0.95rem] leading-relaxed text-mist">{m.body}</p>
+                </div>
+              </li>
+            </Reveal>
+          ))}
+        </ul>
+      </section>
+
       {/* how it works */}
-      <section className="mt-20 sm:mt-28">
+      <section className="mt-20 border-t border-line pt-14 sm:mt-28">
         <Reveal>
           <h2 className="font-editorial max-w-2xl text-[2rem] leading-[1.08] text-fog sm:text-[2.6rem]">
             A professional audit costs money and happens once a decade.{" "}

@@ -26,7 +26,8 @@ import { rollupBuilding, type RoomRollup } from "@/lib/rollup";
 import { listActions, rankActions, type ActionItem } from "@/lib/actions";
 import { counted, fmtMoney, fmtMoneyFull } from "@/lib/energy";
 import { exportStore, importStore, downloadText } from "@/lib/export";
-import { addBuilding, addFix, currentStore, newBuilding, removeAudit, removeBuilding, removeFix, replaceStore, setActiveBuilding, updateBuilding, useStore } from "@/lib/useStore";
+import { readImport } from "@/lib/importData";
+import { addAudit, addBuilding, addFix, currentStore, newBuilding, removeAudit, removeBuilding, removeFix, replaceStore, setActiveBuilding, updateBuilding, useStore } from "@/lib/useStore";
 import type { Offender } from "@/lib/types";
 
 /** One fix on the to-do list: the move, the device and room it is for, and whether it's done. */
@@ -52,6 +53,10 @@ export function Places() {
       if (id && currentStore().buildings.some((b) => b.id === id)) setActiveBuilding(id);
       if (action === "rename") setIntent({ tab: "overview", rename: true, n: 1 });
       else if (action === "edit") setIntent({ tab: "details", rename: false, n: 1 });
+      else if (action === "bill") {
+        setIntent({ tab: "details", rename: false, n: 1 });
+        setTimeout(() => document.getElementById("place-bill")?.scrollIntoView({ behavior: "smooth", block: "center" }), 400);
+      }
       if (id || action) window.history.replaceState(null, "", "/places");
     }, 0);
     return () => clearTimeout(t);
@@ -652,35 +657,73 @@ function AllPlaces() {
 
 function Backup() {
   const store = useStore();
-  const [error, setError] = useState<string | null>(null);
+  const active = store.buildings.find((b) => b.id === store.activeBuildingId) ?? store.buildings[0];
+  const [message, setMessage] = useState<{ text: string; bad?: boolean } | null>(null);
+  const [pendingBackup, setPendingBackup] = useState<string | null>(null);
+
+  async function onFile(f: File | undefined) {
+    if (!f || !active) return;
+    const text = await f.text();
+    const r = readImport(f.name, text, active.id);
+    if (r.kind === "error") setMessage({ text: r.error, bad: true });
+    else if (r.kind === "backup") setPendingBackup(text);
+    else {
+      r.audits.forEach(addAudit);
+      setMessage({ text: `Added ${r.audits.length} room${r.audits.length === 1 ? "" : "s"} to ${active.name}: ${r.audits.map((a) => a.areas[0]).join(", ")}.` });
+    }
+  }
+
   return (
-    <section className="flex flex-wrap items-center gap-2 rounded-2xl border border-line px-4 py-3">
-      <span className="mr-auto text-[0.82rem] text-mist">Everything here is saved in this browser only. Keep a copy, or move it to another device.</span>
-      <button
-        onClick={() => downloadText(`ghostwatt-backup-${new Date().toISOString().slice(0, 10)}.json`, exportStore(store), "application/json")}
-        className="rounded-full border border-line px-3.5 py-1.5 text-[0.8rem] text-fog transition-colors hover:border-fog/40"
-      >
-        Download a copy
-      </button>
-      <label className="cursor-pointer rounded-full border border-line px-3.5 py-1.5 text-[0.8rem] text-fog transition-colors hover:border-fog/40">
-        Load a copy
-        <input
-          type="file"
-          accept="application/json"
-          className="hidden"
-          onChange={async (e) => {
-            const f = e.target.files?.[0];
-            e.target.value = "";
-            if (!f) return;
-            const r = importStore(await f.text());
-            if (r.ok && r.store) {
-              replaceStore(r.store);
-              setError(null);
-            } else setError(r.error ?? "That file couldn't be read.");
-          }}
-        />
-      </label>
-      {error && <p className="w-full text-[0.78rem] text-ember">{error}</p>}
+    <section className="rounded-2xl border border-line px-4 py-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="mr-auto min-w-0">
+          <div className="text-[0.92rem] font-medium text-fog">Your data</div>
+          <p className="mt-0.5 text-[0.8rem] leading-relaxed text-dim">
+            Saved in this browser only. Lost a photo or switched devices? Import a CSV or report data file from an earlier scan and its rooms come back here.
+          </p>
+        </div>
+        <label className="cursor-pointer rounded-full bg-fog px-4 py-2 text-[0.84rem] font-medium text-ink transition-colors hover:bg-fog/85">
+          Import a file
+          <input
+            type="file"
+            accept=".csv,.json,text/csv,application/json"
+            className="hidden"
+            onChange={(e) => {
+              onFile(e.target.files?.[0]);
+              e.target.value = "";
+            }}
+          />
+        </label>
+        <button
+          onClick={() => downloadText(`ghostwatt-backup-${new Date().toISOString().slice(0, 10)}.json`, exportStore(store), "application/json")}
+          className="rounded-full border border-line px-4 py-2 text-[0.84rem] text-fog transition-colors hover:border-fog/40"
+        >
+          Download a full copy
+        </button>
+      </div>
+      <p className="mt-2 text-[0.74rem] text-dim">Imports go into {active?.name ?? "the selected place"}. Accepts the CSV for facilities, report data (.json) and full copies.</p>
+      {pendingBackup && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl bg-amber/[0.08] px-3.5 py-2.5 text-[0.84rem]">
+          <span className="text-mist">That&apos;s a full copy. Loading it replaces everything saved here.</span>
+          <button
+            onClick={() => {
+              const r = importStore(pendingBackup);
+              if (r.ok && r.store) {
+                replaceStore(r.store);
+                setMessage({ text: "Loaded the full copy." });
+              } else setMessage({ text: r.error ?? "That file couldn't be read.", bad: true });
+              setPendingBackup(null);
+            }}
+            className="rounded-full bg-fog px-3.5 py-1.5 text-[0.8rem] font-medium text-ink"
+          >
+            Replace with the copy
+          </button>
+          <button onClick={() => setPendingBackup(null)} className="px-2 text-[0.8rem] text-mist hover:text-fog">
+            Cancel
+          </button>
+        </div>
+      )}
+      {message && <p className={`mt-2 text-[0.82rem] ${message.bad ? "text-ember" : "text-lime"}`}>{message.text}</p>}
     </section>
   );
 }

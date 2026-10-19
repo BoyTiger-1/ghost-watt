@@ -1201,6 +1201,23 @@ export function Scanner() {
               <PlacePicker place={place} onChange={choosePlace} label={false} />
             </div>
           </section>
+          <a
+            href={`/places?place=${building.id}&action=bill`}
+            className="flex items-center gap-3 rounded-2xl border border-lime/30 bg-lime/[0.06] px-4 py-3.5 transition-colors hover:bg-lime/[0.1]"
+          >
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-lime/15 text-lime">
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M7 3h10v18l-2.5-1.5L12 21l-2.5-1.5L7 21zM10 8h4M10 12h4M10 16h2" />
+              </svg>
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[0.92rem] font-medium text-fog">{building.bill ? "Your bill is in use" : "Have an electric bill?"}</span>
+              <span className="block text-[0.78rem] leading-snug text-mist">
+                {building.bill ? "Every number uses the price you actually pay. Update it in My places." : "Snap a photo of it or type three numbers, and every estimate uses your real price."}
+              </span>
+            </span>
+            <Icon name="chevron" className="h-4 w-4 shrink-0 -rotate-90 text-dim" />
+          </a>
           <section className="space-y-4">
             <div>
               <h3 className="text-[0.92rem] font-medium text-fog">Prices and hours</h3>

@@ -21,6 +21,8 @@ import { rollupBuilding } from "@/lib/rollup";
 import { buildBrief, headline, type BriefItem } from "@/lib/report";
 import { fmtCo2, fmtMoney, fmtMoneyFull, fmtPayback } from "@/lib/energy";
 import { annotatedDataUrl, type DetectionPhoto } from "./DetectionView";
+import { downloadText } from "@/lib/export";
+import { reportData } from "@/lib/importData";
 
 /** A picture that can go into the report: a photo whose boxes get burned in, or a ready image. */
 export interface ReportPicture {
@@ -149,8 +151,14 @@ export function ReportBrief({ current, pictures = [] }: { current?: SavedAudit |
             Print
           </button>
         </div>
+        <button
+          onClick={() => downloadText(`ghostwatt-report-${title.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.json`, reportData(audit), "application/json")}
+          className="rounded-full border border-line px-4 py-2.5 text-[0.84rem] text-fog transition-colors hover:border-fog/40"
+        >
+          Download report data
+        </button>
         <p className="text-[0.76rem] leading-relaxed text-dim">
-          For a PDF, choose <span className="text-mist">&ldquo;Save as PDF&rdquo;</span> as the printer in the window that opens. It prints black on white.
+          Report data can be imported in My places later, even if the photos are gone. For a PDF, choose <span className="text-mist">&ldquo;Save as PDF&rdquo;</span> as the printer in the window that opens. It prints black on white.
         </p>
         <p className="rounded-xl bg-surface2/70 px-3 py-2.5 text-[0.76rem] leading-relaxed text-mist">
           Click the title, the <span className="text-fog">Prepared by</span> line or <span className="text-fog">Your notes</span> to write on the report. Add a note to any recommendation, and untick pictures you don&apos;t want included.

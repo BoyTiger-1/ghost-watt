@@ -76,7 +76,7 @@ export const PlaceEditor = forwardRef<HTMLInputElement, { building: Building }>(
         <ScheduleEditor schedule={building.schedule} onChange={(schedule) => set({ schedule })} />
       </Section>
 
-      <Section title="Your electric bill (optional)" hint="Three numbers off one bill give the exact price you pay. That beats every estimate.">
+      <Section id="place-bill" title="Your electric bill (optional)" hint="Snap a photo of a bill, or type three numbers off it. You get the exact price you pay, and that beats every estimate.">
         <div className="mt-1.5 grid gap-3 sm:grid-cols-3">
           <BillField label="Electricity used (kWh)" value={bill?.kwh} onChange={(kwh) => set({ bill: { kwh, dollars: bill?.dollars ?? 0, days: bill?.days ?? 30, periodEnd: bill?.periodEnd ?? "" } })} />
           <BillField label="Total charged ($)" value={bill?.dollars} onChange={(dollars) => set({ bill: { kwh: bill?.kwh ?? 0, dollars, days: bill?.days ?? 30, periodEnd: bill?.periodEnd ?? "" } })} />
@@ -98,9 +98,9 @@ export const PlaceEditor = forwardRef<HTMLInputElement, { building: Building }>(
   );
 });
 
-function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+function Section({ id, title, hint, children }: { id?: string; title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <section>
+    <section id={id} className="scroll-mt-24">
       <h4 className="text-[0.9rem] font-medium text-fog">{title}</h4>
       {hint && <p className="mt-0.5 text-[0.8rem] leading-relaxed text-dim">{hint}</p>}
       {children}
