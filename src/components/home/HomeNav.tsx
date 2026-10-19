@@ -7,7 +7,7 @@ const LINKS = [
   { href: "#see", label: "How it works" },
   { href: "#count", label: "The math" },
   { href: "#everywhere", label: "Devices" },
-  { href: "#class", label: "Classrooms" },
+  { href: "#class", label: "Team scan" },
   { href: "#method", label: "Methodology" },
 ];
 

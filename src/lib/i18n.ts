@@ -10,8 +10,8 @@ import { usePrefs, type Lang } from "./prefs";
 const STRINGS = {
   // navigation
   "nav.scanner": ["Scanner", "Escáner"],
-  "nav.rooms": ["Rooms", "Salas"],
-  "nav.buildings": ["Buildings", "Edificios"],
+  "nav.places": ["My places", "Mis lugares"],
+  "nav.team": ["Team scan", "En equipo"],
   "nav.method": ["Method", "Método"],
   "nav.settings": ["Settings", "Ajustes"],
   "nav.accessibility": ["Accessibility", "Accesibilidad"],

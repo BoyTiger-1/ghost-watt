@@ -14,7 +14,7 @@ import { useT } from "@/lib/i18n";
 import { usePrefs } from "@/lib/prefs";
 import { beep, say } from "@/lib/cues";
 import { BillCalibration } from "./BillCalibration";
-import { ContributeBar } from "./ContributeBar";
+import { TeamSend } from "./scan/TeamSend";
 import { WeatherContext } from "./WeatherContext";
 import { EquivalenceStrip } from "./EquivalenceStrip";
 import { BenchmarkPanel, ExportBar, LoadMixPanel } from "./AuditPanels";
@@ -28,6 +28,9 @@ import { listActions, rankActions } from "@/lib/actions";
 import { CameraMode, type PhotoShot, type VideoShot } from "./scan/CameraMode";
 import { UploadMode } from "./scan/UploadMode";
 import { CaptureCard } from "./scan/CaptureCard";
+import { ClearWorkDialog } from "./scan/ClearWorkDialog";
+import { Tour, TOUR_KEY } from "./scan/Tour";
+import { clearWorkspace, eraseEverything, loadWorkspace, saveWorkspace } from "@/lib/workspace";
 import { Icon } from "./scan/icons";
 import { analysisSquare } from "@/lib/image";
 import type { CategorizedObservation } from "@/lib/parse";
@@ -146,10 +149,19 @@ export function Scanner() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   /** The device row opened from a box on the photo. */
   const [openDevice, setOpenDevice] = useState<string | null>(null);
+  /** "Scan this room again" from My places: new pictures are saved as that room, so it gets a before and after. */
+  const [roomName, setRoomName] = useState<string | null>(null);
+  const roomRef = useRef<string | null>(null);
+  useEffect(() => {
+    roomRef.current = roomName;
+  }, [roomName]);
   // /report used to be its own page; it now lands on this tab.
   useEffect(() => {
     const t = setTimeout(() => {
-      if (new URLSearchParams(window.location.search).get("view") === "report") setTab("report");
+      const q = new URLSearchParams(window.location.search);
+      if (q.get("view") === "report") setTab("report");
+      const room = q.get("room")?.trim();
+      if (room) setRoomName(room.slice(0, 60));
     }, 0);
     return () => clearTimeout(t);
   }, []);
@@ -319,11 +331,84 @@ export function Scanner() {
   }, []);
 
   const add = useCallback((c: Capture) => {
-    setCaptures((prev) => [c, ...prev]);
+    const named = roomRef.current ? { ...c, name: roomRef.current } : c;
+    setCaptures((prev) => [named, ...prev]);
     setSelectedId(c.id);
   }, []);
 
   const counter = useRef({ photo: 0, video: 0 });
+
+  // ---- the work in progress, kept on this device ---------------------------
+
+  /** True once the saved work has been read, so an empty first render never overwrites it. */
+  const [restored, setRestored] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    loadWorkspace().then((ws) => {
+      if (!alive) return;
+      if (ws && !capturesRef.current.length) {
+        setCaptures(ws.captures);
+        setSelectedId(ws.selectedId);
+        // Carry on numbering where the saved work left off.
+        for (const c of ws.captures) {
+          const m = /^(Photo|Video) (\d+)$/.exec(c.name);
+          if (m) {
+            const k = m[1] === "Photo" ? "photo" : "video";
+            counter.current[k] = Math.max(counter.current[k], Number(m[2]));
+          }
+        }
+        // A picture opened in upload mode reopens there.
+        if (ws.captures.some((c) => c.origin === "upload")) setMode("upload");
+      }
+      setRestored(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!restored) return;
+    const t = setTimeout(() => saveWorkspace(captures, selectedId), 800);
+    return () => clearTimeout(t);
+  }, [captures, selectedId, restored]);
+
+  const [confirmClear, setConfirmClear] = useState(false);
+
+  const [touring, setTouring] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        if (!localStorage.getItem(TOUR_KEY)) setTouring(true);
+      } catch {
+        // Storage blocked: don't nag on every visit.
+      }
+    }, 900);
+    return () => clearTimeout(t);
+  }, []);
+  async function clearWork(everything: boolean) {
+    setConfirmClear(false);
+    for (const c of capturesRef.current) if (c.videoUrl) URL.revokeObjectURL(c.videoUrl);
+    setCaptures([]);
+    setSelectedId(null);
+    setOverride({});
+    setTab("devices");
+    counter.current = { photo: 0, video: 0 };
+    await clearWorkspace();
+    try {
+      // The notes written on this scan's report go with it.
+      const notes = JSON.parse(localStorage.getItem("gw-report-notes") ?? "{}") as Record<string, unknown>;
+      for (const k of Object.keys(notes)) if (k.startsWith("current:")) delete notes[k];
+      localStorage.setItem("gw-report-notes", JSON.stringify(notes));
+    } catch {
+      // Nothing kept.
+    }
+    if (everything) {
+      await eraseEverything();
+      window.location.reload();
+      return;
+    }
+    setToast("Cleared. Ready for a fresh scan.");
+  }
   const nextName = (kind: "photo" | "video") =>
     `${kind === "photo" ? "Photo" : "Video"} ${String(++counter.current[kind]).padStart(2, "0")}`;
 
@@ -808,6 +893,7 @@ export function Scanner() {
     <button
       onClick={() => setShowSettings(true)}
       aria-haspopup="dialog"
+      data-tour="settings"
       className="inline-flex min-w-0 items-center gap-2 rounded-full bg-fog/[0.06] px-3.5 py-2 text-[0.8rem] font-medium text-mist transition-colors hover:bg-fog/[0.1] hover:text-fog sm:text-[0.82rem]"
     >
       <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" aria-hidden>
@@ -819,6 +905,34 @@ export function Scanner() {
       <span className="text-dim">·</span>
       <span className="shrink-0 font-mono text-[0.76rem]">${settings.ratePerKwh.toFixed(2)}/kWh</span>
     </button>
+  );
+
+  const helpButton = (
+    <button
+      onClick={() => setTouring(true)}
+      data-tour="help"
+      aria-label="Show me around"
+      title="Show me around"
+      className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-fog/[0.06] text-[0.95rem] font-semibold text-mist transition-colors hover:bg-fog/[0.1] hover:text-fog"
+    >
+      ?
+    </button>
+  );
+
+  const roomChip = roomName && (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-cyan/10 py-1.5 pl-3.5 pr-1.5 text-[0.82rem] text-cyan">
+      Saving as <span className="font-medium">{roomName}</span>
+      <button
+        onClick={() => {
+          setRoomName(null);
+          window.history.replaceState(null, "", "/scan");
+        }}
+        aria-label="Stop saving pictures under this room name"
+        className="grid h-6 w-6 place-items-center rounded-full hover:bg-cyan/15"
+      >
+        <Icon name="close" className="h-3 w-3" />
+      </button>
+    </span>
   );
 
   return (
@@ -834,25 +948,46 @@ export function Scanner() {
         </PageHeader>
         <h1 className="sr-only">{t("nav.scanner")}</h1>
         <div className="flex items-center justify-between gap-2 md:flex-col md:items-end">
-          <ModeSwitch mode={mode} onChange={setMode} />
+          <div data-tour="mode">
+            <ModeSwitch mode={mode} onChange={setMode} />
+          </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <PlacePicker place={place} onChange={choosePlace} />
+            <div data-tour="place">
+              <PlacePicker place={place} onChange={choosePlace} />
+            </div>
             {settingsButton}
+            {roomChip}
+            {helpButton}
           </div>
         </div>
       </div>
       ) : (
         <div className="no-print mb-4 flex flex-wrap items-center justify-between gap-2.5">
           <h1 className="sr-only">{t("nav.scanner")}</h1>
-          <ModeSwitch mode={mode} onChange={setMode} />
+          <div data-tour="mode">
+            <ModeSwitch mode={mode} onChange={setMode} />
+          </div>
           <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-            <PlacePicker place={place} onChange={choosePlace} />
+            <div data-tour="place">
+              <PlacePicker place={place} onChange={choosePlace} />
+            </div>
             {settingsButton}
+            {roomChip}
+            {helpButton}
+            <button
+              onClick={() => setConfirmClear(true)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-ember/35 px-3.5 py-2 text-[0.82rem] font-medium text-ember transition-colors hover:bg-ember/[0.08]"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M4 7h16M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" />
+              </svg>
+              Clear current work
+            </button>
           </div>
         </div>
       )}
 
-      <div className="no-print">
+      <div className="no-print" data-tour="add">
         {mode === "camera" && (
           <CameraMode
             settings={settings}
@@ -878,7 +1013,7 @@ export function Scanner() {
 
         {/* Something added: what was found, drawn on it, beside the short version. */}
         {captures.length > 0 && (
-          <div className={`grid gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:items-start ${mode === "camera" ? "mt-6" : ""}`}>
+          <div className={`grid gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] ${mode === "camera" ? "mt-6" : ""}`}>
             <div className="min-w-0 space-y-3">
               <MediaViewer
                 items={viewerItems}
@@ -888,25 +1023,27 @@ export function Scanner() {
                 onHover={setHovered}
                 onPick={pickDevice}
                 onFiles={mode === "upload" ? onFiles : undefined}
-                onClear={() => setCaptures([])}
+                onClear={() => setConfirmClear(true)}
+                footer={
+                  selected && (
+                    <CaptureCard
+                      key={selected.id}
+                      compact
+                      capture={selected}
+                      cost={priced.find((p) => p.c.id === selected.id)?.offenders.reduce((s, o) => s + o.costPerYear, 0) ?? 0}
+                      devices={priced.find((p) => p.c.id === selected.id)?.offenders.reduce((s, o) => s + o.count, 0) ?? 0}
+                      schedule={building.schedule}
+                      onDetails={(d) => setDetails(selected.id, d)}
+                      onPatch={(p) => patch(selected.id, p)}
+                      onReanalyze={() => patch(selected.id, { status: "pending", result: undefined, error: undefined, errorCode: undefined })}
+                      onUseOnDevice={selected.onDevice?.length ? () => adoptOnDevice(selected.id) : undefined}
+                      onRemove={() => remove(selected.id)}
+                    />
+                  )
+                }
               />
-              {selected && (
-                <CaptureCard
-                  key={selected.id}
-                  compact
-                  capture={selected}
-                  cost={priced.find((p) => p.c.id === selected.id)?.offenders.reduce((s, o) => s + o.costPerYear, 0) ?? 0}
-                  devices={priced.find((p) => p.c.id === selected.id)?.offenders.reduce((s, o) => s + o.count, 0) ?? 0}
-                  schedule={building.schedule}
-                  onDetails={(d) => setDetails(selected.id, d)}
-                  onPatch={(p) => patch(selected.id, p)}
-                  onReanalyze={() => patch(selected.id, { status: "pending", result: undefined, error: undefined, errorCode: undefined })}
-                  onUseOnDevice={selected.onDevice?.length ? () => adoptOnDevice(selected.id) : undefined}
-                  onRemove={() => remove(selected.id)}
-                />
-              )}
             </div>
-            <div className="min-w-0">
+            <div className="flex min-w-0 flex-col">
               {hasResults ? (
                 <Summary
                   annual={totals.annualCostPerYear}
@@ -933,6 +1070,12 @@ export function Scanner() {
           </div>
         )}
       </div>
+
+      {hasResults && (
+        <div className="mt-5">
+          <TeamSend offenders={countedOffenders} mode={auditMode} defaultRoom={done[0]?.c.name ?? building.name} />
+        </div>
+      )}
 
       {hasResults && (
         <div id="scan-tabs" className="mt-8 scroll-mt-20 space-y-5">
@@ -993,7 +1136,6 @@ export function Scanner() {
               <ReportBrief current={currentAudit} pictures={reportPictures} />
               <div className="no-print space-y-3">
                 <ExportBar offenders={countedOffenders} settings={settings} buildingName={building.name} savedTo={ready ? building.name : undefined} roomCount={done.length} />
-                <ContributeBar offenders={countedOffenders} mode={auditMode} defaultArea={done[0]?.c.name ?? building.name} />
               </div>
             </div>
           )}
@@ -1092,6 +1234,9 @@ export function Scanner() {
           </AnimatePresence>,
           document.body,
         )}
+
+      <Tour open={touring} onClose={() => setTouring(false)} />
+      <ClearWorkDialog open={confirmClear} count={captures.length} onCancel={() => setConfirmClear(false)} onConfirm={clearWork} />
 
       <AnimatePresence>
         {toast && (

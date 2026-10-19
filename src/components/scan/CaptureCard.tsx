@@ -43,7 +43,7 @@ export function CaptureCard({
   const noteChanged = (c.details.note ?? "") !== sentNote && c.status === "done";
 
   return (
-    <motion.article layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="panel relative overflow-hidden">
+    <motion.article layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={compact ? "relative overflow-hidden border-t border-line" : "panel relative overflow-hidden"}>
       <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center gap-3 p-2.5 text-left">
         <div className={`relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-surface2 ${compact ? "hidden" : ""}`}>
           {thumb ? (
