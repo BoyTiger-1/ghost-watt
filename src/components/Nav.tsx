@@ -8,6 +8,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { motion } from "framer-motion";
 import { EngineIndicator } from "./EngineIndicator";
 import { Mark } from "./home/HomeNav";
 import { useT, type Key } from "@/lib/i18n";
@@ -29,7 +30,12 @@ export function Nav() {
 
   return (
     <>
-      <header className="site-header fixed inset-x-0 top-0 z-50 border-b border-line/80 bg-ink/80 backdrop-blur-xl backdrop-saturate-150">
+      <motion.header
+        initial={{ y: -12, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+        className="site-header fixed inset-x-0 top-0 z-50 border-b border-line/80 bg-ink/80 backdrop-blur-xl backdrop-saturate-150"
+      >
         <div className="mx-auto grid h-14 max-w-6xl grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 sm:px-6 md:h-16">
           <Link href="/" className="flex shrink-0 items-center gap-2.5" aria-label={t("nav.home")}>
             <Mark />
@@ -44,13 +50,16 @@ export function Nav() {
                   key={tab.href}
                   href={tab.href}
                   aria-current={active ? "page" : undefined}
-                  className={`rounded-full px-3.5 py-1.5 text-[0.86rem] transition-all ${
-                    active
-                      ? "bg-surface text-fog shadow-[0_1px_2px_rgba(28,27,24,0.08),0_4px_12px_-6px_rgba(28,27,24,0.2)]"
-                      : "text-mist hover:text-fog"
-                  }`}
+                  className={`relative rounded-full px-3.5 py-1.5 text-[0.86rem] transition-colors duration-300 ${active ? "text-fog" : "text-mist hover:text-fog"}`}
                 >
-                  {t(tab.key)}
+                  {active && (
+                    <motion.span
+                      layoutId="nav-pill"
+                      className="absolute inset-0 rounded-full bg-surface shadow-[0_1px_2px_rgba(28,27,24,0.08),0_4px_12px_-6px_rgba(28,27,24,0.2)]"
+                      transition={{ type: "spring", stiffness: 380, damping: 32 }}
+                    />
+                  )}
+                  <span className="relative">{t(tab.key)}</span>
                 </Link>
               );
             })}
@@ -84,7 +93,7 @@ export function Nav() {
             </Link>
           </div>
         </div>
-      </header>
+      </motion.header>
 
       {/* the phone's tab bar */}
       <nav
@@ -103,8 +112,15 @@ export function Nav() {
                     active ? "text-fog" : "text-dim"
                   }`}
                 >
-                  <span className={`grid h-7 w-12 place-items-center rounded-full transition-colors ${active ? "bg-fog/[0.07]" : ""}`}>
-                    <Icon name={tab.icon} className="h-[1.3rem] w-[1.3rem]" />
+                  <span className="relative grid h-7 w-12 place-items-center rounded-full">
+                    {active && (
+                      <motion.span
+                        layoutId="tab-pill-phone"
+                        className="absolute inset-0 rounded-full bg-fog/[0.08]"
+                        transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                      />
+                    )}
+                    <Icon name={tab.icon} className="relative h-[1.3rem] w-[1.3rem]" />
                   </span>
                   {t(tab.key)}
                 </Link>

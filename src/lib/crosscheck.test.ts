@@ -16,13 +16,18 @@ describe("crossCheck", () => {
     expect(out[0].verification).toBe("verified");
   });
 
-  it("marks several screens the detector saw none of as unverified", () => {
-    const out = crossCheck([obs("monitor", 4, { confidence: 0.9 })], [obs("laptop", 0)]);
-    expect(out[0].verification).toBe("unverified");
+  it("marks many screens the detector saw none of as unverified, but not a few", () => {
+    expect(crossCheck([obs("monitor", 8, { confidence: 0.9 })], [obs("laptop", 0)])[0].verification).toBe("unverified");
+    // The detector finds about half the screens in a photo: missing four is normal.
+    expect(crossCheck([obs("monitor", 4, { confidence: 0.9 })], [obs("laptop", 0)])[0].verification).toBe("verified");
+  });
+
+  it("never holds back lights on the light finder's silence", () => {
+    expect(crossCheck([obs("downlight", 14, { confidence: 0.9 })], [])[0].verification).toBe("verified");
   });
 
   it("marks a count far beyond what the detector saw", () => {
-    const out = crossCheck([obs("monitor", 12, { confidence: 0.9 })], [obs("monitor", 2)]);
+    const out = crossCheck([obs("monitor", 14, { confidence: 0.9 })], [obs("monitor", 2)]);
     expect(out[0].verification).toBe("unverified");
   });
 

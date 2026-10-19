@@ -18,7 +18,11 @@ import type { Box } from "./types";
  * the classifier double-checks them (lib/verify.ts). Everything else COCO knows
  * - keyboards, remotes, clocks, phones - is left to the photo pipeline.
  */
-export const LIVE_CLASSES = new Set(["tv", "laptop", "microwave", "refrigerator", "oven", "toaster"]);
+export const LIVE_CLASSES = new Set([
+  "tv", "laptop", "microwave", "refrigerator", "oven", "toaster",
+  // Only a fine-tuned detector (scripts/train-detector.py) reports these.
+  "lamp", "light bulb", "chandelier", "ceiling light", "ceiling fan", "printer", "projector",
+]);
 
 /**
  * Per-class detector score needed to become a candidate. A candidate is drawn

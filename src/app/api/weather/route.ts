@@ -10,8 +10,9 @@ export const runtime = "nodejs";
  */
 export async function GET(req: Request) {
   const url = new URL(req.url);
-  const lat = Number(url.searchParams.get("lat"));
-  const lon = Number(url.searchParams.get("lon"));
+  // About 1 km: the weather does not need the house.
+  const lat = Math.round(Number(url.searchParams.get("lat")) * 100) / 100;
+  const lon = Math.round(Number(url.searchParams.get("lon")) * 100) / 100;
 
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
     return NextResponse.json(

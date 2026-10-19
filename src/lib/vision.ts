@@ -48,7 +48,7 @@ interface HostedProvider {
   model: string;
   signup: string;
   note: string;
-  call: (images: DecodedImage[], key: string, model: string, prompt: string, schema: object) => Promise<string>;
+  call: (images: DecodedImage[], key: string, model: string, prompt: string, schema: object, opts?: CallOptions) => Promise<string>;
   /**
    * Where to list this provider's models, for recovering when the default model
    * is retired. Only set for providers whose model list says which models take
@@ -59,12 +59,21 @@ interface HostedProvider {
   fallbacks?: string[];
   /** The most images one request may carry. A video's frames are thinned to fit. */
   maxImages?: number;
+  /**
+   * How the JSON shape is asked for. "schema": response_format json_schema
+   * (falls back to json_object on a 400). "none": the prompt alone, as the
+   * original build did for Groq - its Qwen vision model answered best that way,
+   * and a schema it does not support costs a rejected request per scan.
+   */
+  jsonMode?: "schema" | "none";
 }
 
 // Box coordinates roughly triple the length of a reply: a full lab at 8 boxes a
 // type is 1000+ tokens. 700 used to cut the JSON off mid-array, and a truncated
 // array parses as nothing, so the whole scan fell through to the estimate.
-const MAX_TOKENS = 1500;
+// Qwen 3.x on Groq can think before it answers, and thinking counts against the
+// limit: at 1500 a busy room's reply was sometimes cut off mid-array.
+const MAX_TOKENS = 2500;
 /** A video's frames share one reply, and current models think before answering. */
 const MAX_TOKENS_LARGE = 4000;
 
@@ -74,9 +83,9 @@ const MAX_TOKENS_LARGE = 4000;
  * Effort "medium": "low" answered fast but undercounted - thirty downlights and
  * a row of monitors seen from behind take a moment's thought to tally.
  */
-function anthropicTuning(model: string): Record<string, unknown> {
+function anthropicTuning(model: string, fast = false): Record<string, unknown> {
   return /^claude-(haiku|sonnet|opus|fable|mythos)-([5-9]|\d{2})/.test(model)
-    ? { output_config: { effort: "medium" } }
+    ? { output_config: { effort: fast ? "low" : "medium" } }
     : { temperature: 0 };
 }
 
@@ -86,6 +95,23 @@ const TIMEOUT_MS = Number(process.env.VISION_TIMEOUT_MS ?? 45000);
 function isServerless(): boolean {
   return Boolean(process.env.VERCEL || process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.RENDER);
 }
+
+/**
+ * "fast": the live view's confirm step. The model answers without thinking
+ * first (where the provider lets it), with a shorter reply limit, and a second
+ * provider is started if the first has not answered within HEDGE_MS. A photo
+ * scan keeps thinking on: counting a busy room is where it helps.
+ */
+export interface CallOptions {
+  fast?: boolean;
+}
+
+/** Start the next provider if the first has not answered by then. */
+const HEDGE_MS = 3000;
+const MAX_TOKENS_FAST = 1500;
+
+/** Models that rejected reasoning_effort once: never sent it again. */
+const noReasoningParam = new Set<string>();
 
 // ---- image handling -----------------------------------------------------
 
@@ -150,6 +176,7 @@ async function callAnthropic(
   model: string,
   prompt: string,
   schema: object,
+  opts: CallOptions = {},
 ): Promise<string> {
   // The schema is enforced as a forced tool call: the model can only answer by
   // filling in the typed fields, so there is no prose to parse and no field to
@@ -160,7 +187,7 @@ async function callAnthropic(
     {
       model,
       max_tokens: imgs.length > 1 || anthropicTuning(model).output_config ? MAX_TOKENS_LARGE : MAX_TOKENS,
-      ...anthropicTuning(model),
+      ...anthropicTuning(model, opts.fast),
       tools: [
         {
           name: "report",
@@ -193,15 +220,22 @@ async function callAnthropic(
     .trim();
 }
 
-function openAiCompatible(endpoint: string) {
-  return async (imgs: DecodedImage[], key: string, model: string, prompt: string, schema: object): Promise<string> => {
+function openAiCompatible(endpoint: string, jsonMode: "schema" | "none" = "schema") {
+  return async (imgs: DecodedImage[], key: string, model: string, prompt: string, schema: object, opts: CallOptions = {}): Promise<string> => {
+    // Fast: ask the model to answer without thinking first. Groq's Qwen and
+    // Gemini 2.5 both take reasoning_effort "none"; a model that rejects it is
+    // remembered and asked plainly from then on.
+    let noThink = Boolean(opts.fast) && !noReasoningParam.has(model);
     const body = (strict: boolean) => ({
       model,
-      max_tokens: imgs.length > 1 ? MAX_TOKENS_LARGE : MAX_TOKENS,
+      max_tokens: imgs.length > 1 ? MAX_TOKENS_LARGE : opts.fast ? MAX_TOKENS_FAST : MAX_TOKENS,
       temperature: 0,
-      ...(strict
-        ? { response_format: { type: "json_schema", json_schema: { name: "report", schema } } }
-        : { response_format: { type: "json_object" } }),
+      ...(noThink ? { reasoning_effort: "none" } : {}),
+      ...(jsonMode === "none"
+        ? {}
+        : strict
+          ? { response_format: { type: "json_schema", json_schema: { name: "report", schema } } }
+          : { response_format: { type: "json_object" } }),
       messages: [
         {
           role: "user",
@@ -213,14 +247,24 @@ function openAiCompatible(endpoint: string) {
       ],
     });
     let json: { choices?: { message?: { content?: string } }[] };
-    try {
-      json = (await postJson(endpoint, { Authorization: `Bearer ${key}` }, body(true))) as typeof json;
-    } catch (err) {
-      // Not every model behind these endpoints takes a schema. A 400 about the
-      // response format falls back to plain JSON mode; anything else is real.
-      const msg = err instanceof Error ? err.message : "";
-      if (!/HTTP 400/.test(msg) || !/response_format|json_schema|schema/i.test(msg)) throw err;
-      json = (await postJson(endpoint, { Authorization: `Bearer ${key}` }, body(false))) as typeof json;
+    let strict = true;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        json = (await postJson(endpoint, { Authorization: `Bearer ${key}` }, body(strict))) as typeof json;
+        break;
+      } catch (err) {
+        // Not every model behind these endpoints takes every option. A 400 about
+        // reasoning drops that; a 400 about the response format falls back to
+        // plain JSON mode; anything else is real.
+        const msg = err instanceof Error ? err.message : "";
+        if (attempt >= 2 || !/HTTP 400/.test(msg)) throw err;
+        if (noThink && /reasoning/i.test(msg)) {
+          noThink = false;
+          noReasoningParam.add(model);
+        } else if (strict && jsonMode !== "none" && /response_format|json_schema|schema/i.test(msg)) {
+          strict = false;
+        } else throw err;
+      }
     }
     return stripReasoning(json.choices?.[0]?.message?.content ?? "");
   };
@@ -258,18 +302,18 @@ const HOSTED: HostedProvider[] = [
     id: "groq",
     label: "Groq",
     env: "GROQ_API_KEY",
-    // Groq's vision line-up churns (Llama 3.2 Vision, then Llama 4 Scout, were
-    // each retired). The default is the vision model Groq documents today, the
-    // fallbacks are the ones it has carried recently, and on model_not_found the
-    // call also asks Groq for any model whose input_modalities include "image".
-    // GROQ_API_KEY_MODEL still overrides. Groq accepts at most 3 images (Qwen) or
-    // 5 (Llama 4) per request, so a video's frames are thinned to fit.
-    model: "qwen/qwen3.6-27b",
-    fallbacks: ["meta-llama/llama-4-scout-17b-16e-instruct", "meta-llama/llama-4-maverick-17b-128e-instruct"],
+    // Groq's vision line-up churns: Llama 4 Scout was retired, then Qwen 3.6.
+    // Qwen 3.8 is the one answering in production (it is what the live site
+    // reports). A retired default no longer breaks anything: on model_not_found
+    // the call asks Groq for a model whose input_modalities include "image" and
+    // retries with that. GROQ_API_KEY_MODEL still overrides. Qwen takes at most
+    // 3 images a request, so a video's frames are thinned to fit.
+    model: "qwen/qwen3.8-27b",
     maxImages: 3,
+    jsonMode: "none",
     signup: "https://console.groq.com/keys",
     note: "Free tier, and by far the fastest to answer. Images cost nothing.",
-    call: openAiCompatible("https://api.groq.com/openai/v1/chat/completions"),
+    call: openAiCompatible("https://api.groq.com/openai/v1/chat/completions", "none"),
     modelsUrl: "https://api.groq.com/openai/v1/models",
   },
   {
@@ -359,7 +403,7 @@ export async function describeImageAny(
 }
 
 /** The same chain over one or more images (a video's keyframes), a prompt and the JSON shape the answer must take. */
-export async function describeImagesAny(images: string[], prompt: string, schema: object = VISION_SCHEMA): Promise<VisionResult> {
+export async function describeImagesAny(images: string[], prompt: string, schema: object = VISION_SCHEMA, opts: CallOptions = {}): Promise<VisionResult> {
   const forced = process.env.VISION_PROVIDER?.trim().toLowerCase();
   const errors: string[] = [];
   let localConfigured = false;
@@ -384,9 +428,13 @@ export async function describeImagesAny(images: string[], prompt: string, schema
   const providers = configuredHosted();
   // A serverless function has about 60 s in all. Each provider gets a share of
   // it, so one that hangs cannot take the whole request down with it: the next
-  // provider still gets its turn.
-  const budgetMs = Math.max(8000, Math.min(TIMEOUT_MS, Math.floor(50000 / Math.max(1, providers.length))));
-  for (const hosted of providers) {
+  // provider still gets its turn. The live confirm gets a short share: a late
+  // answer is no use to a moving camera.
+  const budgetMs = opts.fast
+    ? 15000
+    : Math.max(8000, Math.min(TIMEOUT_MS, Math.floor(50000 / Math.max(1, providers.length))));
+
+  const attempt = async (hosted: HostedProvider): Promise<VisionResult | null> => {
     const key = keyFor(hosted)!;
     const img = thinImages(images.map(decodeImage), hosted.maxImages ?? 10);
     const tried = new Set<string>();
@@ -396,7 +444,7 @@ export async function describeImagesAny(images: string[], prompt: string, schema
       if (tried.has(model)) continue;
       tried.add(model);
       try {
-        const text = await callWithRetry(hosted, img, key, model, prompt, schema, budgetMs);
+        const text = await callWithRetry(hosted, img, key, model, prompt, schema, budgetMs, opts);
         if (text) {
           if (i > 0) discovered.set(hosted.id, model);
           return { ok: true, text, model, provider: `${hosted.label} (hosted)`, kind: "hosted" };
@@ -414,6 +462,20 @@ export async function describeImagesAny(images: string[], prompt: string, schema
         }
       }
     }
+    return null;
+  };
+
+  let next = 0;
+  // Fast: a hedged pair. The second provider starts only if the first is slow,
+  // so a quick first answer costs one request, not two.
+  if (opts.fast && providers.length > 1) {
+    next = 2;
+    const won = await hedge(() => attempt(providers[0]), () => attempt(providers[1]), HEDGE_MS);
+    if (won) return won;
+  }
+  for (; next < providers.length; next++) {
+    const r = await attempt(providers[next]);
+    if (r) return r;
   }
   if (!providers.length) errors.push("no hosted vision key is configured on this deployment");
 
@@ -426,6 +488,42 @@ export async function describeImagesAny(images: string[], prompt: string, schema
     error: errors.join("; "),
     configured: providers.length > 0 || localConfigured,
   };
+}
+
+/**
+ * Run `first`; if it has not answered within `delayMs`, run `second` beside it.
+ * Resolves with the first non-null answer, or null when both come back empty.
+ */
+export function hedge<T>(first: () => Promise<T | null>, second: () => Promise<T | null>, delayMs: number): Promise<T | null> {
+  return new Promise((resolve) => {
+    let pending = 1;
+    let done = false;
+    let secondStarted = false;
+    const settle = (v: T | null) => {
+      if (done) return;
+      if (v !== null) {
+        done = true;
+        clearTimeout(timer);
+        resolve(v);
+        return;
+      }
+      pending--;
+      // The first failed before the delay: start the second now rather than wait.
+      if (!secondStarted) startSecond();
+      else if (pending === 0) {
+        done = true;
+        resolve(null);
+      }
+    };
+    const startSecond = () => {
+      if (secondStarted || done) return;
+      secondStarted = true;
+      pending++;
+      second().then(settle, () => settle(null));
+    };
+    const timer = setTimeout(startSecond, delayMs);
+    first().then(settle, () => settle(null));
+  });
 }
 
 /** The useful part of a provider's error, without the JSON envelope. */
@@ -454,10 +552,11 @@ async function callWithRetry(
   prompt: string,
   schema: object,
   budgetMs = TIMEOUT_MS,
+  opts: CallOptions = {},
 ): Promise<string> {
   const started = Date.now();
   try {
-    return await withBudget(p.call(img, key, model, prompt, schema), budgetMs, p.label);
+    return await withBudget(p.call(img, key, model, prompt, schema, opts), budgetMs, p.label);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "";
     if (!/HTTP (429|5\d\d)/.test(msg)) throw err;
@@ -466,7 +565,7 @@ async function callWithRetry(
     // No time left in this provider's share for a retry: let the next provider have it.
     if (left < 4000) throw err;
     await new Promise((r) => setTimeout(r, wait));
-    return await withBudget(p.call(img, key, model, prompt, schema), left, p.label);
+    return await withBudget(p.call(img, key, model, prompt, schema, opts), left, p.label);
   }
 }
 

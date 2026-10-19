@@ -19,7 +19,13 @@ const MODELS = "https://storage.googleapis.com/mediapipe-models/object_detector"
 // (ONNX Runtime Web, 13 MB) were measured against it on 40 labelled Open Images
 // photos of screens, laptops and appliances (docs/live-detector-benchmark.md):
 // neither found more at the same precision, and both were ~3x slower on CPU.
-const MODEL = { name: "EfficientDet-Lite0", url: `${MODELS}/efficientdet_lite0/float16/1/efficientdet_lite0.tflite` };
+// A detector fine-tuned on lights and the other devices that matter here
+// (scripts/train-detector.py) can replace it without a code change: set
+// NEXT_PUBLIC_DETECTOR_MODEL_URL to the .tflite file, e.g. one in /public.
+const CUSTOM = process.env.NEXT_PUBLIC_DETECTOR_MODEL_URL?.trim();
+const MODEL = CUSTOM
+  ? { name: "Ghost Watt detector", url: CUSTOM }
+  : { name: "EfficientDet-Lite0", url: `${MODELS}/efficientdet_lite0/float16/1/efficientdet_lite0.tflite` };
 
 export interface LoadedDetector {
   detector: ObjectDetector;
