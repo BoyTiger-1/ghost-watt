@@ -15,8 +15,8 @@ const DEFAULTS = [
 export function MethodSection() {
   return (
     <section id="method" className="relative scroll-mt-16 px-5 py-16 sm:px-8 sm:py-32">
-      <div className="mx-auto grid max-w-[84rem] items-center gap-14 lg:grid-cols-[0.85fr_1.15fr] lg:gap-20">
-        <div className="max-w-[31rem]">
+      <div className="mx-auto grid max-w-[84rem] gap-14 lg:gap-16">
+        <div className="max-w-[40rem]">
           <Chapter n="05" label="Method" />
           <h2 className="font-editorial mt-6 text-[clamp(2.5rem,5vw,4.4rem)] leading-[0.98] text-graphite">
             Every number has
