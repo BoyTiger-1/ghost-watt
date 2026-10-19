@@ -994,20 +994,21 @@ function group(items: readonly LiveItem[]): Row[] {
   return [...rows.values()].sort((a, b) => b.cost - a.cost || b.count - a.count);
 }
 
-/** The cost pill. Confirmed readings only: candidates are suggestions, not money. */
+/**
+ * The cost pill: everything in view, priced at once. While the view is only the
+ * on-device read it is an estimate and says so; when the confirm step has read
+ * it through the strong path the same pill says confirmed.
+ */
 function SummaryLine({ items, dark, ai }: { items: readonly ViewItem[]; dark?: boolean; ai?: AiStatus }) {
   const t = useT();
-  const confirmed = items.filter((i) => !i.candidate && i.kind !== "other");
-  const candidates = items.filter((i) => i.candidate && i.kind !== "other");
-  const cost = confirmed.reduce((s, i) => s + i.costPerYear, 0);
-  if (!confirmed.length) {
-    const confirming = ai?.kind === "confirming";
+  const shown = items.filter((i) => i.kind !== "other" && i.state !== "off");
+  const estimate = shown.some((i) => i.candidate);
+  const cost = shown.reduce((s, i) => s + i.costPerYear, 0);
+  if (!shown.length) {
     return (
       <span className="flex min-w-0 items-baseline gap-2">
-        <span className={`text-[0.9rem] font-medium ${dark ? "text-white" : "text-fog"}`}>{confirming ? t("cam.confirming") : t("cam.hold")}</span>
-        <span className={`truncate text-[0.78rem] ${dark ? "text-white/70" : "text-mist"}`}>
-          {candidates.length ? `${candidates.length} ${candidates.length > 1 ? t("cam.candidates.in.view") : t("cam.candidate.in.view")}` : t("cam.point.short")}
-        </span>
+        <span className={`text-[0.9rem] font-medium ${dark ? "text-white" : "text-fog"}`}>{ai?.kind === "confirming" ? t("cam.confirming") : t("cam.scanning")}</span>
+        <span className={`truncate text-[0.78rem] ${dark ? "text-white/70" : "text-mist"}`}>{t("cam.point.short")}</span>
       </span>
     );
   }
@@ -1018,7 +1019,7 @@ function SummaryLine({ items, dark, ai }: { items: readonly ViewItem[]; dark?: b
         <span className={`text-[0.72rem] font-normal ${dark ? "text-white/60" : "text-dim"}`}>{t("cam.if.left.on")}</span>
       </span>
       <span className={`truncate text-[0.78rem] ${dark ? "text-white/70" : "text-mist"}`}>
-        {confirmed.length} {t("cam.confirmed.in.view")}
+        {shown.length} {t("cam.in.view")} · {estimate ? (ai?.kind === "confirming" ? t("cam.confirming") : t("cam.estimate")) : t("cam.confirmed.short")}
       </span>
     </span>
   );
@@ -1030,7 +1031,7 @@ const PATH_WORD: Record<AnalysisMode, string> = { enhanced: "cloud model", "on-d
 function aiLine(ai: AiStatus): string {
   switch (ai.kind) {
     case "moving":
-      return ai.candidates ? `${ai.candidates} candidate${ai.candidates > 1 ? "s" : ""} · hold still to confirm` : "Hold still on a view to confirm it";
+      return ai.candidates ? `${ai.candidates} in view · live estimate` : "Scanning";
     case "confirming":
       return `Confirming with the ${PATH_WORD[ai.mode]}…`;
     case "confirmed":
@@ -1061,14 +1062,13 @@ function LiveRead({
   onLocate: () => void;
   dark?: boolean;
 }) {
-  const confirmedItems = items.filter((i) => !i.candidate);
-  const candidateItems = items.filter((i) => i.candidate);
-  const rows = group(confirmedItems);
-  const candRows = group(candidateItems);
-  const cost = confirmedItems.reduce((s, i) => s + i.costPerYear, 0);
-  const typical = confirmedItems.reduce((s, i) => s + i.typicalCostPerYear, 0);
-  const watts = confirmedItems.reduce((s, i) => s + i.watts, 0);
+  const shown = items.filter((i) => i.state !== "off");
+  const rows = group(shown);
+  const cost = shown.reduce((s, i) => s + i.costPerYear, 0);
+  const typical = shown.reduce((s, i) => s + i.typicalCostPerYear, 0);
+  const watts = shown.reduce((s, i) => s + i.watts, 0);
   const confirmed = ai.kind === "confirmed";
+  const estimate = shown.some((i) => i.candidate);
   const tr = useT();
   const t = dark
     ? { fog: "text-white", mist: "text-white/75", dim: "text-white/55", line: "border-white/10", chip: "bg-white/10" }
@@ -1078,13 +1078,13 @@ function LiveRead({
     <div className="flex min-h-0 flex-1 flex-col">
       {!dark && (
         <div className="flex items-center justify-between">
-          <span className="mono-label">{confirmed ? `${tr("cam.confirmed.by")} · ${PATH_WORD[ai.mode]}` : tr("cam.candidates")}</span>
-          <span className="font-mono text-[0.66rem] text-dim">{confirmed ? tr("cam.priced") : tr("cam.not.priced")}</span>
+          <span className="mono-label">{confirmed && !estimate ? `${tr("cam.confirmed.by")} · ${PATH_WORD[ai.mode]}` : tr("cam.live.estimate")}</span>
+          <span className="font-mono text-[0.66rem] text-dim">{ai.kind === "confirming" ? tr("cam.confirming") : confirmed && !estimate ? tr("cam.priced") : tr("cam.refines")}</span>
         </div>
       )}
 
       <div className={dark ? "" : "mt-3"}>
-        {confirmed ? (
+        {shown.length ? (
           <>
             <div className={`font-mono text-[2rem] font-bold leading-none ${t.fog}`}>
               ≈{fmtMoney(cost)}
@@ -1096,36 +1096,18 @@ function LiveRead({
           </>
         ) : (
           <>
-            <div className={`text-[1.3rem] font-semibold leading-tight ${t.fog}`}>{ai.kind === "confirming" ? tr("cam.confirming") : tr("cam.hold")}</div>
-            <p className={`mt-1 text-[0.78rem] ${t.mist}`}>
-              {candRows.length
-                ? `${candidateItems.filter((i) => i.kind !== "other").length} ${candidateItems.length > 1 ? tr("cam.candidates.in.view") : tr("cam.candidate.in.view")}. ${tr("cam.candidates.unpriced")}`
-                : tr("cam.point")}
-            </p>
+            <div className={`text-[1.3rem] font-semibold leading-tight ${t.fog}`}>{ai.kind === "confirming" ? tr("cam.confirming") : tr("cam.scanning")}</div>
+            <p className={`mt-1 text-[0.78rem] ${t.mist}`}>{tr("cam.point")}</p>
           </>
         )}
       </div>
 
       <ul className={`mt-3 min-h-0 flex-1 space-y-1.5 overflow-y-auto ${dark ? "" : "max-h-[300px]"}`}>
-        {rows.length === 0 && candRows.length === 0 && (
+        {rows.length === 0 && (
           <li className={`rounded-xl border border-dashed ${t.line} px-3 py-4 text-center text-[0.8rem] ${t.dim}`}>
             {tr("cam.nothing")}
           </li>
         )}
-        {!confirmed &&
-          candRows.map((r) => (
-            <li key={`c-${r.key}`} className={`flex items-center gap-2.5 rounded-xl border border-dashed ${t.line} px-2.5 py-2`}>
-              <span className="h-2.5 w-2.5 shrink-0 rounded-[3px] opacity-60" style={{ background: itemColor(r) }} />
-              <span className="min-w-0 flex-1">
-                <span className={`block truncate text-[0.84rem] font-medium ${t.fog}`}>
-                  {r.count > 1 ? `${r.count} × ` : ""}
-                  {r.label}
-                  <span className={`ml-1.5 text-[0.72rem] font-normal ${t.dim}`}>candidate</span>
-                </span>
-                <span className={`block font-mono text-[0.66rem] ${t.dim}`}>detector {Math.round(r.score * 100)}% · not priced</span>
-              </span>
-            </li>
-          ))}
         {rows.map((r, i) => (
           <motion.li
             key={r.key}
@@ -1165,7 +1147,7 @@ function LiveRead({
         <ContextRow icon="bulb" dark={dark}>
           {ai.kind === "confirmed"
             ? (() => {
-                const lit = confirmedItems.filter((i) => i.kind === "light" && i.state !== "off").length;
+                const lit = shown.filter((i) => i.kind === "light").length;
                 return lit ? `Confirmed: ${lit} light${lit > 1 ? "s" : ""} on in this view` : "Confirmed: no lights on in this view";
               })()
             : scene
@@ -1205,8 +1187,8 @@ function LiveRead({
 
       {!dark && (
         <p className="mt-3 rounded-xl bg-surface2 px-3 py-2.5 text-[0.76rem] leading-relaxed text-mist">
-          Dashed boxes are candidates from the detector in this browser; nothing is priced until you hold still and the view is confirmed by{" "}
-          {ai.kind === "confirmed" || ai.kind === "confirming" ? `the ${PATH_WORD[ai.mode]}` : "the strong read"} - the same reading a photo gets.{" "}
+          Boxes and prices appear at once from the detector in this browser. When the camera pauses on a view, the{" "}
+          {ai.kind === "confirmed" || ai.kind === "confirming" ? PATH_WORD[ai.mode] : "cloud model"} reads it in the background and replaces the estimate - the same reading a photo gets.{" "}
           <span className="font-medium text-fog">Photo</span> saves this view to your results.{" "}
           <span className="font-medium text-fog">Video</span> records a walkthrough and audits the whole clip.
         </p>
@@ -1275,7 +1257,7 @@ function bracket(ctx: CanvasRenderingContext2D, x: number, y: number, w: number,
 
 function label(it: ViewItem): string {
   if (it.kind === "person") return "person · room in use";
-  if (it.candidate) return `${it.label}? · hold still to confirm`;
+  if (it.candidate && it.state !== "off") return `${it.label} · ${fmtWatts(it.watts)} · ~${fmtMoney(it.typicalCostPerYear)}/yr`;
   if (it.state === "off") return `${it.label} · off`;
   const state = it.why === "screen dark" ? " · dark" : it.state === "standby" ? " · standby" : it.why === "screen lit" ? " · lit" : "";
   // Typical use on the picture: the honest everyday figure. The panel adds the left-on one.
@@ -1364,15 +1346,9 @@ function drawOverlay(
   for (const p of placed) {
     const { it, x, y, w, h, color } = p;
     ctx.globalAlpha = 1;
-    if (it.candidate) {
-      // A suggestion: a thin dashed outline, no fill, no cost. It firms up when confirmed.
-      ctx.setLineDash([6, 5]);
-      ctx.strokeStyle = color + "aa";
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(x + 0.5, y + 0.5, w, h);
-      ctx.setLineDash([]);
-      continue;
-    }
+    // Live detections and confirmed ones are drawn the same way: a box with a
+    // price. A live one is an on-device estimate and says so in its label; the
+    // confirm step quietly replaces it with the strong read when the view is held.
     if (it.kind === "light") {
       ctx.shadowColor = color;
       ctx.shadowBlur = 14;
@@ -1429,9 +1405,8 @@ function drawBoxesOnly(ctx: CanvasRenderingContext2D, r: ReturnType<typeof cover
     const x1 = mirrored ? 1 - bx2 : bx1;
     const x2 = mirrored ? 1 - bx1 : bx2;
     const x = r.x + x1 * r.w, y = r.y + y1 * r.h, w = (x2 - x1) * r.w, h = (y2 - y1) * r.h;
-    ctx.setLineDash(it.candidate ? [6, 5] : []);
     ctx.strokeStyle = itemColor(it);
-    ctx.lineWidth = it.candidate ? 1.5 : 2.5;
+    ctx.lineWidth = 2.5;
     ctx.strokeRect(x + 0.5, y + 0.5, w, h);
   }
   ctx.setLineDash([]);

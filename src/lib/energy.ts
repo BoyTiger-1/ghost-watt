@@ -141,6 +141,10 @@ export function scoreObservation(
     ? (hours * active + (8760 - hours) * cat.wattsStandby) / 1000
     : typical.kwhPerYear;
   const typicalKwhPerYear = typicalKwhPerUnit * count;
+  const typicalCostPerYear = typicalKwhPerYear * settings.ratePerKwh;
+  // Typical use already pays for standby through the empty hours; leaving a
+  // device on adds only the draw above standby on top of it.
+  const annualCostPerYear = thermostaticTotal(cat, costPerYear, typicalCostPerYear) ?? typicalCostPerYear + Math.max(0, costPerYear - standbyCostPerYear);
 
   return {
     id: `${source}-${cat.id}-${index}`,
@@ -172,7 +176,8 @@ export function scoreObservation(
     activeWattsPerUnit: active,
     typicalHoursPerDay,
     typicalKwhPerYear,
-    typicalCostPerYear: typicalKwhPerYear * settings.ratePerKwh,
+    typicalCostPerYear,
+    annualCostPerYear,
     usageBasis: hoursKnown && !cat.thermostatic ? "Your hours" : typical.basis,
     usageSource: hoursKnown && !cat.thermostatic ? "user" : typical.source,
     ...(obs.tech ? { tech: obs.tech } : {}),
@@ -181,6 +186,11 @@ export function scoreObservation(
     ...(obs.verification === "unverified" ? { unverified: true } : {}),
     ...(obs.confidence !== undefined ? { modelConfidence: obs.confidence } : {}),
   };
+}
+
+/** A fridge or vending machine runs all year whatever the schedule: its year is its typical use. */
+function thermostaticTotal(cat: DeviceCategory, waste: number, typical: number): number | null {
+  return cat.thermostatic ? Math.max(typical, waste) : null;
 }
 
 /** Observations (already tagged with categoryId) → ranked offenders. */
@@ -211,6 +221,7 @@ export function rankObservations(
       existing.typicalKwhPerYear = (existing.typicalKwhPerYear ?? 0) + (o.typicalKwhPerYear ?? 0);
       existing.typicalCostPerYear = (existing.typicalCostPerYear ?? 0) + (o.typicalCostPerYear ?? 0);
       existing.standbyCostPerYear = (existing.standbyCostPerYear ?? 0) + (o.standbyCostPerYear ?? 0);
+      existing.annualCostPerYear = (existing.annualCostPerYear ?? 0) + (o.annualCostPerYear ?? 0);
       if (o.boxes?.length) existing.boxes = [...(existing.boxes ?? []), ...o.boxes];
       existing.paybackMonths =
         existing.fixCost > 0 && existing.annualSavings > 0
@@ -230,6 +241,9 @@ export function counted<T extends { unverified?: boolean }>(offenders: readonly 
 }
 
 export interface AuditTotals {
+  /** What the counted devices cost to run for a year, all in. */
+  annualCostPerYear: number;
+  /** After-hours waste: the part of the year's cost a fix removes. */
   costPerYear: number;
   co2KgPerYear: number;
   kwhPerYear: number;
@@ -252,6 +266,7 @@ export function aggregate(all: Offender[]): AuditTotals {
   const totals = offenders.reduce(
     (acc, o) => {
       acc.costPerYear += o.costPerYear;
+      acc.annualCostPerYear += o.annualCostPerYear ?? (o.typicalCostPerYear ?? 0) + o.costPerYear;
       acc.co2KgPerYear += o.co2KgPerYear;
       acc.kwhPerYear += o.kwhPerYear;
       acc.costLowPerYear += o.costLowPerYear;
@@ -263,6 +278,7 @@ export function aggregate(all: Offender[]): AuditTotals {
     },
     {
       costPerYear: 0,
+      annualCostPerYear: 0,
       co2KgPerYear: 0,
       kwhPerYear: 0,
       costLowPerYear: 0,

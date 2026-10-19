@@ -617,7 +617,24 @@ export function Scanner() {
     const qs = done.map((p) => p.rateQuality);
     return qs.length ? qs.reduce((a, b) => (RATE_SIGMA[b] > RATE_SIGMA[a] ? b : a)) : "national";
   }, [done]);
-  const range = useMemo(() => costRange(countedOffenders, rateQuality), [countedOffenders, rateQuality]);
+  // The year's running cost, as a range: each line's band scales with it.
+  const annualRange = useMemo(
+    () =>
+      costRange(
+        countedOffenders.map((o) => {
+          const a = o.annualCostPerYear ?? 0;
+          const k = o.costPerYear > 0 ? a / o.costPerYear : 0;
+          return {
+            costPerYear: a,
+            costLowPerYear: k ? o.costLowPerYear * k : a * 0.7,
+            costHighPerYear: k ? o.costHighPerYear * k : a * 1.4,
+            hoursKnown: o.hoursKnown,
+          };
+        }),
+        rateQuality,
+      ),
+    [countedOffenders, rateQuality],
+  );
   const maxCost = ranked[0]?.offender.costPerYear ?? 0;
   const hasResults = done.length > 0;
   const working = captures.some((c) => c.status === "working" || c.status === "pending");
@@ -788,7 +805,8 @@ export function Scanner() {
             <>
               <TotalsHeader
                 cost={totals.costPerYear}
-                range={range}
+                annual={totals.annualCostPerYear}
+                annualRange={annualRange}
                 rateQuality={rateQuality}
                 co2={totals.co2KgPerYear}
                 kwh={totals.kwhPerYear}
@@ -1069,7 +1087,8 @@ const RATE_WORDS: Record<RateQuality, string> = {
 
 function TotalsHeader({
   cost,
-  range,
+  annual,
+  annualRange,
   rateQuality,
   co2,
   kwh,
@@ -1084,7 +1103,8 @@ function TotalsHeader({
   place,
 }: {
   cost: number;
-  range: ReturnType<typeof costRange>;
+  annual: number;
+  annualRange: ReturnType<typeof costRange>;
   rateQuality: RateQuality;
   co2: number;
   kwh: number;
@@ -1102,7 +1122,8 @@ function TotalsHeader({
   const t = useT();
   const lines = basisMix.measured + basisMix.ai + basisMix.catalog;
   // Precision: how tight the 80% band is, as a share of the headline.
-  const precision = Math.max(0, Math.min(1, 1 - range.spread));
+  const precision = Math.max(0, Math.min(1, 1 - annualRange.spread));
+  const wasteShare = annual > 0 ? Math.min(1, cost / annual) : 0;
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="panel ticked relative overflow-hidden p-5 sm:p-6">
       <div
@@ -1110,7 +1131,7 @@ function TotalsHeader({
         style={{ background: "radial-gradient(60% 120% at 100% 0%, rgba(239,157,46,0.1), transparent 60%)" }}
       />
       <div className="flex items-center justify-between gap-3">
-        <span className="mono-label text-cyan">{t("totals.eyebrow")}</span>
+        <span className="mono-label text-cyan">{t("totals.eyebrow.run")}</span>
         <span className="font-mono text-[0.68rem] text-dim">
           {captures} {captures === 1 ? t("totals.capture") : t("totals.captures")}
           {working && <span className="ml-1.5 text-sodium-deep">· {t("totals.analysing")}</span>}
@@ -1119,39 +1140,42 @@ function TotalsHeader({
 
       <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
         <BigStat
-          label={t("totals.wasted")}
+          label={t("totals.run")}
           accent
           value={
-            cost > 0 ? (
+            annual > 0 ? (
               <span className="whitespace-nowrap">
-                <CountUp value={range.p10} format={fmtMoney} />–<CountUp value={range.p90} format={fmtMoney} />
+                <CountUp value={annualRange.p10} format={fmtMoney} />–<CountUp value={annualRange.p90} format={fmtMoney} />
               </span>
             ) : (
               "$0"
             )
           }
         />
-        <BigStat label={t("totals.co2")} value={<CountUp value={co2} format={fmtCo2} />} />
-        <BigStat label={t("totals.energy")} value={<CountUp value={kwh} format={fmtKwh} />} />
+        <BigStat label={t("totals.wasted")} value={<CountUp value={cost} format={fmtMoneyFull} />} />
         <BigStat label={t("totals.recoverable")} value={<CountUp value={recoverable} format={fmtMoneyFull} />} />
+        <BigStat label={t("totals.co2")} value={<CountUp value={co2} format={fmtCo2} />} />
       </div>
 
-      {cost > 0 && (
+      {annual > 0 && (
         <div className="mt-5 border-t border-line pt-4">
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
             <span className="text-[0.84rem] text-fog">
-              {t("totals.best")} <span className="font-mono font-semibold">{fmtMoneyFull(cost)}</span> {t("totals.year.between")}{" "}
-              <span className="font-mono font-semibold">{fmtMoney(range.p10)}</span> {t("totals.and")} <span className="font-mono font-semibold">{fmtMoney(range.p90)}</span>
+              {t("totals.best")} <span className="font-mono font-semibold">{fmtMoneyFull(annual)}</span> {t("totals.year.between")}{" "}
+              <span className="font-mono font-semibold">{fmtMoney(annualRange.p10)}</span> {t("totals.and")} <span className="font-mono font-semibold">{fmtMoney(annualRange.p90)}</span>
             </span>
-            <span className="font-mono text-[0.72rem] text-dim">±{Math.round(range.spread * 100)}% · {t("totals.range")}</span>
+            <span className="font-mono text-[0.72rem] text-dim">±{Math.round(annualRange.spread * 100)}% · {t("totals.range")} · {fmtKwh(kwh)} {t("totals.wasted.kwh")}</span>
           </div>
-          {/* The band, drawn: where the headline sits inside what's plausible. */}
-          <div className="relative mt-2.5 h-2 rounded-full bg-surface2">
-            <div
-              className="absolute inset-y-0 rounded-full bg-gradient-to-r from-sodium/40 via-sodium to-sodium/40"
-              style={{ left: `${(range.p10 / (range.p90 * 1.15)) * 100}%`, right: `${100 - (range.p90 / (range.p90 * 1.15)) * 100}%` }}
-            />
-            <div className="absolute -top-1 h-4 w-0.5 rounded bg-fog" style={{ left: `${(cost / (range.p90 * 1.15)) * 100}%` }} />
+          {/* The year, drawn: the part spent in normal use and the part wasted after hours. */}
+          <div className="mt-2.5 flex h-2.5 overflow-hidden rounded-full bg-surface2" aria-hidden="true">
+            <motion.div className="h-full bg-cyan/70" initial={{ width: 0 }} animate={{ width: `${(1 - wasteShare) * 100}%` }} transition={{ duration: 0.6, ease: "easeOut" }} />
+            <motion.div className="h-full bg-ember" initial={{ width: 0 }} animate={{ width: `${wasteShare * 100}%` }} transition={{ duration: 0.6, ease: "easeOut", delay: 0.1 }} />
+          </div>
+          <div className="mt-1 flex justify-between text-[0.7rem] text-dim">
+            <span>{t("totals.normal.use")}</span>
+            <span className="text-ember">
+              {Math.round(wasteShare * 100)}% {t("totals.after.hours.share")}
+            </span>
           </div>
           <p className="mt-2.5 text-[0.74rem] leading-relaxed text-dim">
             {lines > 0 && (
@@ -1166,7 +1190,7 @@ function TotalsHeader({
         </div>
       )}
 
-      {cost > 0 && (
+      {annual > 0 && (
         <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-surface2/60 p-3 text-[0.8rem]">
           <div>
             <div className="font-mono text-lg font-semibold text-fog">{fmtMoneyFull(cost)}</div>

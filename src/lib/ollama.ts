@@ -119,19 +119,19 @@ Also give "boxes": where each unit is, as [x1, y1, x2, y2] pixel coordinates in 
 
 ${layout}
 ${context.length ? "\n" + context.join("\n") + "\n" : ""}
-List only the electrical devices and appliances you can actually see in this picture. Never add a device because a room of this kind usually has one: if it is not visible, it is not listed. For each give:
-- "device": be specific. Use these names where they fit: ${DEVICE_NAMES}. Never a vague "lights" or "electronics": say which kind (recessed downlights, LED panels, a desk lamp, a 24-inch monitor, a mini-fridge). Each distinct kind of device gets its own entry, even when two kinds sit side by side.
-- "count": how many you can see. Do not round up to a typical number.
+List every electrical device or appliance you can see in the picture - lights included - and nothing you cannot see. For each give:
+- "device": be specific. Use these names where they fit: ${DEVICE_NAMES}. Say which kind of light (recessed downlights, globe pendant lights, LED panels, track lights, a desk lamp) rather than just "lights". Each distinct kind gets its own entry, even when two kinds sit side by side.
+- "count": how many you can see.
 - "state": ON (lit, running, display showing something), STANDBY (dark but with an indicator light or clock), or OFF.
-- "confidence": 0 to 1, how sure you are of the device and the count. Use a low number for anything half-hidden, far away or ambiguous rather than leaving it out or guessing it is fine.
-- "visible": true. (Anything you would have to infer gets no entry at all.)
+- "confidence": 0 to 1, how sure you are of the device and the count.
+- "visible": true for everything you list.
 - "watts": your best estimate of ONE unit's power draw in watts while running, judged from its visible size, age and technology. Reference points: ${WATT_GUIDE}.
 - "technology": the kind of unit if you can tell, e.g. "LED", "halogen", "incandescent", "CFL", "T8 fluorescent", "T12 fluorescent", "CRT", "CCFL LCD", "plasma", "lamp projector", "laser projector". Omit if unsure.
 - "evidence": a few words on what you saw that decided the state and wattage.
 - "where": where in the picture the units are, in a few words ("ceiling, left half", "desk under the window"), so a person can walk to them.
 
 Counting rules - these are where audits go wrong:
-- Count every light fixture individually, including small recessed downlights far down a corridor. Report each kind of light as its own entry (troffers, downlights, pendants), never lumped together.
+- Count every light fixture individually, including small recessed downlights far down a corridor, pendant globes hanging from the ceiling and lamps on desks. Report each kind of light as its own entry (troffers, downlights, pendants), never lumped together. A light that is visibly lit is ON; a fixture that is clearly dark is OFF.
 - Daylight through a window, a reflection in glass or a glossy floor, and a white wall or grille are NOT lights. Only count a fixture you can see.
 - Count computers and monitors even when seen from behind or at an angle; an all-in-one (like an iMac) is one device, not a monitor plus a computer. If you cannot see the screen, use STANDBY.
 - Look across the whole image, edges and background included, before answering.
