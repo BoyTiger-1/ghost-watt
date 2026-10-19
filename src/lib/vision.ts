@@ -59,12 +59,21 @@ interface HostedProvider {
   fallbacks?: string[];
   /** The most images one request may carry. A video's frames are thinned to fit. */
   maxImages?: number;
+  /**
+   * How the JSON shape is asked for. "schema": response_format json_schema
+   * (falls back to json_object on a 400). "none": the prompt alone, as the
+   * original build did for Groq - its Qwen vision model answered best that way,
+   * and a schema it does not support costs a rejected request per scan.
+   */
+  jsonMode?: "schema" | "none";
 }
 
 // Box coordinates roughly triple the length of a reply: a full lab at 8 boxes a
 // type is 1000+ tokens. 700 used to cut the JSON off mid-array, and a truncated
 // array parses as nothing, so the whole scan fell through to the estimate.
-const MAX_TOKENS = 1500;
+// Qwen 3.x on Groq can think before it answers, and thinking counts against the
+// limit: at 1500 a busy room's reply was sometimes cut off mid-array.
+const MAX_TOKENS = 2500;
 /** A video's frames share one reply, and current models think before answering. */
 const MAX_TOKENS_LARGE = 4000;
 
@@ -193,15 +202,17 @@ async function callAnthropic(
     .trim();
 }
 
-function openAiCompatible(endpoint: string) {
+function openAiCompatible(endpoint: string, jsonMode: "schema" | "none" = "schema") {
   return async (imgs: DecodedImage[], key: string, model: string, prompt: string, schema: object): Promise<string> => {
     const body = (strict: boolean) => ({
       model,
       max_tokens: imgs.length > 1 ? MAX_TOKENS_LARGE : MAX_TOKENS,
       temperature: 0,
-      ...(strict
-        ? { response_format: { type: "json_schema", json_schema: { name: "report", schema } } }
-        : { response_format: { type: "json_object" } }),
+      ...(jsonMode === "none"
+        ? {}
+        : strict
+          ? { response_format: { type: "json_schema", json_schema: { name: "report", schema } } }
+          : { response_format: { type: "json_object" } }),
       messages: [
         {
           role: "user",
@@ -258,18 +269,18 @@ const HOSTED: HostedProvider[] = [
     id: "groq",
     label: "Groq",
     env: "GROQ_API_KEY",
-    // Groq's vision line-up churns (Llama 3.2 Vision, then Llama 4 Scout, were
-    // each retired). The default is the vision model Groq documents today, the
-    // fallbacks are the ones it has carried recently, and on model_not_found the
-    // call also asks Groq for any model whose input_modalities include "image".
-    // GROQ_API_KEY_MODEL still overrides. Groq accepts at most 3 images (Qwen) or
-    // 5 (Llama 4) per request, so a video's frames are thinned to fit.
-    model: "qwen/qwen3.6-27b",
-    fallbacks: ["meta-llama/llama-4-scout-17b-16e-instruct", "meta-llama/llama-4-maverick-17b-128e-instruct"],
+    // Groq's vision line-up churns: Llama 4 Scout was retired, then Qwen 3.6.
+    // Qwen 3.8 is the one answering in production (it is what the live site
+    // reports). A retired default no longer breaks anything: on model_not_found
+    // the call asks Groq for a model whose input_modalities include "image" and
+    // retries with that. GROQ_API_KEY_MODEL still overrides. Qwen takes at most
+    // 3 images a request, so a video's frames are thinned to fit.
+    model: "qwen/qwen3.8-27b",
     maxImages: 3,
+    jsonMode: "none",
     signup: "https://console.groq.com/keys",
     note: "Free tier, and by far the fastest to answer. Images cost nothing.",
-    call: openAiCompatible("https://api.groq.com/openai/v1/chat/completions"),
+    call: openAiCompatible("https://api.groq.com/openai/v1/chat/completions", "none"),
     modelsUrl: "https://api.groq.com/openai/v1/models",
   },
   {
