@@ -17,7 +17,6 @@ import { ThemeToggle } from "./ThemeToggle";
 const TABS = [
   { href: "/scan", key: "nav.scanner", icon: "scan" },
   { href: "/portfolio", key: "nav.rooms", icon: "rooms" },
-  { href: "/report", key: "nav.brief", icon: "doc" },
   { href: "/buildings", key: "nav.buildings", icon: "building" },
   { href: "/methodology", key: "nav.method", icon: "book" },
 ] as const satisfies readonly { href: string; key: Key; icon: string }[];
@@ -95,7 +94,7 @@ export function Nav() {
         aria-label="Sections"
         className="app-tabbar no-print fixed inset-x-0 bottom-0 z-50 border-t border-line/80 bg-ink/85 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl backdrop-saturate-150 md:hidden"
       >
-        <ul className="mx-auto grid max-w-md grid-cols-5">
+        <ul className="mx-auto grid max-w-md grid-cols-4">
           {TABS.map((tab) => {
             const active = pathname === tab.href;
             return (

@@ -7,7 +7,7 @@ const COLUMNS = [
     links: [
       { href: "/scan", label: "Scanner" },
       { href: "/portfolio", label: "Rooms" },
-      { href: "/report", label: "Board brief" },
+      { href: "/scan?view=report", label: "Printable report" },
       { href: "/buildings", label: "Buildings" },
     ],
   },

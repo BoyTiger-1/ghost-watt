@@ -12,18 +12,7 @@ export function UploadMode({ onFiles }: { onFiles: (files: File[]) => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
 
-  // Paste a screenshot or a copied photo straight in.
-  useEffect(() => {
-    const onPaste = (e: ClipboardEvent) => {
-      const files = [...(e.clipboardData?.files ?? [])].filter(accepted);
-      if (files.length) {
-        e.preventDefault();
-        onFiles(files);
-      }
-    };
-    window.addEventListener("paste", onPaste);
-    return () => window.removeEventListener("paste", onPaste);
-  }, [onFiles]);
+  usePastedFiles(onFiles);
 
   return (
     <div
@@ -87,7 +76,23 @@ export function UploadMode({ onFiles }: { onFiles: (files: File[]) => void }) {
   );
 }
 
-function accepted(f: File) {
+/** Paste a screenshot or a copied photo straight in. */
+export function usePastedFiles(onFiles?: (files: File[]) => void) {
+  useEffect(() => {
+    if (!onFiles) return;
+    const onPaste = (e: ClipboardEvent) => {
+      const files = [...(e.clipboardData?.files ?? [])].filter(accepted);
+      if (files.length) {
+        e.preventDefault();
+        onFiles(files);
+      }
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [onFiles]);
+}
+
+export function accepted(f: File) {
   return f.type.startsWith("image/") || f.type.startsWith("video/") || /\.(hei[cf]|mov|mp4|webm)$/i.test(f.name);
 }
 

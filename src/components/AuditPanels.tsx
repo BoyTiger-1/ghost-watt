@@ -249,12 +249,6 @@ export function ExportBar({
         CSV for facilities
       </button>
       <button
-        onClick={() => window.print()}
-        className="border border-line px-3 py-1.5 text-[0.8rem] text-mist transition-colors hover:border-fog/40 hover:text-fog rounded-full"
-      >
-        Print / PDF
-      </button>
-      <button
         onClick={copySummary}
         className="border border-line px-3 py-1.5 text-[0.8rem] text-mist transition-colors hover:border-fog/40 hover:text-fog rounded-full"
       >

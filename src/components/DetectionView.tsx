@@ -1,9 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+// A photo with every device it was read for drawn on it.
+//
+// State, not device type, picks the colour: what a reader needs from the photo
+// at a glance is which things are burning power, not which are monitors. The
+// same boxes are burned into a PNG for the report and for saving.
+
+import { useMemo } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { fmtMoney } from "@/lib/energy";
 import { loadImage } from "@/lib/image";
+import { STATE_COLOR, STATE_PLAIN } from "./scan/plain";
 import type { AnalysisMode, Box, DeviceState, Offender, Sighting } from "@/lib/types";
 
 export interface DetectionPhoto {
@@ -16,21 +23,7 @@ export interface DetectionPhoto {
   sightings?: Sighting[];
 }
 
-// State, not device type, picks the colour: what a facilities manager needs from
-// the photo at a glance is which things are burning power, not which are monitors.
-const STATE_COLOR: Record<DeviceState, string> = {
-  on: "#ff6a5c",
-  standby: "#ffb24d",
-  off: "#7d8799",
-};
-
-const STATE_WORD: Record<DeviceState, string> = {
-  on: "on",
-  standby: "standby",
-  off: "off",
-};
-
-/** One thing drawn on the photo: a costed offender, or a device seen switched off. */
+/** One thing drawn on the photo: a costed device, or one seen switched off. */
 interface Mark {
   id: string;
   label: string;
@@ -42,7 +35,7 @@ interface Mark {
   unverified?: boolean;
 }
 
-interface Placed {
+export interface Placed {
   key: string;
   box: Box;
   mark: Mark;
@@ -50,140 +43,88 @@ interface Placed {
   n: number;
 }
 
-/** Offender card anchor, shared with OffenderCard so a box click can scroll to it. */
+/** Device row anchor, so a box click can scroll to its row. */
 export const offenderAnchor = (id: string) => `offender-${id}`;
 
-export function DetectionView({
-  photos,
+export function placeMarks(photo: DetectionPhoto): Placed[] {
+  const out: Placed[] = [];
+  for (const o of photo.offenders) {
+    const mark: Mark = { id: o.id, label: o.label, state: o.state, count: o.count, cost: o.costPerYear, unverified: o.unverified };
+    (o.boxes ?? []).forEach((box, n) => out.push({ key: `${o.id}-${n}`, box, mark, n }));
+  }
+  for (const [i, s] of (photo.sightings ?? []).entries()) {
+    const mark: Mark = { id: `sighting-${i}`, label: s.label, state: s.state, count: s.count, cost: null };
+    s.boxes.forEach((box, n) => out.push({ key: `${mark.id}-${n}`, box, mark, n }));
+  }
+  // Big boxes first, so small ones drawn later sit on top and stay hoverable.
+  return out.sort((a, b) => area(b.box) - area(a.box));
+}
+
+export function AnnotatedPhoto({
+  photo,
   hovered,
   onHover,
+  onPick,
+  showLabels = true,
+  hidden,
 }: {
-  photos: DetectionPhoto[];
+  photo: DetectionPhoto;
   hovered: string | null;
   onHover: (id: string | null) => void;
+  /** A box was clicked: the device it belongs to. */
+  onPick?: (offenderId: string) => void;
+  showLabels?: boolean;
+  hidden?: ReadonlySet<DeviceState>;
 }) {
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [showLabels, setShowLabels] = useState(true);
-  const [hidden, setHidden] = useState<Set<DeviceState>>(new Set());
   const reduceMotion = useReducedMotion();
-
-  const photo = photos.find((p) => p.id === activeId) ?? photos[0];
-
-  const placed = useMemo<Placed[]>(() => {
-    if (!photo) return [];
-    const out: Placed[] = [];
-    for (const o of photo.offenders) {
-      const mark: Mark = { id: o.id, label: o.label, state: o.state, count: o.count, cost: o.costPerYear, unverified: o.unverified };
-      (o.boxes ?? []).forEach((box, n) => out.push({ key: `${o.id}-${n}`, box, mark, n }));
-    }
-    for (const [i, s] of (photo.sightings ?? []).entries()) {
-      const mark: Mark = { id: `sighting-${i}`, label: s.label, state: s.state, count: s.count, cost: null };
-      s.boxes.forEach((box, n) => out.push({ key: `${mark.id}-${n}`, box, mark, n }));
-    }
-    // Big boxes first, so small ones drawn later sit on top and stay hoverable.
-    return out.sort((a, b) => area(b.box) - area(a.box));
-  }, [photo]);
-
-  if (!photo) return null;
-
-  const visible = placed.filter((p) => !hidden.has(p.mark.state));
-  const located = placed.length;
-  const counted =
-    photo.offenders.reduce((s, o) => s + o.count, 0) +
-    (photo.sightings ?? []).reduce((s, o) => s + o.count, 0);
+  const placed = useMemo(() => placeMarks(photo), [photo]);
+  const visible = hidden ? placed.filter((p) => !hidden.has(p.mark.state)) : placed;
   const cloud = photo.mode === "enhanced";
 
-  function toggleState(s: DeviceState) {
-    setHidden((prev) => {
-      const next = new Set(prev);
-      if (next.has(s)) next.delete(s);
-      else next.add(s);
-      return next;
-    });
-  }
-
-  function jumpTo(id: string) {
-    if (id.startsWith("sighting-")) return;
-    document
-      .getElementById(offenderAnchor(id))
-      ?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
-  }
-
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="panel ticked overflow-hidden"
-      aria-label="Where each device was seen"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="mono-label text-cyan">detections</span>
-          <span className="truncate font-mono text-[0.68rem] text-dim">
-            {photo.name} · {photo.engine}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <ToggleChip on={showLabels} onClick={() => setShowLabels((v) => !v)}>
-            labels
-          </ToggleChip>
-          <button
-            onClick={() => downloadAnnotated(photo, visible, showLabels)}
-            disabled={!located}
-            className="border border-line px-2.5 py-1 text-[0.75rem] text-mist transition-colors enabled:hover:border-cyan enabled:hover:text-cyan disabled:opacity-40"
-          >
-            save png
-          </button>
+    <div className="relative flex justify-center bg-black">
+      {/* The boxes share a frame exactly the size of the drawn image, so they line up even when a tall photo is letterboxed. */}
+      <div className="relative inline-block max-w-full">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={photo.dataUrl} alt={`${photo.name}, with the devices found marked`} className="block h-auto max-h-[70vh] w-auto max-w-full select-none" draggable={false} />
+        <div className="absolute inset-0">
+          <BoxLayer photo={photo} visible={visible} hovered={hovered} onHover={onHover} onPick={onPick} showLabels={showLabels} reduceMotion={!!reduceMotion} />
         </div>
       </div>
 
-      {photos.length > 1 && (
-        <div className="no-scrollbar flex gap-2 overflow-x-auto border-b border-line px-4 py-2.5">
-          {photos.map((p) => {
-            const n =
-              p.offenders.reduce((s, o) => s + (o.boxes?.length ?? 0), 0) +
-              (p.sightings ?? []).reduce((s, o) => s + o.boxes.length, 0);
-            const active = p.id === photo.id;
-            return (
-              <button
-                key={p.id}
-                onClick={() => setActiveId(p.id)}
-                aria-pressed={active}
-                className={`flex shrink-0 items-center gap-2 border px-1.5 py-1 transition-colors ${
-                  active ? "border-cyan" : "border-line hover:border-line2"
-                }`}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={p.dataUrl} alt="" className="h-7 w-10 object-cover" />
-                <span className={`font-mono text-[0.66rem] ${active ? "text-fog" : "text-dim"}`}>
-                  {p.name} · {n}
-                </span>
-              </button>
-            );
-          })}
+      {!placed.length && (
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent px-4 pb-3 pt-10">
+          <p className="text-[0.78rem] leading-relaxed text-white/80">
+            {cloud
+              ? "The AI counted the devices but didn't say exactly where they are, so nothing is outlined on this photo."
+              : "Nothing in this photo could be outlined."}
+          </p>
         </div>
       )}
+    </div>
+  );
+}
 
-      <div className="relative bg-black/40">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={photo.dataUrl}
-          alt={`${photo.name}, with detected devices marked`}
-          className="block h-auto w-full select-none"
-          draggable={false}
-        />
-
-        {/* Faint grid while boxes draw in: reads as "measured", not decorated. */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 opacity-[0.07]"
-          style={{
-            backgroundImage:
-              "linear-gradient(#2fe6cf 1px, transparent 1px), linear-gradient(90deg, #2fe6cf 1px, transparent 1px)",
-            backgroundSize: "10% 10%",
-          }}
-        />
-
+/** The boxes, positioned in fractions of the image. */
+function BoxLayer({
+  photo,
+  visible,
+  hovered,
+  onHover,
+  onPick,
+  showLabels,
+  reduceMotion,
+}: {
+  photo: DetectionPhoto;
+  visible: Placed[];
+  hovered: string | null;
+  onHover: (id: string | null) => void;
+  onPick?: (offenderId: string) => void;
+  showLabels: boolean;
+  reduceMotion: boolean;
+}) {
+  return (
+    <>
         <AnimatePresence>
           {visible.map((p, i) => {
             const color = STATE_COLOR[p.mark.state];
@@ -193,6 +134,7 @@ export function DetectionView({
             const labelBelow = y1 < 0.07;
             // Boxes near the right edge hang their label leftwards, so it stays on the photo.
             const labelRight = x1 > 0.55;
+            const sighting = p.mark.id.startsWith("sighting-");
             return (
               <motion.button
                 key={`${photo.id}-${p.key}`}
@@ -209,9 +151,9 @@ export function DetectionView({
                 onMouseLeave={() => onHover(null)}
                 onFocus={() => onHover(p.mark.id)}
                 onBlur={() => onHover(null)}
-                onClick={() => jumpTo(p.mark.id)}
-                aria-label={`${p.mark.label}, ${STATE_WORD[p.mark.state]}, ${costWords(p.mark)}`}
-                className="absolute cursor-pointer outline-none focus-visible:ring-1 focus-visible:ring-cyan"
+                onClick={() => !sighting && onPick?.(p.mark.id)}
+                aria-label={`${p.mark.label}, ${STATE_PLAIN[p.mark.state].toLowerCase()}, ${costWords(p.mark)}`}
+                className="absolute cursor-pointer outline-none focus-visible:ring-1 focus-visible:ring-white"
                 style={{
                   left: `${x1 * 100}%`,
                   top: `${y1 * 100}%`,
@@ -228,12 +170,12 @@ export function DetectionView({
                 <Corners color={color} thick={isHot} />
                 {showLabels && (p.n === 0 || isHot) && (
                   <span
-                    className={`pointer-events-none absolute ${labelRight ? "right-[-1px]" : "left-[-1px]"} whitespace-nowrap px-1.5 py-0.5 font-mono text-[0.6rem] font-bold text-black sm:text-[0.66rem] ${
+                    className={`pointer-events-none absolute ${labelRight ? "right-[-1px]" : "left-[-1px]"} whitespace-nowrap rounded-[3px] px-1.5 py-0.5 text-[0.62rem] font-semibold text-black sm:text-[0.7rem] ${
                       labelBelow ? "top-full mt-px" : "bottom-full mb-px"
                     }`}
                     style={{ background: color }}
                   >
-                    {p.mark.label.toLowerCase()}
+                    {p.mark.label}
                     {p.n === 0 ? ` · ${tag(p.mark)}` : ""}
                   </span>
                 )}
@@ -241,40 +183,7 @@ export function DetectionView({
             );
           })}
         </AnimatePresence>
-
-        {!located && (
-          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent px-4 pb-3 pt-10">
-            <p className="font-mono text-[0.7rem] leading-relaxed text-mist">
-              {cloud
-                ? "The model counted devices but did not say where they are, so nothing is marked on this photo."
-                : "The on-device detector found nothing it could box in this photo."}
-            </p>
-          </div>
-        )}
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-        <div className="flex flex-wrap items-center gap-2">
-          {(Object.keys(STATE_COLOR) as DeviceState[]).map((s) => {
-            const n = placed.filter((p) => p.mark.state === s).length;
-            if (!n) return null;
-            return (
-              <ToggleChip key={s} on={!hidden.has(s)} onClick={() => toggleState(s)} color={STATE_COLOR[s]}>
-                {STATE_WORD[s]} · {n}
-              </ToggleChip>
-            );
-          })}
-        </div>
-        {located > 0 && (
-          <span
-            className="font-mono text-[0.66rem] text-dim"
-            title="The model marks the units it can see clearly. Costs always use the full count."
-          >
-            {located} of {counted} units located · costs use the full count
-          </span>
-        )}
-      </div>
-    </motion.section>
+    </>
   );
 }
 
@@ -292,42 +201,14 @@ function Corners({ color, thick }: { color: string; thick: boolean }) {
   );
 }
 
-function ToggleChip({
-  on,
-  onClick,
-  color,
-  children,
-}: {
-  on: boolean;
-  onClick: () => void;
-  color?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={on}
-      className={`flex items-center gap-1.5 border px-2.5 py-1 text-[0.75rem] transition-colors ${
-        on ? "border-line2 text-fog" : "border-line text-dim line-through"
-      }`}
-    >
-      {color && <span className="h-2 w-2" style={{ background: on ? color : "transparent", border: `1px solid ${color}` }} />}
-      {children}
-    </button>
-  );
-}
-
 function tag(m: Mark) {
-  if (m.unverified) return `unverified ×${m.count}`;
-  return m.cost === null ? `off ×${m.count}` : `${fmtMoney(m.cost)}/yr`;
+  if (m.unverified) return "not sure";
+  return m.cost === null ? "off" : m.cost > 0 ? `${fmtMoney(m.cost)}/yr wasted` : "no waste";
 }
 
 function costWords(m: Mark) {
-  if (m.unverified) return `${m.count} reported by the model but unverified, not counted`;
-  return m.cost === null
-    ? `${m.count} seen switched off, costing nothing`
-    : `${fmtMoney(m.cost)} a year for all ${m.count}`;
+  if (m.unverified) return `${m.count} the AI wasn't sure about, not counted`;
+  return m.cost === null ? `${m.count} seen switched off, costing nothing` : `${fmtMoney(m.cost)} a year wasted for all ${m.count}`;
 }
 
 function area(b: Box) {
@@ -335,10 +216,10 @@ function area(b: Box) {
 }
 
 /**
- * Burn the boxes into a PNG, so the evidence survives outside the app - in an
- * email to facilities, a slide for the school board, a work order.
+ * The photo with its boxes burned in, as a PNG data URL: for the report, an
+ * email to facilities, a slide for the school board.
  */
-async function downloadAnnotated(photo: DetectionPhoto, placed: Placed[], labels: boolean) {
+export async function annotatedDataUrl(photo: DetectionPhoto, labels = true): Promise<string | null> {
   const img = await loadImage(photo.dataUrl);
   const W = img.naturalWidth;
   const H = img.naturalHeight;
@@ -346,15 +227,15 @@ async function downloadAnnotated(photo: DetectionPhoto, placed: Placed[], labels
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext("2d");
-  if (!ctx) return;
+  if (!ctx) return null;
   ctx.drawImage(img, 0, 0);
 
   const lw = Math.max(2, Math.round(W / 400));
   const font = Math.max(11, Math.round(W / 70));
-  ctx.font = `bold ${font}px ui-monospace, monospace`;
+  ctx.font = `bold ${font}px ui-sans-serif, system-ui, sans-serif`;
   ctx.textBaseline = "top";
 
-  for (const p of placed) {
+  for (const p of placeMarks(photo)) {
     const color = STATE_COLOR[p.mark.state];
     const x = p.box[0] * W;
     const y = p.box[1] * H;
@@ -364,7 +245,7 @@ async function downloadAnnotated(photo: DetectionPhoto, placed: Placed[], labels
     ctx.lineWidth = lw;
     ctx.strokeRect(x, y, w, h);
     if (labels && p.n === 0) {
-      const text = `${p.mark.label.toLowerCase()} · ${tag(p.mark)}`;
+      const text = `${p.mark.label} · ${tag(p.mark)}`;
       const tw = ctx.measureText(text).width + 8;
       const th = font + 6;
       const ty = y - th < 0 ? y + h : y - th;
@@ -377,15 +258,21 @@ async function downloadAnnotated(photo: DetectionPhoto, placed: Placed[], labels
 
   // Footer stamp: what this is and where the numbers came from.
   const total = photo.offenders.reduce((s, o) => s + (o.unverified ? 0 : o.costPerYear), 0);
-  const stamp = `GhostWatt · ${photo.name} · ${fmtMoney(total)}/yr phantom load · ${photo.engine}`;
+  const stamp = `Ghost Watt · ${photo.name} · ${fmtMoney(total)} a year wasted while empty`;
   const sh = font + 12;
   ctx.fillStyle = "rgba(0,0,0,0.72)";
   ctx.fillRect(0, H - sh, W, sh);
-  ctx.fillStyle = "#2fe6cf";
+  ctx.fillStyle = "#ffc35a";
   ctx.fillText(stamp, 8, H - sh + 6);
 
+  return canvas.toDataURL("image/png");
+}
+
+export async function downloadAnnotated(photo: DetectionPhoto) {
+  const url = await annotatedDataUrl(photo);
+  if (!url) return;
   const a = document.createElement("a");
-  a.href = canvas.toDataURL("image/png");
+  a.href = url;
   a.download = `ghostwatt-${photo.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.png`;
   a.click();
 }
