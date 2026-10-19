@@ -232,11 +232,12 @@ export function CameraMode({
       if (engineModeRef.current === "enhanced" && now0 >= a.cloudRetryAt) {
         a.confirmingWith = "enhanced";
         try {
-          const square = await analysisSquare(still.toDataURL("image/jpeg", 0.85), 0.8);
+          // A lighter upload than a photo scan: a phone on mobile data sends it faster.
+          const square = await analysisSquare(still.toDataURL("image/jpeg", 0.8), 0.68);
           const res = await fetch("/api/analyze", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ image: square.dataUrl, frame: square.frame, source: "Live view", settings: settingsRef.current }),
+            body: JSON.stringify({ image: square.dataUrl, frame: square.frame, source: "Live view", settings: settingsRef.current, fast: true }),
           });
           if (!res.ok) {
             const err = (await res.json().catch(() => null)) as AnalyzeError | null;

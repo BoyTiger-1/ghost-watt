@@ -82,3 +82,19 @@ Each detector lists what it found with its confidence and time. The page also
 exposes `window.__bench.one(url, [models])` for scripting against a labelled
 set; the Open Images run above used Playwright to call it per picture and a
 small Python script to match boxes.
+
+## Teaching the live detector lights
+
+The stock model has no lamp, light or fan class, so no threshold change can make
+it box a light. `scripts/train-detector.py` fine-tunes a MediaPipe detector on
+Open Images V7 (Lamp, Light bulb, Chandelier, Ceiling fan, Television, Computer
+monitor, Laptop, Microwave oven, Refrigerator, Oven, Printer) and exports a
+`.tflite` file. Setting `NEXT_PUBLIC_DETECTOR_MODEL_URL` to that file swaps it in
+with no code change; the class names it emits are already mapped to the device
+catalogue. The script is written for a Colab GPU runtime and has not been run in
+this repository's build environment.
+
+Open Images labels say what a thing is, not whether it is lit, so a trained
+lamp detector still needs the pixel check (or the cloud confirm) to tell a lit
+fixture from a dark one. Re-run the benchmark above with the new model before
+switching the deployed site to it.
