@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Arrow } from "./HomeNav";
 import { useMediaQuery } from "./useMediaQuery";
 import { usePrefs } from "@/lib/prefs";
+import { Flashlight, Magnetic, SplitLines } from "@/components/motion/Motion";
 
 const SchoolScene = dynamic(() => import("./SchoolScene").then((m) => m.SchoolScene), {
   ssr: false,
@@ -33,6 +34,7 @@ export function HomeHero() {
   return (
     <section className="relative isolate overflow-hidden">
       {/* the sky at about 7pm: haze up top, a low warm sun, paper underneath */}
+      <Flashlight size={560} className="-z-[5]" />
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute inset-0 bg-[linear-gradient(180deg,var(--home-sky-1)_0%,var(--home-sky-2)_32%,var(--home-sky-3)_62%,var(--color-paper)_100%)]" />
         <div className="absolute right-[8%] top-[22%] h-[38rem] w-[38rem] rounded-full bg-[radial-gradient(circle,var(--home-sun),transparent_65%)] blur-2xl" />
@@ -69,18 +71,18 @@ export function HomeHero() {
             An energy audit you can do with a phone
           </motion.p>
 
-          <motion.h1
-            variants={rise}
-            initial="hidden"
-            animate="show"
-            custom={1}
-            className="font-editorial mt-5 text-[clamp(3.2rem,6.2vw,5.9rem)] leading-[0.93] text-graphite"
-          >
-            Your school has
-            <br />a night shift.
-            <br />
-            <span className="whitespace-nowrap italic text-dusk">Nobody clocked in.</span>
-          </motion.h1>
+          <h1 className="font-editorial mt-5 text-[clamp(3.2rem,6.2vw,5.9rem)] leading-[0.93] text-graphite">
+            <SplitLines
+              delay={0.25}
+              lines={[
+                "Your school has",
+                "a night shift.",
+                <span key="c" className="whitespace-nowrap italic text-dusk">
+                  Nobody clocked in.
+                </span>,
+              ]}
+            />
+          </h1>
 
           <motion.p
             variants={rise}
@@ -101,6 +103,7 @@ export function HomeHero() {
             custom={3}
             className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-4"
           >
+<Magnetic>
             <Link
               href="/scan"
               className="group inline-flex items-center gap-3 rounded-full bg-graphite py-3.5 pl-6 pr-4 text-[0.95rem] font-medium text-paper shadow-[0_12px_30px_-12px_rgba(28,27,24,0.6)] transition-transform hover:scale-[1.03] active:scale-[0.98]"
@@ -110,6 +113,7 @@ export function HomeHero() {
                 <Arrow />
               </span>
             </Link>
+            </Magnetic>
             <a href="#see" className="group inline-flex items-center gap-2 text-[0.95rem] text-graphite">
               <span className="underline decoration-graphite/25 decoration-1 underline-offset-[6px] transition-colors group-hover:decoration-graphite">
                 See how it works
@@ -153,9 +157,9 @@ function TonightCard() {
       initial={{ opacity: 0, y: 24 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.9, delay: 0.6, ease: [0.22, 1, 0.36, 1] }}
-      className="row-start-2 mt-12 overflow-hidden rounded-[1.75rem] bg-[linear-gradient(180deg,#2c3352,#1d2238)] p-5 text-paper shadow-[0_30px_60px_-30px_rgba(29,34,56,0.7)]"
+      className="row-start-2 mt-12 overflow-hidden rounded-[1.75rem] bg-[linear-gradient(180deg,#2c3352,#1d2238)] p-5 text-moon shadow-[0_30px_60px_-30px_rgba(29,34,56,0.7)]"
     >
-      <div className="flex items-center justify-between text-[0.8rem] text-paper/60">
+      <div className="flex items-center justify-between text-[0.8rem] text-moon/60">
         <span className="flex items-center gap-2">
           <span className="soft-pulse h-1.5 w-1.5 rounded-full bg-[#ffc777]" />
           Tonight, 9:41 pm
@@ -180,14 +184,14 @@ function TonightCard() {
             />
             <span className="min-w-0 flex-1">
               <span className="block text-[0.95rem] font-medium leading-tight">{t.room}</span>
-              <span className="block text-[0.8rem] text-paper/55">{t.what}, left on</span>
+              <span className="block text-[0.8rem] text-moon/55">{t.what}, left on</span>
             </span>
             <span className="font-numeric text-[0.9rem] text-[#ffc777]">${t.cost}</span>
           </motion.li>
         ))}
       </ul>
       <div className="mt-4 flex items-end justify-between border-t border-white/10 pt-4">
-        <span className="text-[0.8rem] leading-snug text-paper/60">
+        <span className="text-[0.8rem] leading-snug text-moon/60">
           a year, for one school,
           <br />
           ranked worst first

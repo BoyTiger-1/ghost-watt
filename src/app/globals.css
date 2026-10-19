@@ -47,6 +47,9 @@
   --color-moss: #2e5b45;
   --color-dusk: #3a4566;
   --color-haze: #dfe4ef;
+
+  /* text on the night panels, which stay dark in both themes */
+  --color-moon: #f5f2eb;
 }
 
 :root {
@@ -73,9 +76,9 @@
   }
 }
 
-/* Room under the phone tab bar, on every page but the landing page. */
+/* Room under the phone tab bar, on every page. */
 @media (max-width: 767px) {
-  body:not(:has(.home)) main {
+  main {
     padding-bottom: calc(4.75rem + env(safe-area-inset-bottom));
   }
 }
@@ -996,4 +999,98 @@ body:has(.home) ::-webkit-scrollbar-thumb:hover { background: var(--color-pebble
   background: color-mix(in srgb, var(--color-amber) 10%, transparent);
   box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.18);
   clip-path: inset(-100vmax 0);
+}
+
+/* ---- motion & atmosphere ---------------------------------------------------
+ *
+ * The site's "after hours" voice in CSS: a light that follows you through the
+ * dark, film grain over the night scenes, a bolt that flickers when you reach
+ * for the logo. Every one of these switches off under reduced motion and lite
+ * visuals.
+ */
+
+/* The hero's floating room tags: theme tokens, so they read in both themes. */
+.scene-tag {
+  background: color-mix(in oklab, var(--color-cream) 88%, transparent);
+  border-color: color-mix(in oklab, var(--color-graphite) 12%, transparent);
+  box-shadow: 0 8px 24px -8px rgba(28, 27, 24, 0.35);
+}
+:root[data-theme="dark"] .scene-tag {
+  background: rgba(24, 24, 22, 0.88);
+  border-color: rgba(255, 214, 160, 0.22);
+  box-shadow: 0 10px 30px -8px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(0, 0, 0, 0.25), 0 0 24px -6px rgba(255, 181, 74, 0.25);
+}
+
+/* The bolt in the logo flickers like a tube when you reach for it. */
+@keyframes bolt-flicker {
+  0%, 100% { opacity: 1; }
+  20% { opacity: 0.2; }
+  28% { opacity: 1; }
+  44% { opacity: 0.45; }
+  52% { opacity: 1; }
+}
+.nav-brand:hover svg path:last-child {
+  animation: bolt-flicker 0.7s steps(1) 1;
+}
+
+/* The active section pill: a soft amber glow so it reads at a glance. */
+.nav-pill {
+  box-shadow: 0 1px 2px rgba(28, 27, 24, 0.18), 0 8px 22px -8px rgba(28, 27, 24, 0.45);
+}
+:root[data-theme="dark"] .nav-pill {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 8px 26px -8px rgba(255, 190, 110, 0.35);
+}
+
+/* Film grain, laid over the night scenes. */
+.grain::after {
+  content: "";
+  position: absolute;
+  inset: -50%;
+  pointer-events: none;
+  opacity: 0.07;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  animation: grain 1.2s steps(6) infinite;
+  mix-blend-mode: overlay;
+}
+@keyframes grain {
+  0% { transform: translate(0, 0); }
+  20% { transform: translate(-3%, 2%); }
+  40% { transform: translate(2%, -3%); }
+  60% { transform: translate(-2%, -1%); }
+  80% { transform: translate(3%, 3%); }
+  100% { transform: translate(0, 0); }
+}
+
+/* Masked line reveal: each line rises out of its own slot. */
+.line-mask {
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.08em;
+  margin-bottom: -0.08em;
+}
+
+/* An endless ticker. */
+@keyframes ticker {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.ticker { animation: ticker 38s linear infinite; }
+.ticker-host:hover .ticker { animation-play-state: paused; }
+
+/* Room glyphs that come on one at a time. */
+@keyframes window-on {
+  0%, 100% { opacity: 0.15; }
+  8%, 60% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .grain::after,
+  .ticker,
+  .nav-brand:hover svg path:last-child {
+    animation: none;
+  }
+}
+:root[data-motion="reduce"] .grain::after,
+:root[data-lite] .grain::after {
+  display: none;
 }

@@ -1,4 +1,5 @@
-import { HomeNav } from "@/components/home/HomeNav";
+import { Intro } from "@/components/home/Intro";
+import { ImpactSection } from "@/components/home/ImpactSection";
 import { HomeHero } from "@/components/home/HomeHero";
 import { Manifesto } from "@/components/home/Manifesto";
 import { SeeSection } from "@/components/home/SeeSection";
@@ -13,9 +14,10 @@ import { HomeFooter } from "@/components/home/HomeFooter";
 export default function Home() {
   return (
     <div className="home bg-paper text-graphite">
-      <HomeNav />
+      <Intro />
       <HomeHero />
       <Manifesto />
+      <ImpactSection />
       <SeeSection />
       <CountSection />
       <EverywhereSection />

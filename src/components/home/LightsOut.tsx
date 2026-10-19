@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useRef } from "react";
 import { motion, useScroll, useTransform, type MotionValue } from "framer-motion";
 import { Arrow } from "./HomeNav";
+import { Flashlight, Magnetic, SplitLines } from "@/components/motion/Motion";
 
 const COLS = 14;
 const ROWS = 4;
@@ -35,31 +36,32 @@ export function LightsOut() {
     <section className="px-3 pb-6 pt-10 sm:px-6">
       <div
         ref={ref}
-        className="relative mx-auto max-w-[86rem] overflow-hidden rounded-[2rem] bg-[linear-gradient(180deg,#2a3150_0%,#1d2238_70%,#191d30_100%)] px-6 pb-16 pt-20 text-paper sm:rounded-[2.75rem] sm:px-14 sm:pt-28"
+        className="grain relative isolate mx-auto max-w-[86rem] overflow-hidden rounded-[2rem] bg-[linear-gradient(180deg,#2a3150_0%,#1d2238_70%,#191d30_100%)] px-6 pb-16 pt-20 text-moon sm:rounded-[2.75rem] sm:px-14 sm:pt-28"
       >
+        <Flashlight size={600} />
         <div className="pointer-events-none absolute -top-32 left-1/2 h-80 w-[60rem] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(160,175,230,0.25),transparent)]" />
 
         <div className="relative mx-auto max-w-[44rem] text-center">
           <h2 className="font-editorial text-[clamp(2.8rem,6.4vw,5.6rem)] leading-[0.96]">
-            Find it tonight.
-            <br />
-            <span className="italic text-[#ffc777]">Switch it off tomorrow.</span>
+            <SplitLines inView lines={["Find it tonight.", <span key="b" className="italic text-[#ffc777]">Switch it off tomorrow.</span>]} />
           </h2>
-          <p className="mx-auto mt-6 max-w-[30rem] text-[1.05rem] leading-[1.65] text-paper/70">
+          <p className="mx-auto mt-6 max-w-[30rem] text-[1.05rem] leading-[1.65] text-moon/70">
             Open Ghost Watt on any phone or laptop and scan your first room. There is nothing
             to install and nothing to pay for.
           </p>
           <div className="mt-9 flex flex-wrap items-center justify-center gap-x-6 gap-y-4">
+            <Magnetic>
             <Link
               href="/scan"
-              className="group inline-flex items-center gap-3 rounded-full bg-paper py-3.5 pl-6 pr-4 text-[0.95rem] font-medium text-graphite transition-transform hover:scale-[1.03] active:scale-[0.98]"
+              className="group inline-flex items-center gap-3 rounded-full bg-moon py-3.5 pl-6 pr-4 text-[0.95rem] font-medium text-[#1c1b18] transition-transform hover:scale-[1.03] active:scale-[0.98]"
             >
               Start a free scan
               <span className="grid h-7 w-7 place-items-center rounded-full bg-sodium transition-transform group-hover:translate-x-0.5">
                 <Arrow />
               </span>
             </Link>
-            <Link href="/methodology" className="text-[0.95rem] text-paper/80 underline decoration-paper/25 underline-offset-[6px] hover:decoration-paper">
+            </Magnetic>
+            <Link href="/methodology" className="text-[0.95rem] text-moon/80 underline decoration-moon/25 underline-offset-[6px] hover:decoration-moon">
               How the numbers work
             </Link>
           </div>

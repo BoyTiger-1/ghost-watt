@@ -73,7 +73,7 @@ export function ClassSection() {
             <div className="flex items-center justify-between">
               <span className="rounded-lg bg-graphite px-2.5 py-1 font-numeric text-[0.8rem] tracking-[0.18em] text-paper">K7QM4P</span>
               <span className="text-[0.8rem] text-stone">
-                <span className="font-numeric text-sodium-deep">${total.toLocaleString("en-US")}</span>/yr found
+                <span className="font-numeric text-amber">${total.toLocaleString("en-US")}</span>/yr found
               </span>
             </div>
             <ul className="mt-4 space-y-1.5">
@@ -88,7 +88,7 @@ export function ClassSection() {
                   <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-graphite text-[0.68rem] font-medium text-paper">{r.who}</span>
                   <span className="min-w-0 flex-1 text-[0.92rem] text-graphite">{r.name}</span>
                   {r.cost !== undefined ? (
-                    <span className="font-editorial text-[1.25rem] italic text-sodium-deep">${r.cost}</span>
+                    <span className="font-editorial text-[1.25rem] italic text-amber">${r.cost}</span>
                   ) : (
                     <span className="font-editorial text-[1.1rem] italic text-moss">all off</span>
                   )}
@@ -106,31 +106,31 @@ export function ClassSection() {
                 <span className="text-[0.85rem] text-stone">Lincoln Middle · 27 phones</span>
               </div>
               <span className="text-[0.85rem] text-stone">
-                found so far <span className="font-numeric text-sodium-deep">${total.toLocaleString("en-US")}</span>/yr
+                found so far <span className="font-numeric text-amber">${total.toLocaleString("en-US")}</span>/yr
               </span>
             </div>
 
             <svg viewBox="0 0 600 340" className="w-full" role="img" aria-label="Floor plan of a school filling in as rooms are scanned">
-              <rect x="20" y="150" width="560" height="40" fill="#f1ede5" />
-              <text x="300" y="175" textAnchor="middle" fontSize="10" fill="#a19b90" letterSpacing="3">CORRIDOR</text>
+              <rect x="20" y="150" width="560" height="40" style={{ fill: "var(--color-surface2)" }} />
+              <text x="300" y="175" textAnchor="middle" fontSize="10" style={{ fill: "var(--color-pebble)" }} letterSpacing="3">CORRIDOR</text>
               {ROOMS.map((r, i) => {
                 const d = 0.3 + i * 0.28;
                 const waste = r.cost !== undefined;
                 const heat = waste ? Math.min(1, (r.cost ?? 0) / 486) : 0;
                 return (
                   <g key={r.name}>
-                    <rect x={r.x} y={r.y} width={r.w} height={r.h} fill="#fbf9f5" stroke="#d6cfc2" strokeWidth="1.5" />
+                    <rect x={r.x} y={r.y} width={r.w} height={r.h} style={{ fill: "var(--color-cream)", stroke: "var(--color-line2)" }} strokeWidth="1.5" />
                     <motion.rect
                       x={r.x + 1}
                       y={r.y + 1}
                       width={r.w - 2}
                       height={r.h - 2}
-                      fill={waste ? `rgba(239,157,46,${0.18 + heat * 0.5})` : "rgba(46,91,69,0.12)"}
+                      fill={waste ? `rgba(239,157,46,${0.14 + heat * 0.3})` : "rgba(46,91,69,0.12)"}
                       initial={{ opacity: 0 }}
                       animate={inView ? { opacity: 1 } : {}}
                       transition={{ duration: 0.6, delay: d }}
                     />
-                    <text x={r.x + 10} y={r.y + 20} fontSize="11" fill="#57534b" style={{ fontFamily: "var(--font-geist)" }}>
+                    <text x={r.x + 10} y={r.y + 20} fontSize="11" style={{ fontFamily: "var(--font-geist)", fill: "var(--color-stone)" }}>
                       {r.name}
                     </text>
                     <motion.g initial={{ opacity: 0, y: 6 }} animate={inView ? { opacity: 1, y: 0 } : {}} transition={{ duration: 0.5, delay: d + 0.15 }}>
@@ -138,14 +138,13 @@ export function ClassSection() {
                         x={r.x + 10}
                         y={r.y + r.h - 14}
                         fontSize={waste && (r.cost ?? 0) > 200 ? 22 : 15}
-                        fill={waste ? "#a8610c" : "#2e5b45"}
-                        style={{ fontFamily: "var(--font-instrument)" }}
+                        style={{ fontFamily: "var(--font-instrument)", fill: waste ? "var(--color-amber)" : "var(--color-moss)" }}
                         fontStyle="italic"
                       >
                         {waste ? `$${r.cost}` : "all off"}
                       </text>
-                      <circle cx={r.x + r.w - 18} cy={r.y + 18} r="10" fill="#1c1b18" />
-                      <text x={r.x + r.w - 18} y={r.y + 21.5} fontSize="8.5" textAnchor="middle" fill="#f5f2eb" style={{ fontFamily: "var(--font-geist)" }}>
+                      <circle cx={r.x + r.w - 18} cy={r.y + 18} r="10" style={{ fill: "var(--color-graphite)" }} />
+                      <text x={r.x + r.w - 18} y={r.y + 21.5} fontSize="8.5" textAnchor="middle" style={{ fontFamily: "var(--font-geist)", fill: "var(--color-paper)" }}>
                         {r.who}
                       </text>
                     </motion.g>

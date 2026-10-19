@@ -13,6 +13,8 @@ const STRINGS = {
   "nav.places": ["My places", "Mis lugares"],
   "nav.team": ["Team scan", "En equipo"],
   "nav.method": ["Method", "Método"],
+  "nav.about": ["About", "Nosotros"],
+  "nav.open": ["Open the app", "Abrir la app"],
   "nav.settings": ["Settings", "Ajustes"],
   "nav.accessibility": ["Accessibility", "Accesibilidad"],
   "nav.theme.toLight": ["Switch to light mode", "Cambiar a modo claro"],

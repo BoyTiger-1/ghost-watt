@@ -419,11 +419,14 @@ function Tags() {
             style={{ animationDelay: `${l.delay}s` }}
           >
             <div className="flex flex-col items-center">
-              <div className="flex items-center gap-2 whitespace-nowrap rounded-full border border-white/70 bg-white/85 py-1.5 pl-2 pr-3 text-[12px] leading-none text-graphite shadow-[0_8px_24px_-8px_rgba(28,27,24,0.35)] backdrop-blur-md">
-                <span className="h-2 w-2 rounded-full" style={{ background: l.tone, boxShadow: `0 0 0 3px ${l.tone}33` }} />
+              {/* Theme tokens only: a fixed white chip turned into white text on white in dark mode. */}
+              <div className="scene-tag flex items-center gap-2 whitespace-nowrap rounded-full border py-1.5 pl-2 pr-3 text-[12px] leading-none text-graphite backdrop-blur-md">
+                <span className="relative h-2 w-2 rounded-full" style={{ background: l.tone, boxShadow: `0 0 0 3px ${l.tone}33` }}>
+                  <span className="soft-pulse absolute inset-0 rounded-full" style={{ background: l.tone }} />
+                </span>
                 <span className="font-medium">{l.room}</span>
-                <span className="hidden text-pebble md:inline">{l.what}</span>
-                <span className="font-numeric text-[11px] font-medium text-sodium-deep">{l.cost}/yr</span>
+                <span className="hidden text-stone md:inline">{l.what}</span>
+                <span className="font-numeric text-[11px] font-semibold text-amber">{l.cost}/yr</span>
               </div>
               <span className="w-px bg-graphite/30" style={{ height: l.stem }} />
               <span className="h-1.5 w-1.5 rounded-full bg-graphite/50" />

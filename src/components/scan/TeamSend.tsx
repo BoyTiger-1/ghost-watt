@@ -8,6 +8,7 @@ import Link from "next/link";
 import { isValidCode } from "@/lib/classroom";
 import type { Contribution } from "@/lib/classroom";
 import type { Offender } from "@/lib/types";
+import { submitToTeam } from "@/lib/team";
 import { TEAM_CODE_KEY, TEAM_NAME_KEY } from "../TeamScan";
 
 type Phase = "idle" | "sending" | "sent" | "error";
@@ -44,21 +45,11 @@ export function TeamSend({ offenders, mode, defaultRoom }: { offenders: Offender
       // ignore
     }
     try {
-      const res = await fetch(`/api/class/${code}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ area: roomValue, contributor: name, mode, offenders }),
-      });
-      const json = (await res.json()) as { ok?: boolean; error?: string };
-      if (!res.ok || !json.ok) {
-        setPhase("error");
-        setMessage(json.error ?? "The team didn't accept that.");
-        return;
-      }
+      await submitToTeam(code, { area: roomValue, contributor: name, mode, offenders });
       setPhase("sent");
-    } catch {
+    } catch (e) {
       setPhase("error");
-      setMessage("Couldn't reach the team. Check your connection.");
+      setMessage(e instanceof Error ? e.message : "Couldn't reach the team. Check your connection.");
     }
   };
 

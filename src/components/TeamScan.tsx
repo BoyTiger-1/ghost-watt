@@ -8,28 +8,19 @@
 // team", and this page adds it all up, live. No accounts, and no photos ever
 // leave anyone's phone: what travels is the list of devices each scan found.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
-import { CODE_LENGTH, isValidCode, normalizeCode, type MergedRow, type AreaSummary, type ClassTotals } from "@/lib/classroom";
+import { CODE_LENGTH, isValidCode, normalizeCode } from "@/lib/classroom";
+import { createTeam, teamVia, useTeamBoard, type TeamVia } from "@/lib/team";
+import { RELAY_HOURS } from "@/lib/teamRelay";
 import { useStore } from "@/lib/useStore";
 import { US_AVERAGE } from "@/lib/grid";
 import { fmtMoneyFull } from "@/lib/energy";
 import { DeviceGlyph } from "./DeviceGlyph";
+import { TeamQR } from "./team/TeamQR";
+import { PresentMode } from "./team/PresentMode";
 
-interface MapResponse {
-  code: string;
-  buildingName: string;
-  regionCode: string;
-  createdAt: string;
-  durable: boolean;
-  rows: MergedRow[];
-  totals: ClassTotals;
-  areas: AreaSummary[];
-  error?: string;
-}
-
-const POLL_MS = 6000;
 /** Shared with TeamSend on the scanner, so a joined team is remembered there too. */
 export const TEAM_CODE_KEY = "ghostwatt.class.code";
 export const TEAM_NAME_KEY = "ghostwatt.class.name";
@@ -44,10 +35,9 @@ export function TeamScan() {
   const [code, setCode] = useState("");
   const [entry, setEntry] = useState("");
   const [teamName, setTeamName] = useState("");
-  const [data, setData] = useState<MapResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [tier, setTier] = useState<{ durable: boolean; local: boolean } | null>(null);
+  const [via, setVia] = useState<TeamVia | null>(null);
 
   // A link with ?code= joins straight away; otherwise the last team is remembered.
   useEffect(() => {
@@ -65,47 +55,18 @@ export function TeamScan() {
         // Private mode: it just won't remember.
       }
     }, 0);
-    fetch("/api/class", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j: { durable: boolean }) => setTier({ durable: j.durable, local: ["localhost", "127.0.0.1"].includes(window.location.hostname) }))
-      .catch(() => setTier(null));
+    void teamVia().then(setVia);
     return () => clearTimeout(t);
   }, []);
-
-  const load = useCallback(async (c: string) => {
-    try {
-      const res = await fetch(`/api/class/${c}`, { cache: "no-store" });
-      const json = (await res.json()) as MapResponse;
-      if (!res.ok) {
-        setError(json.error ?? "That team couldn't be found. Codes expire after two weeks.");
-        setData(null);
-        return;
-      }
-      setData(json);
-      setError(null);
-    } catch {
-      setError("Couldn't reach the team. Check your connection.");
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!code) return;
-    const first = setTimeout(() => load(code), 0);
-    const t = setInterval(() => load(code), POLL_MS);
-    return () => {
-      clearTimeout(first);
-      clearInterval(t);
-    };
-  }, [code, load]);
 
   const open = (c: string) => {
     remember(c);
     setCode(c);
+    window.history.replaceState(null, "", `/team?code=${c}`);
   };
 
   const leave = () => {
     setCode("");
-    setData(null);
     setError(null);
     try {
       localStorage.removeItem(TEAM_CODE_KEY);
@@ -119,19 +80,9 @@ export function TeamScan() {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/class", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ buildingName: teamName.trim() || placeName, regionCode }),
-      });
-      const json = (await res.json()) as { code?: string; error?: string };
-      if (!res.ok || !json.code) {
-        setError(json.error ?? "Couldn't start a team.");
-        return;
-      }
-      open(json.code);
-    } catch {
-      setError("Couldn't reach the server.");
+      open(await createTeam(teamName.trim() || placeName, regionCode));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't start a team.");
     } finally {
       setBusy(false);
     }
@@ -159,13 +110,12 @@ export function TeamScan() {
         onJoin={join}
         busy={busy}
         error={error}
-        durable={tier?.durable ?? false}
-        usable={tier === null ? true : tier.durable || tier.local}
+        via={via}
       />
     );
   }
 
-  return <Board code={code} data={data} error={error} onLeave={leave} />;
+  return <Board code={code} onLeave={leave} />;
 }
 
 function remember(c: string) {
@@ -188,8 +138,7 @@ function Start({
   onJoin,
   busy,
   error,
-  durable,
-  usable,
+  via,
 }: {
   placeName: string;
   teamName: string;
@@ -200,9 +149,7 @@ function Start({
   onJoin: () => void;
   busy: boolean;
   error: string | null;
-  durable: boolean;
-  /** False on a deployment with no shared store: a team would be lost between requests. */
-  usable: boolean;
+  via: TeamVia | null;
 }) {
   return (
     <div className="space-y-6">
@@ -235,10 +182,10 @@ function Start({
           />
           <button
             onClick={onCreate}
-            disabled={busy || !usable}
+            disabled={busy}
             className="mt-3 w-full rounded-full bg-fog px-4 py-3 text-[0.92rem] font-medium text-ink transition-colors hover:bg-fog/85 disabled:opacity-50"
           >
-            {busy ? "Starting…" : usable ? "Start a team" : "Not available on this site yet"}
+            {busy ? "Starting…" : "Start a team"}
           </button>
         </section>
 
@@ -264,14 +211,11 @@ function Start({
 
       {error && <p className="rounded-xl bg-ember/[0.07] px-4 py-3 text-[0.86rem] text-ember">{error}</p>}
 
-      {!durable && (
-        <section className="rounded-2xl border border-amber/30 bg-amber/[0.05] px-5 py-4 text-[0.84rem] leading-relaxed text-mist">
-          <span className="font-medium text-fog">{usable ? "Works on this computer only for now." : "Teams are switched off on this site."}</span>{" "}
-          {usable
-            ? "Teams are kept in the server's memory, which is fine for trying it out but won't hold up on a hosted site."
-            : "A team started here would be lost almost immediately."}{" "}
-          The site owner can turn teams on by adding a free Upstash Redis database (UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN).
-        </section>
+      {via === "relay" && (
+        <p className="text-[0.8rem] leading-relaxed text-dim">
+          Teams on this site travel end-to-end encrypted through a public relay and last about {RELAY_HOURS} hours there; the board keeps its own copy
+          after that. For two-week teams, the site owner can add a free Upstash Redis database (UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN).
+        </p>
       )}
 
       <p className="text-[0.84rem] leading-relaxed text-dim">
@@ -284,8 +228,10 @@ function Start({
 
 // ---- the team's board ---------------------------------------------------------------
 
-function Board({ code, data, error, onLeave }: { code: string; data: MapResponse | null; error: string | null; onLeave: () => void }) {
+function Board({ code, onLeave }: { code: string; onLeave: () => void }) {
+  const { data, error, via } = useTeamBoard(code);
   const [copied, setCopied] = useState<"link" | "code" | null>(null);
+  const [presenting, setPresenting] = useState(false);
   const prevAreas = useRef(0);
   const [flash, setFlash] = useState(false);
   const link = typeof window !== "undefined" ? `${window.location.origin}/team?code=${code}` : `/team?code=${code}`;
@@ -321,7 +267,8 @@ function Board({ code, data, error, onLeave }: { code: string; data: MapResponse
       {/* invite */}
       <section className="panel overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-5 px-5 py-5 sm:px-6">
-          <div className="min-w-0">
+          <TeamQR value={link} className="h-28 w-28 shrink-0 ring-1 ring-line sm:h-32 sm:w-32" />
+          <div className="min-w-0 flex-1">
             <div className="text-[0.8rem] text-dim">{data?.buildingName ?? "Loading…"} · team code</div>
             <div className="mt-1 font-mono text-4xl font-bold tracking-[0.12em] text-fog sm:text-5xl">{code}</div>
             <p className="mt-2 text-[0.86rem] text-mist">
@@ -333,6 +280,16 @@ function Board({ code, data, error, onLeave }: { code: string; data: MapResponse
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setPresenting(true)}
+              className="inline-flex items-center gap-2 rounded-full bg-sodium px-4 py-2 text-[0.85rem] font-medium text-[#1c1b18] transition-transform hover:scale-[1.03]"
+            >
+              <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                <rect x="1.5" y="2.5" width="13" height="8.5" rx="1.2" />
+                <path d="M8 11v2.5M5 13.5h6" />
+              </svg>
+              Present on the board
+            </button>
             <button onClick={() => copy("link")} className="rounded-full bg-fog px-4 py-2 text-[0.85rem] font-medium text-ink hover:bg-fog/85">
               {copied === "link" ? "Link copied" : "Copy invite link"}
             </button>
@@ -345,6 +302,8 @@ function Board({ code, data, error, onLeave }: { code: string; data: MapResponse
           </div>
         </div>
       </section>
+
+      <AnimatePresence>{presenting && <PresentMode code={code} link={link} data={data} onClose={() => setPresenting(false)} />}</AnimatePresence>
 
       {error && <p className="rounded-xl bg-ember/[0.07] px-4 py-3 text-[0.86rem] text-ember">{error}</p>}
 
@@ -445,8 +404,9 @@ function Board({ code, data, error, onLeave }: { code: string; data: MapResponse
       )}
 
       <p className="text-[0.78rem] leading-relaxed text-dim">
-        Updates every {POLL_MS / 1000} seconds. No photos, accounts or email addresses, just the device lists. The team deletes itself after two weeks.
-        {data && !data.durable ? " On this site the team lives in the server's memory, so a restart clears it." : ""}
+        {via === "relay"
+          ? `Updates live, end-to-end encrypted. No photos, accounts or email addresses, just the device lists. The relay forgets the team after about ${RELAY_HOURS} hours; this page keeps its own copy.`
+          : "Updates every few seconds. No photos, accounts or email addresses, just the device lists. The team deletes itself after two weeks."}
       </p>
     </div>
   );

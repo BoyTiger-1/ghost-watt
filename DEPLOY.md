@@ -51,7 +51,7 @@ environment at build time.
 | `OPENROUTER_API_KEY` | One key, many models, some free (`:free` ids); the last fallback. | [openrouter.ai/keys](https://openrouter.ai/keys) |
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | Paid providers with the best recognition; tried first / fifth. **Billable.** | [console.anthropic.com](https://console.anthropic.com/settings/keys) · [platform.openai.com](https://platform.openai.com/api-keys) |
 | `OPENEI_API_KEY` | The serving utility's published tariff from a photo's location (same api.data.gov key as NREL works). | [openei.org/services/api/signup](https://openei.org/services/api/signup) |
-| `UPSTASH_REDIS_REST_URL` | Class mode across more than one machine. Without it, sessions live in a single instance's memory and two students may land on different instances and never see each other. | [console.upstash.com](https://console.upstash.com/) |
+| `UPSTASH_REDIS_REST_URL` | Team scans that last two weeks. Without it, team codes still work: they run end-to-end encrypted over the public ntfy.sh relay straight from each browser, and last about 12 hours there (the board keeps its own copy). | [console.upstash.com](https://console.upstash.com/) |
 | `UPSTASH_REDIS_REST_TOKEN` | The token half of the pair above. | same |
 | `NREL_API_KEY` | The specific utility serving an address and its commercial rate. Optional — works unkeyed on a shared demo key at a much lower rate limit. | [api.data.gov/signup](https://api.data.gov/signup/) |
 
@@ -69,8 +69,11 @@ paste them in. If you use Vercel's own KV integration instead, it injects
 `KV_REST_API_URL` and `KV_REST_API_TOKEN`; the app reads those names too, so there is
 nothing to rename.
 
-Without Redis the feature still works on one instance and `/class` says plainly that
-sessions are not durable.
+Without Redis, team codes run over an encrypted public relay instead (`src/lib/teamRelay.ts`):
+the topic is a hash of the code, every message is AES-GCM encrypted with a key derived from
+it, and only device rows travel. It covers a class period comfortably; Redis is still the
+better home for a real deployment. A school network that blocks ntfy.sh will block relay
+teams too, and the error says so.
 
 ## Cost control on a public URL
 
