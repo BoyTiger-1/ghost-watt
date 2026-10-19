@@ -224,9 +224,11 @@ export function baseName(name: string): string {
   return name.replace(/\.[a-z0-9]+$/i, "").slice(0, 40) || "Upload";
 }
 
-export function loadImage(src: string): Promise<HTMLImageElement> {
+export function loadImage(src: string, opts: { crossOrigin?: boolean } = {}): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
+    // Must be set before src: changing it afterwards re-fetches the picture.
+    if (opts.crossOrigin) img.crossOrigin = "anonymous";
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error("Could not read that image."));
     img.src = src;

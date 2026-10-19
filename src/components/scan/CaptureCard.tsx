@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { readTime, type Capture, type CaptureDetails } from "@/lib/capture";
-import { ROOM_TYPES } from "@/lib/parse";
 import { fmtMoney } from "@/lib/energy";
+import { ROOM_TYPES } from "@/lib/rooms";
 import type { WeeklySchedule } from "@/lib/schedule";
 import { Icon } from "./icons";
 
@@ -17,6 +17,7 @@ export function CaptureCard({
   onDetails,
   onPatch,
   onReanalyze,
+  onUseOnDevice,
   onRemove,
 }: {
   capture: Capture;
@@ -27,6 +28,8 @@ export function CaptureCard({
   onDetails: (d: Partial<CaptureDetails>) => void;
   onPatch: (p: Partial<Capture>) => void;
   onReanalyze: () => void;
+  /** Offered when the cloud model failed but the on-device detector read something. */
+  onUseOnDevice?: () => void;
   onRemove: () => void;
 }) {
   const [open, setOpen] = useState(!!defaultOpen);
@@ -59,8 +62,14 @@ export function CaptureCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="truncate text-[0.92rem] font-medium text-fog">{c.name}</span>
-            {c.status === "done" && c.result?.mode === "fallback" && (
-              <span className="shrink-0 rounded-full bg-amber/10 px-1.5 py-px text-[0.64rem] font-medium text-amber">estimate</span>
+            {c.status === "done" && c.result && (
+              <span
+                className={`shrink-0 rounded-full px-1.5 py-px text-[0.64rem] font-medium ${
+                  c.result.mode === "enhanced" ? "bg-cyan/10 text-cyan" : "bg-lime/10 text-lime"
+                }`}
+              >
+                {c.result.mode === "enhanced" ? "cloud" : "on-device"}
+              </span>
             )}
           </div>
           <div className="mt-0.5 truncate text-[0.78rem] text-mist">
@@ -123,6 +132,33 @@ export function CaptureCard({
                   <span className="text-[0.68rem] text-dim">re-prices instantly</span>
                 </div>
                 <div className="mt-2 grid grid-cols-2 gap-2">
+                  <label className="block">
+                    <span className="text-[0.72rem] text-dim">Kind of room</span>
+                    <select
+                      value={c.details.roomType ?? ""}
+                      onChange={(e) => onDetails({ roomType: e.target.value || undefined })}
+                      className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-base text-fog outline-none focus:border-cyan sm:text-[0.9rem]"
+                    >
+                      <option value="">Not set: building default</option>
+                      {ROOM_TYPES.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="text-[0.72rem] text-dim">After hours, things seen on</span>
+                    <select
+                      value={c.details.afterHours ?? ""}
+                      onChange={(e) => onDetails({ afterHours: (e.target.value || undefined) as "on" | "standby" | undefined })}
+                      className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-base text-fog outline-none focus:border-cyan sm:text-[0.9rem]"
+                    >
+                      <option value="">{time?.afterHours === false ? "Default: go to standby (seen in open hours)" : "Default: stay as seen"}</option>
+                      <option value="on">stay on</option>
+                      <option value="standby">go to standby</option>
+                    </select>
+                  </label>
                   <NumberField
                     label="Watts, main device"
                     suffix="W"
@@ -150,8 +186,8 @@ export function CaptureCard({
                   />
                 </label>
                 <p className="mt-1.5 text-[0.72rem] leading-relaxed text-dim">
-                  Leave these blank and the AI reads each device&apos;s wattage from what it can see, blended with published ranges, the
-                  time it was taken and where.
+                  The room sets how many hours a day each device is typically in use. Leave the rest blank and the model reads each device&apos;s
+                  wattage from what it can see, blended with published ranges, the time it was taken and where.
                 </p>
               </div>
 
@@ -198,21 +234,22 @@ export function CaptureCard({
 
               {c.result?.notice && <p className="rounded-xl bg-amber/[0.08] px-3 py-2 text-[0.76rem] leading-relaxed text-amber">{c.result.notice}</p>}
 
-              {c.result?.mode === "fallback" && (
-                <label className="block">
-                  <span className="text-[0.72rem] text-dim">No reading of this capture. Estimate it as:</span>
-                  <select
-                    value={c.roomType}
-                    onChange={(e) => onPatch({ roomType: e.target.value })}
-                    className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-base text-fog outline-none sm:text-[0.88rem]"
-                  >
-                    {ROOM_TYPES.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+              {c.status === "error" && (
+                <div role="alert" className="rounded-xl border border-ember/30 bg-ember/[0.06] px-3 py-2.5">
+                  <p className="text-[0.8rem] font-medium text-ember">This picture was not read.</p>
+                  <p className="mt-0.5 text-[0.76rem] leading-relaxed text-mist">{c.error}</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button onClick={onReanalyze} className="inline-flex items-center gap-1.5 rounded-full bg-fog px-3 py-1.5 text-[0.76rem] font-medium text-ink">
+                      <Icon name="refresh" className="h-3.5 w-3.5" />
+                      Try again
+                    </button>
+                    {onUseOnDevice && (
+                      <button onClick={onUseOnDevice} className="rounded-full border border-line px-3 py-1.5 text-[0.76rem] text-mist hover:border-lime hover:text-lime">
+                        Use the on-device reading instead
+                      </button>
+                    )}
+                  </div>
+                </div>
               )}
 
               <div className="flex flex-wrap items-center gap-2">
@@ -222,7 +259,7 @@ export function CaptureCard({
                   aria-label="Name"
                   className="min-w-0 flex-1 rounded-xl border border-line bg-surface px-3 py-2 text-base text-fog outline-none focus:border-cyan sm:text-[0.85rem]"
                 />
-                {(c.status === "error" || noteChanged || c.result?.mode === "fallback") && (
+                {(noteChanged || c.result?.mode === "on-device") && (
                   <button
                     onClick={() => {
                       setSentNote(c.details.note ?? "");

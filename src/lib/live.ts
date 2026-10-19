@@ -73,6 +73,8 @@ export interface Track {
   hits: number;
   /** Consecutive frames it has gone unmatched. */
   missed: number;
+  /** Whether it was matched in each of the last few frames, newest last. */
+  seen: boolean[];
   /** Score-weighted votes per class; `cls` is the leader. */
   votes?: Record<string, number>;
 }
@@ -99,8 +101,14 @@ export class Tracker {
   private tracks: Track[] = [];
   private nextId = 1;
 
+  /**
+   * `window` / `needed`: a track is shown only once it was matched in `needed`
+   * of the last `window` frames (3 of 5 by default). A detector blinking a box
+   * on for one frame never reaches the screen; a real object that drops out for
+   * a frame or two stays.
+   */
   constructor(
-    private readonly opts = { minIou: 0.25, smoothing: 0.55, maxMissed: 8, minHits: 2 },
+    private readonly opts = { minIou: 0.25, smoothing: 0.55, maxMissed: 8, window: 5, needed: 3 },
   ) {}
 
   update(dets: Detection[]): Track[] {
@@ -134,7 +142,13 @@ export class Tracker {
     // thing, so it keeps its id (and its classifier votes) and the label is voted.
     pass(false, Math.max(minIou, 0.5));
 
-    for (const t of this.tracks) if (!matched.has(t)) t.missed++;
+    for (const t of this.tracks) {
+      if (!matched.has(t)) {
+        t.missed++;
+        t.seen.push(false);
+        if (t.seen.length > this.opts.window) t.seen.shift();
+      }
+    }
     this.tracks = this.tracks.filter((t) => t.missed <= maxMissed);
 
     for (const i of unmatched) {
@@ -146,6 +160,7 @@ export class Tracker {
         box: { ...d.box },
         hits: 1,
         missed: 0,
+        seen: [true],
         votes: { [d.cls]: d.score },
       });
     }
@@ -168,12 +183,18 @@ export class Tracker {
     t.score = d.cls === t.cls ? t.score * 0.6 + d.score * 0.4 : t.score * 0.9;
     t.hits++;
     t.missed = 0;
+    t.seen.push(true);
+    if (t.seen.length > this.opts.window) t.seen.shift();
   }
 
-  /** Tracks seen often enough to be real, rather than a one-frame flicker. */
+  /** Tracks seen in enough of the last few frames to be real, rather than a flicker. */
   visible(): Track[] {
-    // Appliances the detector invents from doors and cupboards need a few more frames.
-    return this.tracks.filter((t) => t.hits >= (NEEDS_CONFIRM.has(t.cls) ? Math.max(3, this.opts.minHits) : this.opts.minHits));
+    const { needed } = this.opts;
+    return this.tracks.filter((t) => {
+      const recent = t.seen.filter(Boolean).length;
+      // Appliances the detector invents from doors and cupboards need the full window.
+      return recent >= (NEEDS_CONFIRM.has(t.cls) ? Math.max(needed, 4) : needed);
+    });
   }
 
   /** Ids of every track still held, shown or not. */

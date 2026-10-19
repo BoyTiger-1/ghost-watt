@@ -1,10 +1,9 @@
-// Turn model output (or a room preset) into categorized device observations.
+// Turn model output into categorized device observations.
 //
-// Two paths:
-//   1. parseModelOutput()  - the live path. Prefers JSON; falls back to a
-//      clause-by-clause keyword scan of free text so even a chatty model is usable.
-//   2. fallbackObservations() - the offline path. Representative device fixtures
-//      per room type, used when Ollama is unreachable so a demo never blanks.
+// parseModelOutput() prefers JSON and falls back to a clause-by-clause keyword
+// scan of free text, so a chatty model is still usable. There is deliberately no
+// "typical room" preset path: a reading either comes from a picture or it does
+// not exist.
 
 import { DEVICE_CATALOG, NUMBER_WORDS } from "./devices";
 import type { DeviceObservation, DeviceState } from "./types";
@@ -59,6 +58,16 @@ function extractCount(fragment: string): number {
 
 /** Pull the first balanced JSON array out of a possibly-chatty model response. */
 function extractJsonArray(text: string): unknown[] | null {
+  // The schema answer is {"items": [...]}; take the array inside it.
+  const trimmed = text.trim();
+  if (trimmed.startsWith("{")) {
+    try {
+      const obj = JSON.parse(trimmed) as { items?: unknown };
+      if (Array.isArray(obj.items)) return obj.items;
+    } catch {
+      // Not a clean object: fall through to the array scan.
+    }
+  }
   const start = text.indexOf("[");
   if (start === -1) return null;
   let depth = 0;
@@ -86,6 +95,9 @@ function fromJson(arr: unknown[], frame: Frame): CategorizedObservation[] {
     const rec = item as Record<string, unknown>;
     const label = String(rec.device ?? rec.name ?? rec.label ?? "");
     if (!label) continue;
+    // The model was asked to assert it can see the thing. "visible": false is an
+    // inference about the room, not a reading of the picture, and is dropped.
+    if (rec.visible === false) continue;
     const categoryId = matchCategory(label);
     if (!categoryId) continue;
     const count =
@@ -97,6 +109,8 @@ function fromJson(arr: unknown[], frame: Frame): CategorizedObservation[] {
     const evidence = typeof rec.evidence === "string" ? rec.evidence.trim().slice(0, 120) : "";
     const techRaw = rec.technology ?? rec.tech ?? rec.type;
     const tech = typeof techRaw === "string" ? techRaw.trim().slice(0, 40) : "";
+    const confRaw = Number(rec.confidence);
+    const confidence = Number.isFinite(confRaw) ? Math.max(0, Math.min(1, confRaw > 1 ? confRaw / 100 : confRaw)) : undefined;
     out.push({
       device: label,
       // A model that boxed more units than it counted has told us its count was low.
@@ -107,6 +121,7 @@ function fromJson(arr: unknown[], frame: Frame): CategorizedObservation[] {
       ...(Number.isFinite(watts) && watts > 0 ? { wattsHint: watts } : {}),
       ...(evidence ? { evidence } : {}),
       ...(tech ? { tech } : {}),
+      ...(confidence !== undefined ? { confidence } : {}),
     });
   }
   return out;
@@ -144,100 +159,4 @@ export function parseModelOutput(
     if (fromArr.length) return fromArr;
   }
   return fromFreeText(text);
-}
-
-// ---- room presets (offline fallback) -----------------------------------
-
-export interface RoomType {
-  id: string;
-  label: string;
-  fixtures: { categoryId: string; count: number; state: DeviceState }[];
-}
-
-export const ROOM_TYPES: RoomType[] = [
-  {
-    id: "computer_lab",
-    label: "Computer lab",
-    fixtures: [
-      { categoryId: "monitor", count: 30, state: "on" },
-      { categoryId: "desktop", count: 30, state: "on" },
-      { categoryId: "ceiling_light", count: 6, state: "on" },
-      { categoryId: "projector", count: 1, state: "on" },
-    ],
-  },
-  {
-    id: "classroom",
-    label: "Classroom",
-    fixtures: [
-      { categoryId: "projector", count: 1, state: "on" },
-      { categoryId: "smartboard", count: 1, state: "standby" },
-      { categoryId: "monitor", count: 1, state: "on" },
-      { categoryId: "desktop", count: 1, state: "on" },
-      { categoryId: "ceiling_light", count: 6, state: "on" },
-    ],
-  },
-  {
-    id: "hallway",
-    label: "Hallway / corridor",
-    fixtures: [{ categoryId: "ceiling_light", count: 14, state: "on" }],
-  },
-  {
-    id: "break_room",
-    label: "Break room / lounge",
-    fixtures: [
-      { categoryId: "vending_cold", count: 1, state: "on" },
-      { categoryId: "fridge", count: 1, state: "on" },
-      { categoryId: "water_cooler", count: 1, state: "on" },
-      { categoryId: "coffee", count: 1, state: "on" },
-      { categoryId: "microwave", count: 1, state: "standby" },
-      { categoryId: "ceiling_light", count: 3, state: "on" },
-    ],
-  },
-  {
-    id: "office",
-    label: "Office / admin",
-    fixtures: [
-      { categoryId: "monitor", count: 2, state: "on" },
-      { categoryId: "desktop", count: 1, state: "on" },
-      { categoryId: "copier", count: 1, state: "standby" },
-      { categoryId: "ceiling_light", count: 4, state: "on" },
-    ],
-  },
-  {
-    id: "library",
-    label: "Library / media center",
-    fixtures: [
-      { categoryId: "monitor", count: 12, state: "on" },
-      { categoryId: "desktop", count: 12, state: "on" },
-      { categoryId: "ceiling_light", count: 16, state: "on" },
-      { categoryId: "copier", count: 1, state: "standby" },
-    ],
-  },
-  {
-    id: "gym",
-    label: "Gym / large hall",
-    fixtures: [{ categoryId: "ceiling_light", count: 24, state: "on" }],
-  },
-  {
-    id: "unknown",
-    label: "Mixed / not sure",
-    fixtures: [
-      { categoryId: "monitor", count: 4, state: "on" },
-      { categoryId: "desktop", count: 2, state: "on" },
-      { categoryId: "ceiling_light", count: 6, state: "on" },
-      { categoryId: "projector", count: 1, state: "on" },
-    ],
-  },
-];
-
-export const ROOM_TYPE_BY_ID = Object.fromEntries(ROOM_TYPES.map((r) => [r.id, r]));
-
-export function fallbackObservations(roomTypeId: string): CategorizedObservation[] {
-  const room = ROOM_TYPE_BY_ID[roomTypeId] ?? ROOM_TYPE_BY_ID["unknown"];
-  return room.fixtures.map((f) => ({
-    device: f.categoryId,
-    count: f.count,
-    state: f.state,
-    categoryId: f.categoryId,
-  }));
 }

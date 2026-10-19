@@ -16,6 +16,7 @@ import {
   saveStore,
   uid,
   type Building,
+  type CalibrationRecord,
   type FixRecord,
   type SavedAudit,
   type Store,
@@ -76,7 +77,8 @@ export function currentStore(): Store {
 
 // ---- convenience actions ------------------------------------------------
 
-export function newBuilding(name: string, typeId = "k12", regionCode = "US"): Building {
+/** New buildings default to Washington: the state this app is built for, with its own hydro-heavy grid factor. */
+export function newBuilding(name: string, typeId = "k12", regionCode = "WA"): Building {
   const type = BUILDING_TYPES.find((t) => t.id === typeId) ?? BUILDING_TYPES[0];
   const preset = SCHEDULE_BY_ID[type.schedulePreset] ?? SCHEDULE_PRESETS[0];
   return {
@@ -111,6 +113,7 @@ export function removeBuilding(id: string) {
     buildings: s.buildings.filter((b) => b.id !== id),
     audits: s.audits.filter((a) => a.buildingId !== id),
     fixes: s.fixes.filter((f) => f.buildingId !== id),
+    calibrations: s.calibrations.filter((c) => c.buildingId !== id),
     activeBuildingId: s.activeBuildingId === id ? null : s.activeBuildingId,
   }));
 }
@@ -121,6 +124,17 @@ export function setActiveBuilding(id: string | null) {
 
 export function addAudit(audit: SavedAudit) {
   mutate((s) => ({ ...s, audits: [...s.audits, audit] }));
+}
+
+/** Write a scan, replacing an earlier save of the same capture. */
+export function upsertAudit(audit: SavedAudit) {
+  mutate((s) => {
+    const i = s.audits.findIndex((a) => a.id === audit.id);
+    if (i === -1) return { ...s, audits: [...s.audits, audit] };
+    const audits = s.audits.slice();
+    audits[i] = audit;
+    return { ...s, audits };
+  });
 }
 
 export function removeAudit(id: string) {
@@ -144,6 +158,21 @@ export function verifyFix(id: string, verifiedAnnualSavings: number) {
 
 export function removeFix(id: string) {
   mutate((s) => ({ ...s, fixes: s.fixes.filter((f) => f.id !== id) }));
+}
+
+/** Record a meter reading against the estimate it replaced; a later reading for the same id overwrites. */
+export function upsertCalibration(rec: CalibrationRecord) {
+  mutate((s) => {
+    const i = s.calibrations.findIndex((c) => c.id === rec.id);
+    if (i === -1) return { ...s, calibrations: [...s.calibrations, rec] };
+    const calibrations = s.calibrations.slice();
+    calibrations[i] = rec;
+    return { ...s, calibrations };
+  });
+}
+
+export function removeCalibration(id: string) {
+  mutate((s) => ({ ...s, calibrations: s.calibrations.filter((c) => c.id !== id) }));
 }
 
 export function replaceStore(store: Store) {

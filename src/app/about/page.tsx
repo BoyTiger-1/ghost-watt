@@ -89,11 +89,11 @@ export default function AboutPage() {
           <Reveal>
             <h3 className="text-[1.08rem] font-semibold text-fog">Where do the photos go?</h3>
             <p className="mt-2 text-[1rem] leading-relaxed text-mist">
-              With Ollama running, nowhere: the model reads them on your own computer. Without it,
-              a deployment with a vision key can send a photo to that provider for the scan, and the
-              badge in the header always says which engine is about to run before you upload
-              anything. Every result is labelled <span className="text-fog">live model</span> or{" "}
-              <span className="text-fog">estimated</span>, so you always know what you&apos;re looking at.
+              In On-device mode, nowhere: a detector in the browser reads them and nothing is
+              uploaded. In Enhanced mode a photo is sent to the cloud vision model for the scan and
+              then discarded. The pill in the header always says which mode is about to run, and
+              every result is labelled <span className="text-fog">Enhanced · cloud</span> or{" "}
+              <span className="text-fog">On-device</span>.
             </p>
           </Reveal>
           <Reveal>

@@ -1,14 +1,17 @@
 {
-  "name": "usaii",
+  "name": "ghost-watt",
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/copy-runtimes.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/copy-runtimes.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "bench": "echo Open http://localhost:3000/bench with the dev server running"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.1.0",

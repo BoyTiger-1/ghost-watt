@@ -21,6 +21,9 @@
 // means a clean audit produces a short caveat list and a shaky one produces a long
 // one - and the reader can tell the difference.
 
+import { listActions, rankActions, type ActionItem } from "./actions";
+import { counted } from "./energy";
+import { SOURCE_BY_ID, type Source } from "./sources";
 import type { Offender } from "./types";
 import type { SavedAudit, Building } from "./storage";
 
@@ -55,11 +58,21 @@ export interface Brief {
   mode: SavedAudit["mode"];
   engine: string;
 
+  /** After-hours waste: what the devices cost left as seen through the empty hours. */
   annualWaste: number;
   /** Plausible range for annualWaste, from each device's published wattage band. */
   annualWasteLow: number;
   annualWasteHigh: number;
+  /** What the same devices cost in normal use, for the room type they are in. */
+  typicalCost: number;
   co2KgPerYear: number;
+
+  /** The best moves, ranked by dollars saved per dollar spent, free ones first. */
+  topActions: ActionItem[];
+  /** Where the figures came from, for the method note. */
+  sources: Source[];
+  /** Lines shown to the scanner but left out of this document because nobody confirmed them. */
+  unverifiedLeftOut: number;
 
   /** Fixes that cost nothing: policy, scheduling, switching things off. */
   free: ActionGroup;
@@ -133,7 +146,30 @@ function mergeItems(offenders: Offender[]): BriefItem[] {
         : null;
   }
 
-  return [...by.values()].sort((a, b) => b.annualSavings - a.annualSavings);
+  // Free moves first, then by dollars saved per dollar spent: the order a budget
+  // should be spent in, which is not the order of the biggest savings.
+  return [...by.values()].sort((a, b) => {
+    const af = a.fixCost <= 0;
+    const bf = b.fixCost <= 0;
+    if (af !== bf) return af ? -1 : 1;
+    if (af) return b.annualSavings - a.annualSavings;
+    return b.annualSavings / b.fixCost - a.annualSavings / a.fixCost || b.annualSavings - a.annualSavings;
+  });
+}
+
+/** The documents behind this audit's figures, in the order a reader would want them. */
+function sourcesFor(offenders: Offender[], building: Building | undefined): Source[] {
+  const ids: string[] = [];
+  const add = (id: string | undefined) => {
+    if (id && SOURCE_BY_ID[id] && !ids.includes(id)) ids.push(id);
+  };
+  add("catalog");
+  if (!building?.bill) add("eia-table4-2024");
+  add("egrid");
+  if (offenders.some((o) => o.afterHoursState === "standby" || o.state === "standby")) add("lbnl-standby");
+  if (offenders.some((o) => o.categoryId === "microwave")) add("doe-microwave-standby");
+  for (const o of offenders) add(o.usageSource);
+  return ids.map((id) => SOURCE_BY_ID[id]);
 }
 
 function group(items: BriefItem[]): ActionGroup {
@@ -175,16 +211,16 @@ function buildCaveats(
 ): string[] {
   const out: string[] = [];
 
-  if (audit.mode === "fallback") {
+  if (audit.mode === "on-device") {
     out.push(
-      "No photograph was read by a model for this audit. Every figure below comes from " +
-        "a typical-room profile and should be treated as a starting hypothesis, not a " +
-        "measurement.",
+      "These pictures were read by the small detector in the browser, not by the cloud " +
+        "model. It finds screens, laptops, common appliances and lit fixtures only, and " +
+        "tends to undercount, so the total is more likely low than high.",
     );
   } else if (audit.mode === "mixed") {
     out.push(
-      "Some areas were read from photographs and some were estimated from a room " +
-        "profile. The estimated areas carry the same uncertainty as any assumption.",
+      "Some rooms were read by the cloud model and some by the on-device detector, which " +
+        "finds fewer kinds of device. The on-device rooms are more likely undercounted.",
     );
   }
 
@@ -193,6 +229,14 @@ function buildCaveats(
       "Costs use a published average electricity price, not this building's actual " +
         "rate. Entering one line from a real utility bill replaces the average and is " +
         "the single largest improvement available to these numbers.",
+    );
+  }
+
+  const leftOut = audit.offenders.length - counted(audit.offenders).length;
+  if (leftOut > 0) {
+    out.push(
+      `${leftOut} line${leftOut === 1 ? " was" : "s were"} left out of this document because the reading could not be ` +
+        "cross-checked and nobody confirmed it on the scan. Confirm or delete those lines to change that.",
     );
   }
 
@@ -237,10 +281,15 @@ function buildCaveats(
  * anything generated from the transient contents of a tab is not.
  */
 export function buildBrief(audit: SavedAudit, building?: Building): Brief {
-  const items = mergeItems(audit.offenders);
+  // Unverified lines are left out of a document someone will act on.
+  const offenders = counted(audit.offenders);
+  const items = mergeItems(offenders);
+  const topActions = rankActions(listActions(offenders, audit.settings)).slice(0, 6);
 
-  const free = group(items.filter((i) => i.fixCost <= 0));
-  const capital = group(items.filter((i) => i.fixCost > 0));
+  // A fix that saves nothing (a device already off after hours) is not a recommendation.
+  const worth = items.filter((i) => i.annualSavings >= 0.5);
+  const free = group(worth.filter((i) => i.fixCost <= 0));
+  const capital = group(worth.filter((i) => i.fixCost > 0));
 
   const annualWaste = items.reduce((s, i) => s + i.annualWaste, 0);
   const totalRecoverable = free.annualSavings + capital.annualSavings;
@@ -254,9 +303,13 @@ export function buildBrief(audit: SavedAudit, building?: Building): Brief {
     engine: audit.engine,
 
     annualWaste,
-    annualWasteLow: audit.offenders.reduce((s, o) => s + o.costLowPerYear, 0),
-    annualWasteHigh: audit.offenders.reduce((s, o) => s + o.costHighPerYear, 0),
-    co2KgPerYear: audit.offenders.reduce((s, o) => s + o.co2KgPerYear, 0),
+    annualWasteLow: offenders.reduce((s, o) => s + o.costLowPerYear, 0),
+    annualWasteHigh: offenders.reduce((s, o) => s + o.costHighPerYear, 0),
+    typicalCost: offenders.reduce((s, o) => s + (o.typicalCostPerYear ?? 0), 0),
+    co2KgPerYear: offenders.reduce((s, o) => s + o.co2KgPerYear, 0),
+    topActions,
+    sources: sourcesFor(offenders, building),
+    unverifiedLeftOut: audit.offenders.length - offenders.length,
 
     free,
     capital,

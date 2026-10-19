@@ -10,6 +10,8 @@ import { BuildingBar } from "./BuildingBar";
 import { BudgetPlanner } from "./BudgetPlanner";
 import { GridPulse } from "./GridPulse";
 import { SolarOffset } from "./SolarOffset";
+import { ActionPlan } from "./ActionPlan";
+import { useT } from "@/lib/i18n";
 import { BillCalibration } from "./BillCalibration";
 import { ContributeBar } from "./ContributeBar";
 import { WeatherContext } from "./WeatherContext";
@@ -21,39 +23,64 @@ import { UploadMode } from "./scan/UploadMode";
 import { CaptureCard } from "./scan/CaptureCard";
 import { Icon } from "./scan/icons";
 import { analysisSquare } from "@/lib/image";
-import { ROOM_TYPE_BY_ID, type CategorizedObservation } from "@/lib/parse";
-import { aggregate, fmtCo2, fmtKwh, fmtMoney, fmtMoneyFull } from "@/lib/energy";
+import type { CategorizedObservation } from "@/lib/parse";
+import { ON_DEVICE_ENGINE, describeAnalyzeError, useEngine } from "@/lib/engine";
+import { aggregate, counted, fmtCo2, fmtKwh, fmtMoney, fmtMoneyFull } from "@/lib/energy";
+import { crossCheck } from "@/lib/crosscheck";
 import { costRange, RATE_SIGMA, type RateQuality } from "@/lib/estimate";
 import { regionOrDefault, regionRate } from "@/lib/grid";
 import { occupiedHours, unoccupiedHours, SCHEDULE_BY_ID, SCHEDULE_PRESETS } from "@/lib/schedule";
 import { contextForBuildingType, type UsageContext } from "@/lib/usage";
 import { EfficiencyPanel } from "./EfficiencyPanel";
 import { nowLocal } from "@/lib/exif";
-import { detectStill, verifyStill } from "@/lib/detector";
-import { withLamps } from "@/lib/verify";
-import { readScene } from "@/lib/scene";
-import { itemsToObservations, peopleIn, readItems, type LiveItem } from "@/lib/ondevice";
-import { FrameReader, annotateFrame, baseName, loadImage, readPhotoFile, videoFileKeyframes } from "@/lib/media";
+import { readStill, type StillRead } from "@/lib/still";
+import { itemsToObservations, peopleIn } from "@/lib/ondevice";
+import { annotateFrame, baseName, loadImage, readPhotoFile, toJpeg, videoFileKeyframes } from "@/lib/media";
 import {
   captureId,
   captureSettings,
   costCapture,
   parseOffenderKey,
   promptContext,
-  resolveResult,
   type Capture,
   type CaptureDetails,
   type DeviceAdjust,
   type GeoContext,
 } from "@/lib/capture";
-import { uid, type Building, type SavedAudit } from "@/lib/storage";
-import { addAudit, addBuilding, currentStore, newBuilding, useStore } from "@/lib/useStore";
-import type { AnalysisResult, AuditSettings, Offender } from "@/lib/types";
+import type { Building, SavedAudit } from "@/lib/storage";
+import { addBuilding, currentStore, newBuilding, removeAudit, removeCalibration, upsertAudit, upsertCalibration, useStore } from "@/lib/useStore";
+import type { AnalysisResult, AnalyzeError, AuditSettings } from "@/lib/types";
 
 type Mode = "camera" | "upload";
 type ResultTab = "offenders" | "plan" | "grid" | "context";
 
-const ON_DEVICE_ENGINE = "On-device · EfficientDet + scene analysis";
+/** The saved-scan id a capture writes to, so a re-analysis replaces rather than duplicates. */
+const auditIdFor = (captureId: string) => `scan_${captureId}`;
+
+/** A small JPEG of a capture for the saved room list, never the full photo. */
+async function thumbOf(dataUrl: string | null): Promise<string | undefined> {
+  if (!dataUrl) return undefined;
+  try {
+    return toJpeg(await loadImage(dataUrl), 240, 0.6) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The on-device reading of a capture as a result: what it is, labelled as what it is. */
+function onDeviceResult(c: Pick<Capture, "name" | "onDevice">): AnalysisResult {
+  const observations = c.onDevice ?? [];
+  return {
+    mode: "on-device",
+    engine: ON_DEVICE_ENGINE,
+    source: c.name,
+    offenders: [],
+    observations,
+    notice: observations.length
+      ? "Read on this device: screens, laptops, common appliances and lit fixtures only. Other device types are not recognised and counts tend to run low."
+      : "The on-device detector recognised nothing powered in this picture.",
+  };
+}
 
 /** Shown for the single frame before the first building is written to storage. */
 const PLACEHOLDER_BUILDING: Building = {
@@ -83,22 +110,6 @@ function locate(lat: number, lon: number, sector: Sector): Promise<GeoContext | 
   return geoCache.get(key)!;
 }
 
-/** What the on-device detector reads in one still image. */
-async function readStill(dataUrl: string, settings: AuditSettings) {
-  const img = await loadImage(dataUrl);
-  const raw = await detectStill(img).catch(() => []);
-  const { dets, lamps } = await verifyStill(img, raw).catch(() => ({ dets: raw, lamps: [] }));
-  // A still can afford a finer read than live video: far downlights are a few pixels at 256.
-  const luma = new FrameReader(640).read(img);
-  const scene = luma ? readScene(luma.data, luma.w, luma.h, luma.rgba) : null;
-  if (scene && luma && lamps.length) {
-    scene.lights = withLamps(scene.lights, lamps.map((box) => ({ box, confidence: 0.7 })), luma);
-    if (scene.lights.length) scene.lighting = "on";
-  }
-  const items = readItems(dets, scene?.lights ?? [], settings, luma ?? undefined);
-  return { items, scene };
-}
-
 /** Several frames of one walk: per line, the counts add up, since each keyframe is a different view. */
 function mergeObservations(lists: CategorizedObservation[][]): CategorizedObservation[] {
   const out = new Map<string, CategorizedObservation>();
@@ -114,11 +125,16 @@ function mergeObservations(lists: CategorizedObservation[][]): CategorizedObserv
 }
 
 export function Scanner() {
+  const t = useT();
   const [mode, setMode] = useState<Mode>("camera");
   const [captures, setCaptures] = useState<Capture[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [tab, setTab] = useState<ResultTab>("offenders");
-  const [savedAuditId, setSavedAuditId] = useState<string | null>(null);
+  const engine = useEngine();
+  const engineRef = useRef(engine);
+  useEffect(() => {
+    engineRef.current = engine;
+  }, [engine]);
   const [liveRate, setLiveRate] = useState<{ ratePerKwh: number; source: string } | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
   const [deviceGeo, setDeviceGeo] = useState<{ lat: number; lon: number; geo: GeoContext | null } | null>(null);
@@ -145,7 +161,6 @@ export function Scanner() {
   }, []);
   const choosePlace = (p: UsageContext) => {
     setPlaceChoice(p);
-    setSavedAuditId(null);
     try {
       localStorage.setItem("gw-place", p);
     } catch {
@@ -180,9 +195,11 @@ export function Scanner() {
   const sector: Sector = place === "home" ? "residential" : "commercial";
   const schedule =
     place === contextForBuildingType(building.typeId) ? building.schedule : SCHEDULE_BY_ID[place].schedule;
+  // A real bill beats every lookup: dollars ÷ kWh off the paper is the price this building pays.
+  const billRate = building.bill && building.bill.kwh > 0 && building.bill.dollars > 0 ? building.bill.dollars / building.bill.kwh : undefined;
   const settings: AuditSettings = useMemo(
     () => ({
-      ratePerKwh: override.ratePerKwh ?? liveRate?.ratePerKwh ?? regionRate(region, sector),
+      ratePerKwh: override.ratePerKwh ?? billRate ?? liveRate?.ratePerKwh ?? regionRate(region, sector),
       co2PerKwh: override.co2PerKwh ?? region.co2PerKwh,
       unoccupiedHoursPerYear: override.unoccupiedHoursPerYear ?? unoccupiedHours(schedule),
       occupiedHoursPerYear: occupiedHours(schedule),
@@ -192,7 +209,7 @@ export function Scanner() {
       floorAreaSqFt: building.floorAreaSqFt,
       demandChargePerKw: override.demandChargePerKw,
     }),
-    [override, liveRate, region, building, place, sector, schedule],
+    [override, billRate, liveRate, region, building, place, sector, schedule],
   );
   const sectorRef = useRef(sector);
   useEffect(() => {
@@ -202,7 +219,8 @@ export function Scanner() {
   useEffect(() => {
     settingsRef.current = settings;
   }, [settings]);
-  const rateOverridden = override.ratePerKwh !== undefined || liveRate !== null;
+  // How well the price is known: a bill or a typed figure is exact, a utility lookup close, a state table loose.
+  const rateQualityBase: RateQuality = override.ratePerKwh !== undefined || billRate !== undefined ? "bill" : liveRate ? "utility" : "state";
 
   useEffect(() => {
     if (!toast) return;
@@ -278,7 +296,6 @@ export function Scanner() {
   }, []);
 
   const add = useCallback((c: Capture) => {
-    setSavedAuditId(null);
     setCaptures((prev) => [c, ...prev]);
   }, []);
 
@@ -292,10 +309,13 @@ export function Scanner() {
 
   function onPhoto(shot: PhotoShot) {
     const c = blank("photo", "camera", nextName("photo"));
+    // Only a confirmed view counts as already read; live candidates are not a reading,
+    // so an unconfirmed frame goes through the strong path like any other photo.
+    const confirmedOnDevice = shot.confirmed && shot.mode === "on-device" ? itemsToObservations(shot.items) : undefined;
     add({
       ...c,
       dataUrl: shot.dataUrl,
-      onDevice: itemsToObservations(shot.items),
+      onDevice: confirmedOnDevice,
       meta: {
         takenAt: nowLocal(),
         brightness: shot.scene?.brightness,
@@ -371,24 +391,6 @@ export function Scanner() {
     [add, patch],
   );
 
-  function addEstimate() {
-    const c = blank("photo", "upload", `Estimate ${String(captures.length + 1).padStart(2, "0")}`);
-    const roomType = "classroom";
-    add({
-      ...c,
-      roomType,
-      status: "done",
-      result: {
-        mode: "fallback",
-        engine: `room preset · ${ROOM_TYPE_BY_ID[roomType].label}`,
-        source: c.name,
-        offenders: [],
-        notice: "Estimated from a typical room profile - no photo.",
-        fallbackReason: "requested",
-      },
-    });
-  }
-
   // ---- the analysis queue -------------------------------------------------
 
   const busyRef = useRef(false);
@@ -409,7 +411,7 @@ export function Scanner() {
           onDevice = itemsToObservations(items);
           meta = { ...meta, brightness: scene?.brightness, lighting: scene?.lighting, people: peopleIn(items) };
         } else if (!onDevice && c.kind === "video" && keyframes?.length) {
-          const reads: { items: LiveItem[]; scene: ReturnType<typeof readScene> | null }[] = [];
+          const reads: StillRead[] = [];
           for (const k of keyframes) reads.push(await readStill(k.dataUrl, s));
           keyframes = await Promise.all(keyframes.map(async (k, i) => ({ ...k, annotated: await annotateFrame(k.dataUrl, reads[i].items) })));
           onDevice = mergeObservations(reads.map((r) => itemsToObservations(r.items)));
@@ -431,9 +433,13 @@ export function Scanner() {
           patch(id, { geo });
         }
 
-        // 3. The full AI reading.
+        // 3. The reading itself. On-device mode stops here: the picture never leaves.
         c = get() ?? c;
-        patch(id, { stage: c.kind === "video" ? `AI reading ${keyframes?.length ?? 0} frames` : "AI reading the photo", progress: 0.65 });
+        if (engineRef.current.mode === "on-device") {
+          patch(id, { status: "done", result: onDeviceResult({ name: c.name, onDevice }), errorCode: undefined, stage: undefined, progress: undefined });
+          return;
+        }
+        patch(id, { stage: c.kind === "video" ? `Cloud model reading ${keyframes?.length ?? 0} frames` : "Cloud model reading the photo", progress: 0.65 });
         const context = promptContext({ ...c, onDevice, meta, geo }, building.schedule);
         let body: Record<string, unknown>;
         if (c.kind === "video") {
@@ -442,37 +448,50 @@ export function Scanner() {
           const square = c.dataUrl ? await analysisSquare(c.dataUrl, 0.8) : null;
           body = { image: square?.dataUrl, frame: square?.frame };
         }
-        const res = await fetch("/api/analyze", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...body, roomType: c.roomType, source: c.name, settings: s, context }),
-        });
-        if (!res.ok) throw new Error(res.status === 413 ? "That capture is too large to send." : `Server returned ${res.status}`);
-        const result = resolveResult((await res.json()) as AnalysisResult, onDevice, ON_DEVICE_ENGINE);
-        patch(id, { status: "done", result, stage: undefined, progress: undefined });
-      } catch (err) {
-        // Offline or the server is down: the device's own reading still stands.
-        const onDevice = get()?.onDevice;
-        if (onDevice?.length) {
-          patch(id, {
-            status: "done",
-            stage: undefined,
-            progress: undefined,
-            result: {
-              mode: "live",
-              engine: ON_DEVICE_ENGINE,
-              source: c.name,
-              offenders: [],
-              observations: onDevice,
-              notice: "Couldn't reach the AI. Read on this device instead: screens, laptops, appliances and lit fixtures only.",
-            },
+        let res: Response;
+        try {
+          res = await fetch("/api/analyze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...body, source: c.name, settings: s, context }),
           });
-        } else {
-          patch(id, { status: "error", stage: undefined, progress: undefined, error: err instanceof Error ? err.message : "Analysis failed" });
+        } catch {
+          throw Object.assign(new Error(navigator.onLine ? "The server could not be reached." : "You are offline, so the cloud model cannot read this picture."), {
+            code: "engine-failed",
+          });
         }
+        if (!res.ok) {
+          const errBody = (await res.json().catch(() => null)) as AnalyzeError | null;
+          throw Object.assign(new Error(describeAnalyzeError(res.status, errBody)), { code: errBody?.code ?? "engine-failed" });
+        }
+        const result = (await res.json()) as AnalysisResult;
+        // Two readers of one picture: what the detector cannot back is shown, not counted.
+        result.observations = crossCheck(result.observations ?? [], onDevice);
+        patch(id, { status: "done", result, errorCode: undefined, stage: undefined, progress: undefined });
+      } catch (err) {
+        // No invented answer. The card shows the error and, when the detector saw
+        // something, offers that reading as a choice the user makes.
+        const code = (err as { code?: AnalyzeError["code"] }).code;
+        patch(id, {
+          status: "error",
+          stage: undefined,
+          progress: undefined,
+          error: err instanceof Error ? err.message : "Analysis failed.",
+          errorCode: code,
+        });
       }
     },
     [patch, building.schedule],
+  );
+
+  /** The user chose the on-device reading after the cloud model failed. */
+  const adoptOnDevice = useCallback(
+    (id: string) => {
+      const c = capturesRef.current.find((x) => x.id === id);
+      if (!c) return;
+      patch(id, { status: "done", error: undefined, errorCode: undefined, result: onDeviceResult(c) });
+    },
+    [patch],
   );
 
   // One at a time: hosted vision endpoints rate-limit, and order is what the user expects.
@@ -489,17 +508,7 @@ export function Scanner() {
   }, [captures, analyze]);
 
   const setDetails = (id: string, d: Partial<CaptureDetails>) => {
-    setSavedAuditId(null);
     setCaptures((prev) => prev.map((c) => (c.id === id ? { ...c, details: { ...c.details, ...d } } : c)));
-  };
-
-  const setAdjust = (offenderId: string, a: DeviceAdjust) => {
-    const key = parseOffenderKey(offenderId);
-    if (!key) return;
-    setSavedAuditId(null);
-    setCaptures((prev) =>
-      prev.map((c) => (c.id === key.captureId ? { ...c, adjust: { ...c.adjust, [key.categoryId]: a } } : c)),
-    );
   };
 
   function remove(id: string) {
@@ -508,6 +517,8 @@ export function Scanner() {
       if (c?.videoUrl) URL.revokeObjectURL(c.videoUrl);
       return prev.filter((x) => x.id !== id);
     });
+    // The saved room goes with it: removing a capture is saying it was not a reading to keep.
+    removeAudit(auditIdFor(id));
   }
 
   // ---- pricing ------------------------------------------------------------
@@ -517,22 +528,56 @@ export function Scanner() {
       captures.map((c) => {
         // A location looked up for the other sector is not this capture's price.
         const geo = c.geo && (c.geo.sector ?? sector) === sector ? c.geo : null;
-        const { settings: s, rateQuality } = captureSettings(settings, { geo }, rateOverridden);
-        return { c, offenders: costCapture(c, s), rateQuality };
+        const { settings: s, rateQuality } = captureSettings(settings, { geo }, rateQualityBase);
+        return { c, offenders: costCapture(c, s, schedule), rateQuality };
       }),
-    [captures, settings, rateOverridden, sector],
+    [captures, settings, rateQualityBase, sector, schedule],
   );
 
-  const ranked = useMemo(() => {
-    const flat: { offender: Offender; mode: AnalysisResult["mode"]; engine: string }[] = [];
-    for (const p of priced) {
-      if (!p.c.result) continue;
-      for (const o of p.offenders) flat.push({ offender: o, mode: p.c.result.mode, engine: p.c.result.engine });
-    }
-    return flat.sort((a, b) => b.offender.costPerYear - a.offender.costPerYear);
-  }, [priced]);
+  const ranked = useMemo(
+    () =>
+      priced
+        .flatMap((p) => {
+          const r = p.c.result;
+          return r ? p.offenders.map((offender) => ({ offender, mode: r.mode, engine: r.engine })) : [];
+        })
+        .sort((a, b) => b.offender.costPerYear - a.offender.costPerYear),
+    [priced],
+  );
 
+  const setAdjust = (offenderId: string, a: DeviceAdjust) => {
+    const key = parseOffenderKey(offenderId);
+    if (!key) return;
+    // A measured wattage is the one accuracy figure the app can later show: record
+    // what it had estimated for this device before the meter reading replaced it.
+    const line = ranked.find((r) => r.offender.id === offenderId)?.offender;
+    const calId = `cal_${key.captureId}_${key.categoryId}`;
+    if (a.watts !== undefined && a.watts > 0 && line && ready) {
+      const estimated = line.basis === "measured" ? currentStore().calibrations.find((c) => c.id === calId)?.estimatedWatts : line.activeWattsPerUnit ?? line.perUnitWatts;
+      if (estimated && estimated > 0) {
+        upsertCalibration({
+          id: calId,
+          buildingId: building.id,
+          categoryId: key.categoryId,
+          label: line.label,
+          estimatedWatts: estimated,
+          estimateBasis: line.basis === "ai" ? "ai" : "catalog",
+          measuredWatts: a.watts,
+          at: new Date().toISOString(),
+        });
+      }
+    } else if (a.watts === undefined) {
+      removeCalibration(calId);
+    }
+    setCaptures((prev) =>
+      prev.map((c) => (c.id === key.captureId ? { ...c, adjust: { ...c.adjust, [key.categoryId]: a } } : c)),
+    );
+  };
+
+  /** Every line, unverified ones included, for the list. */
   const offenders = useMemo(() => ranked.map((r) => r.offender), [ranked]);
+  /** The lines that count toward totals, plans and exports. */
+  const countedOffenders = useMemo(() => counted(offenders), [offenders]);
   const totals = useMemo(() => aggregate(offenders), [offenders]);
   const done = priced.filter((p) => p.c.result);
   const rateQuality = useMemo<RateQuality>(() => {
@@ -540,7 +585,7 @@ export function Scanner() {
     const qs = done.map((p) => p.rateQuality);
     return qs.length ? qs.reduce((a, b) => (RATE_SIGMA[b] > RATE_SIGMA[a] ? b : a)) : "national";
   }, [done]);
-  const range = useMemo(() => costRange(offenders, rateQuality), [offenders, rateQuality]);
+  const range = useMemo(() => costRange(countedOffenders, rateQuality), [countedOffenders, rateQuality]);
   const maxCost = ranked[0]?.offender.costPerYear ?? 0;
   const hasResults = done.length > 0;
   const working = captures.some((c) => c.status === "working" || c.status === "pending");
@@ -561,52 +606,77 @@ export function Scanner() {
     [priced],
   );
 
-  /** live / fallback / mixed across every capture scanned so far. */
+  /** enhanced / on-device / mixed across every capture scanned so far. */
   const auditMode = useMemo<SavedAudit["mode"]>(() => {
     const modes = new Set(done.map((p) => p.c.result!.mode));
-    return modes.size > 1 ? "mixed" : modes.has("live") ? "live" : "fallback";
+    return modes.size > 1 ? "mixed" : modes.has("enhanced") ? "enhanced" : "on-device";
   }, [done]);
 
   /**
-   * Write this audit into the building's history.
+   * Every finished capture is saved as a room of the active building, and
+   * re-saved whenever its pricing or its name changes.
    *
-   * Saving is what turns a one-shot estimate into an accountability record: the
-   * portfolio page can then say "this room cost $310 a year in September, you
-   * installed a timer in October, and the November re-scan says it is gone".
+   * Saving used to be a button, and a brief or a building roll-up that depended
+   * on someone having pressed it was a brief that usually said "nothing saved".
+   * The saved record is what the rooms page, the brief and the building total
+   * are built from, so it is written as soon as there is a reading to write.
    */
-  function saveAudit() {
-    if (!hasResults || !ready) return;
-    const audit: SavedAudit = {
-      id: uid("a"),
-      buildingId: building.id,
-      at: new Date().toISOString(),
-      areas: done.map((p) => p.c.name),
-      offenders,
-      settings,
-      mode: auditMode,
-      engine: done[0]?.c.result?.engine ?? "unknown",
+  const buildingIdRef = useRef(building.id);
+  useEffect(() => {
+    buildingIdRef.current = building.id;
+  }, [building.id]);
+  useEffect(() => {
+    if (!ready) return;
+    let alive = true;
+    const t = setTimeout(async () => {
+      for (const p of priced) {
+        const r = p.c.result;
+        if (!r || p.c.status !== "done") continue;
+        const id = auditIdFor(p.c.id);
+        const existing = currentStore().audits.find((a) => a.id === id);
+        const thumb = existing?.thumb ?? (await thumbOf(p.c.dataUrl));
+        if (!alive) return;
+        const audit: SavedAudit = {
+          id,
+          buildingId: existing?.buildingId ?? buildingIdRef.current,
+          at: existing?.at ?? new Date().toISOString(),
+          areas: [p.c.name],
+          offenders: p.offenders,
+          settings: captureSettings(settings, { geo: p.c.geo ?? null }, rateQualityBase).settings,
+          mode: r.mode,
+          engine: r.engine,
+          roomType: p.c.roomType,
+          thumb,
+          captureId: p.c.id,
+        };
+        // Skip the write when nothing about the record changed.
+        if (existing && JSON.stringify({ ...existing, at: 0 }) === JSON.stringify({ ...audit, at: 0 })) continue;
+        upsertAudit(audit);
+      }
+    }, 400);
+    return () => {
+      alive = false;
+      clearTimeout(t);
     };
-    addAudit(audit);
-    setSavedAuditId(audit.id);
-  }
+  }, [priced, ready, settings, rateQualityBase]);
 
   const basisMix = useMemo(() => {
     const m = { measured: 0, ai: 0, catalog: 0 };
-    for (const o of offenders) m[o.basis ?? "catalog"]++;
+    for (const o of countedOffenders) m[o.basis ?? "catalog"]++;
     return m;
-  }, [offenders]);
+  }, [countedOffenders]);
 
   return (
     <section id="scanner" className="relative z-10 mx-auto max-w-6xl scroll-mt-20 px-4 pb-16 pt-[4.25rem] sm:px-6 md:pt-24">
       <div className="mb-3 flex flex-col gap-4 md:mb-6 md:flex-row md:items-end md:justify-between">
-        <PageHeader eyebrow="Scanner" title="Point at the building." accent="See what it's costing you." className="hidden md:block">
-          Live detection on the camera, a full AI audit on every photo or walkthrough video, priced for your utility.{" "}
+        <PageHeader eyebrow={t("nav.scanner")} title={t("scan.title")} accent={t("scan.accent")} className="hidden md:block">
+          {t("scan.intro")}{" "}
           <Link href="/methodology" className="text-cyan underline decoration-cyan/30 underline-offset-4 hover:decoration-cyan">
-            How the numbers work
+            {t("scan.how")}
           </Link>
           .
         </PageHeader>
-        <h1 className="sr-only">Scanner</h1>
+        <h1 className="sr-only">{t("nav.scanner")}</h1>
         <div className="flex flex-col gap-2 md:items-end">
           <ModeSwitch mode={mode} onChange={setMode} />
           <PlacePicker place={place} onChange={choosePlace} />
@@ -632,23 +702,18 @@ export function Scanner() {
         {/* ---- captures ---- */}
         <div className="min-w-0 space-y-3 lg:col-start-1 lg:row-start-1">
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-            <span className="mono-label">captures · {captures.length}</span>
+            <span className="mono-label">{t("scan.captures")} · {captures.length}</span>
             <div className="flex items-center gap-3">
-              <button onClick={addEstimate} className="text-[0.74rem] text-dim hover:text-amber">
-                + estimate without a photo
-              </button>
               {captures.length > 0 && (
                 <button onClick={() => setCaptures([])} className="text-[0.74rem] text-dim hover:text-ember">
-                  Clear
+                  {t("scan.clear")}
                 </button>
               )}
             </div>
           </div>
           {captures.length === 0 && (
             <div className="rounded-2xl border border-dashed border-line2 px-4 py-6 text-center text-[0.84rem] leading-relaxed text-mist">
-              {mode === "camera"
-                ? "Take a photo or record a walkthrough. Each one shows up here as it's analysed."
-                : "Photos and videos you add show up here as they're analysed."}
+              {mode === "camera" ? t("scan.empty.camera") : t("scan.empty.upload")}
             </div>
           )}
           <AnimatePresence initial={false}>
@@ -662,7 +727,8 @@ export function Scanner() {
                 defaultOpen={c.origin === "upload" && captures.length <= 2}
                 onDetails={(d) => setDetails(c.id, d)}
                 onPatch={(p) => patch(c.id, p)}
-                onReanalyze={() => patch(c.id, { status: "pending", result: undefined })}
+                onReanalyze={() => patch(c.id, { status: "pending", result: undefined, error: undefined, errorCode: undefined })}
+                onUseOnDevice={c.onDevice?.length ? () => adoptOnDevice(c.id) : undefined}
                 onRemove={() => remove(c.id)}
               />
             ))}
@@ -684,19 +750,21 @@ export function Scanner() {
                 captures={done.length}
                 basisMix={basisMix}
                 working={working}
-                typical={offenders.reduce((t, o) => t + (o.typicalCostPerYear ?? 0), 0)}
+                typical={countedOffenders.reduce((t, o) => t + (o.typicalCostPerYear ?? 0), 0)}
+                unverified={totals.unverifiedCost}
+                unverifiedCount={offenders.length - countedOffenders.length}
                 place={place}
               />
 
-              <ExportBar offenders={offenders} settings={settings} buildingName={building.name} onSave={ready ? saveAudit : undefined} saved={savedAuditId !== null} />
+              <ExportBar offenders={countedOffenders} settings={settings} buildingName={building.name} savedTo={ready ? building.name : undefined} roomCount={done.length} />
 
-              <ContributeBar offenders={offenders} mode={auditMode} defaultArea={done[0]?.c.name ?? building.name} />
+              <ContributeBar offenders={countedOffenders} mode={auditMode} defaultArea={done[0]?.c.name ?? building.name} />
 
               <TabBar tab={tab} onChange={setTab} count={ranked.length} />
 
               {tab === "offenders" && (
                 <div className="space-y-4">
-                  {offenders.length > 0 && <EfficiencyPanel offenders={offenders} settings={settings} />}
+                  {countedOffenders.length > 0 && <EfficiencyPanel offenders={countedOffenders} settings={settings} />}
                   {detectionPhotos.length > 0 && <DetectionView photos={detectionPhotos} hovered={hovered} onHover={setHovered} />}
                   {ranked.length === 0 && (
                     <div className="panel p-6 text-center text-[0.9rem] text-mist">
@@ -726,12 +794,17 @@ export function Scanner() {
                 </div>
               )}
 
-              {tab === "plan" && <BudgetPlanner offenders={offenders} />}
+              {tab === "plan" && (
+                <div className="space-y-5">
+                  <ActionPlan offenders={countedOffenders} settings={settings} />
+                  <BudgetPlanner offenders={countedOffenders} />
+                </div>
+              )}
 
               {tab === "grid" && (
                 <div className="space-y-5">
                   <GridPulse regionCode={building.regionCode} annualKwhWasted={totals.kwhPerYear} />
-                  <WeatherContext lat={building.lat ?? deviceGeo?.lat} lon={building.lon ?? deviceGeo?.lon} offenders={offenders} />
+                  <WeatherContext lat={building.lat ?? deviceGeo?.lat} lon={building.lon ?? deviceGeo?.lon} offenders={countedOffenders} />
                   <SolarOffset
                     lat={building.lat ?? deviceGeo?.lat}
                     lon={building.lon ?? deviceGeo?.lon}
@@ -745,9 +818,9 @@ export function Scanner() {
 
               {tab === "context" && (
                 <div className="space-y-5">
-                  <LoadMixPanel offenders={offenders} />
+                  <LoadMixPanel offenders={countedOffenders} />
                   <EquivalenceStrip co2Kg={totals.co2KgPerYear} dollars={totals.costPerYear} />
-                  <BenchmarkPanel offenders={offenders} building={building} settings={settings} />
+                  <BenchmarkPanel offenders={countedOffenders} building={building} settings={settings} />
                   <BillCalibration
                     bill={building.bill}
                     auditKwhPerYear={totals.kwhPerYear}
@@ -772,6 +845,7 @@ export function Scanner() {
               <span className="mono-label">Override assumptions</span>
               <span className="font-mono text-xs text-mist">
                 {settings.ratePerKwh.toFixed(3)} $/kWh
+                {override.ratePerKwh === undefined && billRate !== undefined && <span className="ml-1.5 text-lime">from bill</span>}
                 <span className="ml-2 text-cyan">{showSettings ? "−" : "+"}</span>
               </span>
             </button>
@@ -835,14 +909,15 @@ export function Scanner() {
 
 /** Where the scan is. Sets typical hours, empty hours and the price sector. */
 function PlacePicker({ place, onChange }: { place: UsageContext; onChange: (p: UsageContext) => void }) {
+  const t = useT();
   const opts: { id: UsageContext; label: string }[] = [
-    { id: "home", label: "Home" },
-    { id: "school", label: "School" },
-    { id: "office", label: "Office" },
+    { id: "home", label: t("scan.home") },
+    { id: "school", label: t("scan.school") },
+    { id: "office", label: t("scan.office") },
   ];
   return (
     <div className="flex items-center justify-between gap-3 md:justify-end">
-      <span className="text-[0.78rem] text-dim">Scanning a</span>
+      <span className="text-[0.78rem] text-dim">{t("scan.scanning")}</span>
       <div className="flex rounded-full bg-fog/[0.06] p-0.5" role="radiogroup" aria-label="Where you are scanning">
         {opts.map((o) => (
           <button
@@ -863,9 +938,10 @@ function PlacePicker({ place, onChange }: { place: UsageContext; onChange: (p: U
 }
 
 function ModeSwitch({ mode, onChange }: { mode: Mode; onChange: (m: Mode) => void }) {
+  const t = useT();
   const opts: { id: Mode; label: string; icon: "camera" | "upload" }[] = [
-    { id: "camera", label: "Camera", icon: "camera" },
-    { id: "upload", label: "Upload", icon: "upload" },
+    { id: "camera", label: t("scan.camera"), icon: "camera" },
+    { id: "upload", label: t("scan.upload"), icon: "upload" },
   ];
   return (
     <div className="grid grid-cols-2 rounded-full bg-fog/[0.06] p-1 md:w-[260px]" role="tablist" aria-label="Scan mode">
@@ -895,11 +971,12 @@ function ModeSwitch({ mode, onChange }: { mode: Mode; onChange: (m: Mode) => voi
 }
 
 function TabBar({ tab, onChange, count }: { tab: ResultTab; onChange: (t: ResultTab) => void; count: number }) {
+  const t = useT();
   const tabs: { id: ResultTab; label: string; hint: string }[] = [
-    { id: "offenders", label: "Offenders", hint: "What is running" },
-    { id: "plan", label: "Plan", hint: "What to do with the money you have" },
-    { id: "grid", label: "Grid", hint: "When to burn it, and what would cancel it" },
-    { id: "context", label: "Context", hint: "What it means and how you compare" },
+    { id: "offenders", label: t("tab.offenders"), hint: "What is running" },
+    { id: "plan", label: t("tab.plan"), hint: "What to do, in order, and what it changes" },
+    { id: "grid", label: t("tab.grid"), hint: "When to burn it, and what would cancel it" },
+    { id: "context", label: t("tab.context"), hint: "What it means and how you compare" },
   ];
   return (
     <div className="flex rounded-full bg-fog/[0.05] p-1" role="tablist">
@@ -948,6 +1025,8 @@ function TotalsHeader({
   basisMix,
   working,
   typical,
+  unverified,
+  unverifiedCount,
   place,
 }: {
   cost: number;
@@ -961,8 +1040,12 @@ function TotalsHeader({
   basisMix: { measured: number; ai: number; catalog: number };
   working: boolean;
   typical: number;
+  /** Annual cost of lines shown but not counted, and how many there are. */
+  unverified: number;
+  unverifiedCount: number;
   place: UsageContext;
 }) {
+  const t = useT();
   const lines = basisMix.measured + basisMix.ai + basisMix.catalog;
   // Precision: how tight the 80% band is, as a share of the headline.
   const precision = Math.max(0, Math.min(1, 1 - range.spread));
@@ -973,27 +1056,40 @@ function TotalsHeader({
         style={{ background: "radial-gradient(60% 120% at 100% 0%, rgba(239,157,46,0.1), transparent 60%)" }}
       />
       <div className="flex items-center justify-between gap-3">
-        <span className="mono-label text-cyan">bleeding while you sleep</span>
+        <span className="mono-label text-cyan">{t("totals.eyebrow")}</span>
         <span className="font-mono text-[0.68rem] text-dim">
-          {captures} capture{captures === 1 ? "" : "s"}
-          {working && <span className="ml-1.5 text-sodium-deep">· analysing…</span>}
+          {captures} {captures === 1 ? t("totals.capture") : t("totals.captures")}
+          {working && <span className="ml-1.5 text-sodium-deep">· {t("totals.analysing")}</span>}
         </span>
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
-        <BigStat label="/ yr if left on" accent value={<CountUp value={cost} format={fmtMoneyFull} />} />
-        <BigStat label="CO₂ / year" value={<CountUp value={co2} format={fmtCo2} />} />
-        <BigStat label="energy / year" value={<CountUp value={kwh} format={fmtKwh} />} />
-        <BigStat label="recoverable / yr" value={<CountUp value={recoverable} format={fmtMoneyFull} />} />
+        <BigStat
+          label={t("totals.wasted")}
+          accent
+          value={
+            cost > 0 ? (
+              <span className="whitespace-nowrap">
+                <CountUp value={range.p10} format={fmtMoney} />–<CountUp value={range.p90} format={fmtMoney} />
+              </span>
+            ) : (
+              "$0"
+            )
+          }
+        />
+        <BigStat label={t("totals.co2")} value={<CountUp value={co2} format={fmtCo2} />} />
+        <BigStat label={t("totals.energy")} value={<CountUp value={kwh} format={fmtKwh} />} />
+        <BigStat label={t("totals.recoverable")} value={<CountUp value={recoverable} format={fmtMoneyFull} />} />
       </div>
 
       {cost > 0 && (
         <div className="mt-5 border-t border-line pt-4">
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
             <span className="text-[0.84rem] text-fog">
-              Likely <span className="font-mono font-semibold">{fmtMoney(range.p10)}</span> – <span className="font-mono font-semibold">{fmtMoney(range.p90)}</span> a year
+              {t("totals.best")} <span className="font-mono font-semibold">{fmtMoneyFull(cost)}</span> {t("totals.year.between")}{" "}
+              <span className="font-mono font-semibold">{fmtMoney(range.p10)}</span> {t("totals.and")} <span className="font-mono font-semibold">{fmtMoney(range.p90)}</span>
             </span>
-            <span className="font-mono text-[0.72rem] text-dim">±{Math.round(range.spread * 100)}% · 80% range</span>
+            <span className="font-mono text-[0.72rem] text-dim">±{Math.round(range.spread * 100)}% · {t("totals.range")}</span>
           </div>
           {/* The band, drawn: where the headline sits inside what's plausible. */}
           <div className="relative mt-2.5 h-2 rounded-full bg-surface2">
@@ -1020,19 +1116,24 @@ function TotalsHeader({
         <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-surface2/60 p-3 text-[0.8rem]">
           <div>
             <div className="font-mono text-lg font-semibold text-fog">{fmtMoneyFull(cost)}</div>
-            <div className="leading-snug text-mist">
-              if left on whenever the {place === "home" ? "house is empty or asleep" : "building is empty"}
-            </div>
+            <div className="leading-snug text-mist">{place === "home" ? t("totals.after.hours.explain.home") : t("totals.after.hours.explain")}</div>
           </div>
           <div>
             <div className="font-mono text-lg font-semibold text-fog">{fmtMoneyFull(typical)}</div>
-            <div className="leading-snug text-mist">at typical use: hours actually in use, standby otherwise</div>
+            <div className="leading-snug text-mist">{t("totals.typical.explain")}</div>
           </div>
         </div>
       )}
 
-      <div className="mt-4 font-mono text-[0.72rem] text-mist">
-        biggest offender: <span className="text-lime">{topLabel}</span>
+      <div className="mt-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 font-mono text-[0.72rem] text-mist">
+        <span>
+          {t("totals.biggest")} <span className="text-lime">{topLabel}</span>
+        </span>
+        {unverifiedCount > 0 && (
+          <span className="text-amber" title="The cloud model reported these but the on-device detector could not back them. Confirm or delete each one on its card.">
+            + {fmtMoney(unverified)}{t("plan.yr")} · {unverifiedCount} {unverifiedCount > 1 ? t("totals.unverified.plural") : t("totals.unverified")}, {t("totals.not.counted")}
+          </span>
+        )}
       </div>
     </motion.div>
   );
@@ -1048,6 +1149,7 @@ function BigStat({ label, value, accent }: { label: string; value: React.ReactNo
 }
 
 function EmptyState({ working, mode }: { working: boolean; mode: Mode }) {
+  const t = useT();
   const steps =
     mode === "camera"
       ? [
@@ -1067,17 +1169,15 @@ function EmptyState({ working, mode }: { working: boolean; mode: Mode }) {
           <div className={`h-2.5 w-2.5 rounded-full grad-energy-bg ${working ? "pulse-dot" : ""}`} />
         </div>
         <div>
-          <h3 className="text-[1.05rem] font-semibold text-fog">{working ? "Reading your capture…" : "No audit yet"}</h3>
-          <p className="text-[0.84rem] text-mist">
-            {working ? "Ranked offenders appear here as each capture finishes." : "Ranked offenders, costs and fixes appear here."}
-          </p>
+          <h3 className="text-[1.05rem] font-semibold text-fog">{working ? t("empty.reading") : t("empty.none")}</h3>
+          <p className="text-[0.84rem] text-mist">{working ? t("empty.reading.sub") : t("empty.none.sub")}</p>
         </div>
       </div>
       <ol className="mt-5 grid gap-3 sm:grid-cols-3">
-        {steps.map(([t, d], i) => (
-          <li key={t} className="rounded-xl bg-surface2 px-3.5 py-3">
+        {steps.map(([title, d], i) => (
+          <li key={title} className="rounded-xl bg-surface2 px-3.5 py-3">
             <div className="font-mono text-[0.7rem] text-dim">0{i + 1}</div>
-            <div className="mt-1 text-[0.92rem] font-medium text-fog">{t}</div>
+            <div className="mt-1 text-[0.92rem] font-medium text-fog">{title}</div>
             <p className="mt-1 text-[0.8rem] leading-relaxed text-mist">{d}</p>
           </li>
         ))}

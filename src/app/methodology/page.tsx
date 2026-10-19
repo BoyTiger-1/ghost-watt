@@ -2,6 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Reveal } from "@/components/Reveal";
 import { CatalogTable } from "@/components/CatalogTable";
+import { CalibrationTable } from "@/components/CalibrationTable";
+import { ROOM_TYPES } from "@/lib/rooms";
+import { SOURCES } from "@/lib/sources";
+import { GROUP_LABELS, type DeviceGroup } from "@/lib/types";
+import { CATALOG_BY_ID } from "@/lib/devices";
 import { CodeWindow, DEVICES_TS, ENERGY_TS, ENERGY_TS_SHORT } from "@/components/CodeWindow";
 import { PageHeader } from "@/components/PageHeader";
 import { DEFAULT_SETTINGS } from "@/lib/types";
@@ -17,9 +22,12 @@ const TOC = [
   { id: "formula", label: "The formula" },
   { id: "defaults", label: "The defaults" },
   { id: "table", label: "The wattage table" },
+  { id: "rooms", label: "Hours by room type" },
+  { id: "measured", label: "Estimated vs measured" },
   { id: "engines", label: "Which engine read the photo" },
   { id: "carbon", label: "Where the carbon comes from" },
   { id: "totals", label: "What the totals count" },
+  { id: "sources", label: "Sources" },
 ];
 
 export default function MethodologyPage() {
@@ -103,9 +111,13 @@ export default function MethodologyPage() {
               <Default label="Empty hours" value={DEFAULT_SETTINGS.unoccupiedHoursPerYear.toLocaleString()} unit="per year" />
             </dl>
             <p className="mt-4 text-[0.9rem] leading-relaxed text-dim">
-              US-average commercial electricity price and grid carbon intensity, and a building used
-              about 1,900 hours a year (≈ 10 hours × 190 school days), which leaves about 6,800 dark.
-              All three are editable in <Link href="/settings" className="text-cyan underline-offset-4 hover:underline">settings</Link>.
+              These are the last-resort figures, used only when nothing better is known: a US-average
+              electricity price and grid factor, and a building used about 1,900 hours a year
+              (≈ 10 hours × 190 school days), which leaves about 6,800 dark. In practice a scan
+              starts from the building&apos;s state (Washington: $0.119 residential, $0.100 commercial per
+              kWh and about 0.10 kg CO₂/kWh from its mostly-hydro grid), then its utility&apos;s published
+              tariff if located, then a line off its own bill, which beats everything. The schedule drawn in{" "}
+              <Link href="/settings" className="text-cyan underline-offset-4 hover:underline">settings</Link> sets the empty hours.
             </p>
           </Section>
 
@@ -118,11 +130,38 @@ export default function MethodologyPage() {
             <CatalogTable />
           </Section>
 
+          {/* rooms */}
+          <Section id="rooms" title="Hours by room type">
+            <p className="mt-3 text-[1rem] leading-relaxed text-mist">
+              The same monitor costs a different amount in a classroom, an office and a bedroom,
+              because it is used for a different number of hours. Each room type carries the hours a
+              day its devices are typically in use; the rest of the lit or standby time is what the
+              app calls after-hours waste. Published figures are tagged with their source; the rest
+              are this app&apos;s own estimates and are marked as such.
+            </p>
+            <RoomHoursTable />
+            <p className="mt-3 text-[0.8rem] leading-relaxed text-dim">
+              A device not listed for a room falls back to the home / school / office profile. The
+              hours you type for a device override all of this.
+            </p>
+          </Section>
+
+          {/* measured */}
+          <Section id="measured" title="Estimated vs measured">
+            <p className="mt-3 text-[1rem] leading-relaxed text-mist">
+              The app never states an accuracy percentage it has not earned. The only one it will show
+              is this: on devices where somebody entered a plug-in meter reading, how far off was the
+              estimate it replaced?
+            </p>
+            <CalibrationTable />
+          </Section>
+
           {/* engines */}
           <Section id="engines" title="Which engine read the photo">
             <p className="mt-3 text-[1rem] leading-relaxed text-mist">
-              Perception is a chain, tried in order, stopping at the first that answers. Whichever
-              one ran, it contributes the same single thing: a list of devices and their states.
+              Two paths can read a picture, and the pill in the header always says which one is
+              about to run. Whichever one ran, it contributes the same single thing: a list of
+              devices and their states. Nothing is ever filled in from a typical room.
             </p>
             <ol className="mt-8 space-y-7">
               <Engine tone="bg-lime" title="A model on your own machine" badge="live model">
@@ -133,10 +172,11 @@ export default function MethodologyPage() {
                 reads the photo instead, so a visitor with nothing installed still gets a real
                 reading. The photo is sent for the scan and is not stored.
               </Engine>
-              <Engine tone="bg-sodium" title="A room-profile estimate" badge="estimated">
-                No engine, no devices recognised, or no photo at all: Ghost Watt uses a typical
-                fixture set for the room type, so a scan never comes back empty, and labels it so the
-                two are never confused.
+              <Engine tone="bg-lime" title="The detector in your browser" badge="on-device">
+                With no cloud model, or when you choose to keep pictures on the device, a small
+                object detector reads the picture in the browser. It recognises screens, laptops,
+                common appliances and lit fixtures and nothing else, so it undercounts. There is no
+                third path: a scan that could not be read says so instead of guessing.
               </Engine>
             </ol>
           </Section>
@@ -198,6 +238,37 @@ export default function MethodologyPage() {
             <p className="mt-8 text-[0.9rem] text-dim">Both behaviours are pinned by tests.</p>
           </Section>
 
+          {/* sources */}
+          <Section id="sources" title="Sources">
+            <p className="mt-3 text-[1rem] leading-relaxed text-mist">
+              Every figure the app multiplies by traces to one of these. Where a figure could not be
+              checked against the primary document, the entry says so.
+            </p>
+            <ol className="mt-6 space-y-5">
+              {SOURCES.map((src, i) => (
+                <li key={src.id} id={`src-${src.id}`} className="flex gap-4 scroll-mt-28">
+                  <span className="font-mono text-[0.8rem] text-dim tabular-nums">{String(i + 1).padStart(2, "0")}</span>
+                  <div className="min-w-0">
+                    <h3 className="text-[0.98rem] font-semibold text-fog">
+                      {src.url.startsWith("http") ? (
+                        <a href={src.url} target="_blank" rel="noreferrer" className="underline-offset-4 hover:text-cyan hover:underline">
+                          {src.label}
+                        </a>
+                      ) : (
+                        <Link href={src.url} className="underline-offset-4 hover:text-cyan hover:underline">{src.label}</Link>
+                      )}
+                    </h3>
+                    <p className="text-[0.8rem] text-dim">
+                      {src.publisher} · {src.year}
+                    </p>
+                    <p className="mt-1.5 text-[0.9rem] leading-relaxed text-mist">{src.used}</p>
+                    {src.caveat && <p className="mt-1 text-[0.84rem] leading-relaxed text-dim">{src.caveat}</p>}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </Section>
+
           <p className="font-editorial border-t border-line pt-10 text-[1.7rem] leading-[1.25] text-fog sm:text-[2rem]">
             Treat the dollars as well-grounded estimates, not meter readings.{" "}
             <span className="italic text-cyan">The deliverable is the order you fix things in, and that order is robust.</span>
@@ -255,6 +326,47 @@ function Default({ label, value, unit }: { label: string; value: string; unit: s
       <dt className="text-[0.8rem] text-dim">{label}</dt>
       <dd className="font-editorial mt-1 text-[2rem] leading-none text-fog sm:text-[2.6rem]">{value}</dd>
       <dd className="mt-1 text-[0.75rem] text-dim">{unit}</dd>
+    </div>
+  );
+}
+
+const SOURCE_SHORT: Record<string, string> = {
+  estimate: "app estimate",
+  "pnnl-22182": "PNNL lighting study",
+  "energystar-displays": "ENERGY STAR displays",
+  nielsen: "Nielsen",
+};
+
+function RoomHoursTable() {
+  const name = (key: string) =>
+    key.startsWith("group:") ? GROUP_LABELS[key.slice(6) as DeviceGroup] ?? key.slice(6) : CATALOG_BY_ID[key]?.label ?? key;
+  return (
+    <div className="mt-6 overflow-x-auto">
+      <table className="w-full min-w-[30rem] text-left text-[0.84rem]">
+        <thead>
+          <tr className="border-b border-line text-[0.7rem] uppercase tracking-wider text-dim">
+            <th className="py-2 pr-3 font-medium">Room</th>
+            <th className="py-2 font-medium">Hours a day in use</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ROOM_TYPES.filter((r) => Object.keys(r.hours).length).map((r) => (
+            <tr key={r.id} className="border-b border-line/60 align-top text-mist">
+              <td className="py-2.5 pr-3 text-fog">{r.label}</td>
+              <td className="py-2.5">
+                <ul className="flex flex-wrap gap-x-4 gap-y-1">
+                  {Object.entries(r.hours).map(([k, h]) => (
+                    <li key={k} className="whitespace-nowrap">
+                      {name(k)} <span className="font-mono text-fog tabular-nums">{h.hours}h</span>
+                      <span className="ml-1 text-[0.72rem] text-dim">{SOURCE_SHORT[h.source] ?? h.source}</span>
+                    </li>
+                  ))}
+                </ul>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

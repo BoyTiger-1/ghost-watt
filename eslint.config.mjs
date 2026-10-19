@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Model runtimes copied from node_modules at build time (scripts/copy-runtimes.mjs).
+    "public/runtimes/**",
   ]),
 ]);
 

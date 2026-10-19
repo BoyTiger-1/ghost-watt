@@ -59,17 +59,17 @@ export function GridPulse({
   /** Wasted kWh per year from the current audit, so the swing has a dollar-shaped meaning. */
   annualKwhWasted: number;
 }) {
-  const [data, setData] = useState<CarbonResponse | null>(null);
-  const [failed, setFailed] = useState(false);
+  // Keyed by region, so a stale answer for the last region never shows for this one.
+  const [got, setGot] = useState<{ key: string; data: CarbonResponse | null; failed: boolean } | null>(null);
+  const data = got?.key === regionCode ? got.data : null;
+  const failed = got?.key === regionCode ? got.failed : false;
 
   useEffect(() => {
     let alive = true;
-    setData(null);
-    setFailed(false);
     fetch(`/api/grid?zone=${encodeURIComponent(regionCode)}`, { cache: "no-store" })
       .then((r) => r.json())
-      .then((d: CarbonResponse) => alive && setData(d))
-      .catch(() => alive && setFailed(true));
+      .then((d: CarbonResponse) => alive && setGot({ key: regionCode, data: d, failed: false }))
+      .catch(() => alive && setGot({ key: regionCode, data: null, failed: true }));
     return () => {
       alive = false;
     };

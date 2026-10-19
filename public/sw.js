@@ -20,7 +20,7 @@
  *     session with no way to tell the user it happened.
  */
 
-const VERSION = "gw-v1";
+const VERSION = "gw-v2";
 const SHELL = `${VERSION}-shell`;
 const RUNTIME = `${VERSION}-runtime`;
 
@@ -58,6 +58,9 @@ self.addEventListener("message", (event) => {
 function isStaticAsset(url) {
   return (
     url.pathname.startsWith("/_next/static/") ||
+    // The on-device detector's runtime, served by this app: cache-first so a scan
+    // works with no signal once the app has been opened online once.
+    url.pathname.startsWith("/runtimes/") ||
     url.pathname.endsWith(".svg") ||
     url.pathname.endsWith(".woff2") ||
     url.pathname === "/manifest.webmanifest"

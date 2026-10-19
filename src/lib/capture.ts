@@ -6,12 +6,13 @@
 // anything the user types afterwards - a wattage off a nameplate, how many hours
 // it runs, a different count - re-prices the capture instantly and for free.
 
-import { fallbackObservations, type CategorizedObservation } from "./parse";
+import type { CategorizedObservation } from "./parse";
 import { rankObservations } from "./energy";
+import { CATALOG_BY_ID } from "./devices";
 import { localClock, type PhotoMeta } from "./exif";
 import { isOccupiedAt, type WeeklySchedule } from "./schedule";
 import type { RateQuality } from "./estimate";
-import type { AnalysisResult, AuditSettings, Offender } from "./types";
+import type { AnalysisResult, AnalyzeErrorCode, AuditSettings, Offender } from "./types";
 
 export interface GeoContext {
   place: string | null;
@@ -36,6 +37,14 @@ export interface CaptureDetails {
   hoursPerDay?: number;
   /** Free text, passed to the model: "Dell monitors, lab is closed weekends". */
   note?: string;
+  /** Kind of room, for the typical-use hours. */
+  roomType?: string;
+  /**
+   * What happens here after hours, for every device seen on: it stays on as seen
+   * ("on"), or goes to standby. Default: what was seen if the picture was taken
+   * after hours, standby if it was taken during open hours.
+   */
+  afterHours?: "on" | "standby";
 }
 
 /** Per-device corrections, keyed by catalog category. */
@@ -43,6 +52,14 @@ export interface DeviceAdjust {
   count?: number;
   watts?: number;
   hoursPerDay?: number;
+  /** The user looked and says it is real: an unverified line becomes counted. */
+  confirmed?: boolean;
+  /** The user says it is not there. */
+  deleted?: boolean;
+  /** The user says the model named the wrong kind of device. */
+  categoryId?: string;
+  /** The state this device is in after hours, when the user knows: left on, asleep, or switched off. */
+  afterHours?: "on" | "standby" | "off";
 }
 
 export type CaptureStatus = "pending" | "working" | "done" | "error";
@@ -71,7 +88,7 @@ export interface Capture {
   geo?: GeoContext | null;
   details: CaptureDetails;
   adjust: Record<string, DeviceAdjust>;
-  /** Room preset for the no-model fallback. */
+  /** What kind of room this is: sets how many hours a day each device is typically in use. */
   roomType: string;
   status: CaptureStatus;
   stage?: string;
@@ -79,6 +96,8 @@ export interface Capture {
   error?: string;
   /** The audit as the engine returned it. */
   result?: AnalysisResult;
+  /** Why the last analysis failed, when it did. */
+  errorCode?: AnalyzeErrorCode;
   /** What the on-device detector read, kept as a fallback and for hints. */
   onDevice?: CategorizedObservation[];
 }
@@ -90,9 +109,11 @@ export const captureId = () => `c${Date.now().toString(36)}${(n++).toString(36)}
 export function captureSettings(
   base: AuditSettings,
   c: Pick<Capture, "geo">,
-  rateOverridden: boolean,
+  baseQuality: RateQuality | boolean,
 ): { settings: AuditSettings; rateQuality: RateQuality } {
-  if (rateOverridden) return { settings: base, rateQuality: "bill" };
+  // A bill or a typed rate is the building's own price; nothing looked up beats it.
+  if (baseQuality === true || baseQuality === "bill") return { settings: base, rateQuality: "bill" };
+  if (baseQuality === "utility") return { settings: base, rateQuality: "utility" };
   if (c.geo) {
     return {
       settings: { ...base, ratePerKwh: c.geo.ratePerKwh, co2PerKwh: c.geo.co2PerKwh },
@@ -114,6 +135,7 @@ export function applyInputs(
 
   const captureHours = hours(details.hoursPerDay);
   if (captureHours !== undefined) for (const o of out) o.hoursPerYear = captureHours;
+  if (details.afterHours) for (const o of out) if (o.state === "on") o.afterHours = details.afterHours;
 
   // The capture-level wattage belongs to its main device: the one costing most.
   if (details.watts && details.watts > 0 && out.length) {
@@ -126,34 +148,59 @@ export function applyInputs(
   for (const o of out) {
     const a = adjust[o.categoryId];
     if (!a) continue;
+    if (a.deleted) {
+      o.count = 0;
+      continue;
+    }
     if (a.count !== undefined && a.count >= 0) o.count = Math.round(a.count);
     if (a.watts !== undefined && a.watts > 0) o.userWatts = a.watts;
     const h = hours(a.hoursPerDay);
     if (h !== undefined) o.hoursPerYear = h;
+    if (a.confirmed) o.verification = "confirmed";
+    if (a.afterHours) o.afterHours = a.afterHours;
+    if (a.categoryId && CATALOG_BY_ID[a.categoryId] && a.categoryId !== o.categoryId) {
+      o.categoryId = a.categoryId;
+      o.device = CATALOG_BY_ID[a.categoryId].label;
+      // A device the user re-identified is a device the user looked at.
+      o.verification = "confirmed";
+      // The model's wattage read was for the thing it thought it saw.
+      delete o.wattsHint;
+    }
   }
   return out.filter((o) => o.count > 0);
 }
 
 /** The perception a capture's costing starts from. */
 export function baseObservations(c: Capture): CategorizedObservation[] {
-  const r = c.result;
-  if (!r) return [];
-  if (r.observations) return r.observations;
-  // A room-profile estimate carries no observations; rebuild them from the preset.
-  return r.mode === "fallback" ? fallbackObservations(c.roomType) : [];
+  return c.result?.observations ?? [];
 }
 
-/** A capture's offenders, priced with its own location and the user's inputs. */
-export function costCapture(c: Capture, settings: AuditSettings): Offender[] {
+/** The settings one capture is priced with: its room type and whether it was taken after hours. */
+export function captureContext(c: Pick<Capture, "meta" | "details" | "roomType">, settings: AuditSettings, schedule?: WeeklySchedule): AuditSettings {
+  const time = readTime(c.meta.takenAt, schedule);
+  return {
+    ...settings,
+    roomType: c.details.roomType ?? (c.roomType !== "unknown" ? c.roomType : undefined),
+    capturedAfterHours: time ? time.afterHours : null,
+  };
+}
+
+/** A capture's offenders, priced with its own location, room and the user's inputs. */
+export function costCapture(c: Capture, settings: AuditSettings, schedule?: WeeklySchedule): Offender[] {
   if (!c.result) return [];
-  const obs = applyInputs(baseObservations(c), c.details, c.adjust, settings);
-  return rankObservations(obs, settings, c.name).map((o) => ({ ...o, id: offenderKey(c.id, o.categoryId) }));
+  const s = captureContext(c, settings, schedule);
+  const obs = applyInputs(baseObservations(c), c.details, c.adjust, s);
+  return rankObservations(obs, s, c.name).map((o) => ({ ...o, id: offenderKey(c.id, o.categoryId, o.unverified) }));
 }
 
-export const offenderKey = (captureId: string, categoryId: string) => `${captureId}::${categoryId}`;
+export const offenderKey = (captureId: string, categoryId: string, unverified?: boolean) =>
+  `${captureId}::${categoryId}${unverified ? "::?" : ""}`;
 export function parseOffenderKey(id: string): { captureId: string; categoryId: string } | null {
   const i = id.indexOf("::");
-  return i > 0 ? { captureId: id.slice(0, i), categoryId: id.slice(i + 2) } : null;
+  if (i <= 0) return null;
+  const rest = id.slice(i + 2);
+  const j = rest.indexOf("::");
+  return { captureId: id.slice(0, i), categoryId: j === -1 ? rest : rest.slice(0, j) };
 }
 
 // ---- context for the model --------------------------------------------------
@@ -194,31 +241,4 @@ export function promptContext(c: Capture, schedule: WeeklySchedule | undefined) 
     note: c.details.note,
     hints: hints.slice(0, 6),
   };
-}
-
-/** The engine's reply, turned into the result a capture should show. */
-export function resolveResult(
-  server: AnalysisResult,
-  onDevice: CategorizedObservation[] | undefined,
-  engineLabel: string,
-): AnalysisResult {
-  if (server.mode === "live") return server;
-  // The model looked and found nothing powered: that is an answer, not a reason to guess.
-  if (server.fallbackReason === "nothing-found") {
-    return { ...server, mode: "live", offenders: [], observations: [], notice: "No powered devices found in this capture." };
-  }
-  // No model reachable: the detector's own reading of this capture beats a room preset.
-  if (onDevice?.length) {
-    return {
-      mode: "live",
-      engine: engineLabel,
-      source: server.source,
-      offenders: [],
-      observations: onDevice,
-      notice: `${
-        server.fallbackReason === "limited" ? "AI readings are paused for a few minutes." : "No AI vision engine is reachable."
-      } Read on this device instead: screens, laptops, appliances and lit fixtures only.`,
-    };
-  }
-  return server;
 }
