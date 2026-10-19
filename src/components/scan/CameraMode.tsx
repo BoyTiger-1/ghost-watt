@@ -21,6 +21,7 @@ import { classifyRegion, getClassifier, getDetector, padBox, toPixelDetections }
 import { CENTER_ROI, CenterLamp, Verifier, judge, lampScore, withLamps } from "@/lib/verify";
 import { observationsToItems, panelOf, readItems, type LiveItem } from "@/lib/ondevice";
 import { dedupeCandidates, isLiveClass, looksLikeWindow, tooBig } from "@/lib/candidates";
+import { useT } from "@/lib/i18n";
 import { readStill } from "@/lib/still";
 import { analysisSquare } from "@/lib/image";
 import { LightTracker, readScene, regionSaturation, regionStats, type SceneRead } from "@/lib/scene";
@@ -148,6 +149,7 @@ export function CameraMode({
 
   const [phase, setPhase] = useState<Phase>("starting");
   const [error, setError] = useState<{ text: string; noCamera: boolean } | null>(null);
+  const t = useT();
   const [facing, setFacing] = useState<"environment" | "user">("environment");
   const [canFlip, setCanFlip] = useState(false);
   const [torch, setTorch] = useState<boolean | null>(null);
@@ -285,12 +287,12 @@ export function CameraMode({
         setPhase("error");
         setError(
           name === "SecurityError"
-            ? { text: "This browser only allows the camera over HTTPS. Open the deployed site, or upload a photo or video.", noCamera: true }
+            ? { text: "cam.https", noCamera: true }
             : name === "NotAllowedError"
-              ? { text: "Camera access was blocked. Allow it in your browser's site settings, or upload instead.", noCamera: false }
+              ? { text: "cam.blocked", noCamera: false }
               : name === "NotFoundError" || name === "OverconstrainedError"
-                ? { text: "No camera found on this device. Upload a photo or video instead.", noCamera: true }
-                : { text: "The camera couldn't start. Another app may be using it.", noCamera: false },
+                ? { text: "cam.no.camera", noCamera: true }
+                : { text: "cam.busy", noCamera: false },
         );
         return;
       }
@@ -774,7 +776,7 @@ export function CameraMode({
             {error ? (
               <div className="max-w-xs rounded-2xl bg-black/70 p-5 text-center backdrop-blur-md">
                 <Icon name="camera" className="mx-auto h-8 w-8 text-white/70" />
-                <p className="mt-3 text-[0.92rem] leading-relaxed text-white/85">{error.text}</p>
+                <p className="mt-3 text-[0.92rem] leading-relaxed text-white/85">{error.text.startsWith("cam.") ? t(error.text as Parameters<typeof t>[0]) : error.text}</p>
                 <div className="mt-4 flex justify-center gap-2">
                   {!error.noCamera && (
                     <button
@@ -784,11 +786,11 @@ export function CameraMode({
                         start(facing);
                       }}
                       className="rounded-full border border-white/30 px-4 py-2 text-[0.85rem]">
-                      Try again
+                      {t("cam.try.again")}
                     </button>
                   )}
                   <button onClick={onUseUpload} className="rounded-full bg-white px-4 py-2 text-[0.85rem] font-medium text-black">
-                    Upload instead
+                    {t("cam.upload.instead")}
                   </button>
                 </div>
               </div>
@@ -938,15 +940,16 @@ function group(items: readonly LiveItem[]): Row[] {
 
 /** The cost pill. Confirmed readings only: candidates are suggestions, not money. */
 function SummaryLine({ items, dark }: { items: readonly ViewItem[]; dark?: boolean }) {
+  const t = useT();
   const confirmed = items.filter((i) => !i.candidate && i.kind !== "other");
   const candidates = items.filter((i) => i.candidate && i.kind !== "other");
   const cost = confirmed.reduce((s, i) => s + i.costPerYear, 0);
   if (!confirmed.length) {
     return (
       <span className="flex min-w-0 items-baseline gap-2">
-        <span className={`text-[0.9rem] font-medium ${dark ? "text-white" : "text-fog"}`}>Hold still to confirm</span>
+        <span className={`text-[0.9rem] font-medium ${dark ? "text-white" : "text-fog"}`}>{t("cam.hold")}</span>
         <span className={`truncate text-[0.78rem] ${dark ? "text-white/70" : "text-mist"}`}>
-          {candidates.length ? `${candidates.length} candidate${candidates.length > 1 ? "s" : ""} in view` : "point at screens, lights, appliances"}
+          {candidates.length ? `${candidates.length} ${candidates.length > 1 ? t("cam.candidates.in.view") : t("cam.candidate.in.view")}` : t("cam.point.short")}
         </span>
       </span>
     );
@@ -955,10 +958,10 @@ function SummaryLine({ items, dark }: { items: readonly ViewItem[]; dark?: boole
     <span className="flex min-w-0 items-baseline gap-2">
       <span className={`font-mono text-[1.05rem] font-semibold ${dark ? "text-white" : "text-fog"}`}>
         ≈{fmtMoney(cost)}
-        <span className={`text-[0.72rem] font-normal ${dark ? "text-white/60" : "text-dim"}`}>/yr if left on</span>
+        <span className={`text-[0.72rem] font-normal ${dark ? "text-white/60" : "text-dim"}`}>{t("cam.if.left.on")}</span>
       </span>
       <span className={`truncate text-[0.78rem] ${dark ? "text-white/70" : "text-mist"}`}>
-        {confirmed.length} confirmed in view
+        {confirmed.length} {t("cam.confirmed.in.view")}
       </span>
     </span>
   );
@@ -1009,6 +1012,7 @@ function LiveRead({
   const typical = confirmedItems.reduce((s, i) => s + i.typicalCostPerYear, 0);
   const watts = confirmedItems.reduce((s, i) => s + i.watts, 0);
   const confirmed = ai.kind === "confirmed";
+  const tr = useT();
   const t = dark
     ? { fog: "text-white", mist: "text-white/75", dim: "text-white/55", line: "border-white/10", chip: "bg-white/10" }
     : { fog: "text-fog", mist: "text-mist", dim: "text-dim", line: "border-line", chip: "bg-surface2" };
@@ -1017,8 +1021,8 @@ function LiveRead({
     <div className="flex min-h-0 flex-1 flex-col">
       {!dark && (
         <div className="flex items-center justify-between">
-          <span className="mono-label">{confirmed ? `confirmed · ${PATH_WORD[ai.mode]}` : "live candidates · on-device"}</span>
-          <span className="font-mono text-[0.66rem] text-dim">{confirmed ? "priced" : "not priced until confirmed"}</span>
+          <span className="mono-label">{confirmed ? `${tr("cam.confirmed.by")} · ${PATH_WORD[ai.mode]}` : tr("cam.candidates")}</span>
+          <span className="font-mono text-[0.66rem] text-dim">{confirmed ? tr("cam.priced") : tr("cam.not.priced")}</span>
         </div>
       )}
 
@@ -1027,19 +1031,19 @@ function LiveRead({
           <>
             <div className={`font-mono text-[2rem] font-bold leading-none ${t.fog}`}>
               ≈{fmtMoney(cost)}
-              <span className={`ml-1 text-sm font-normal ${t.dim}`}>/yr if left on</span>
+              <span className={`ml-1 text-sm font-normal ${t.dim}`}>{tr("cam.if.left.on")}</span>
             </div>
             <p className={`mt-1.5 text-[0.78rem] ${t.mist}`}>
-              <span className={`font-mono font-semibold ${t.fog}`}>≈{fmtMoney(typical)}/yr</span> at typical use · {fmtWatts(watts)} drawing
+              <span className={`font-mono font-semibold ${t.fog}`}>≈{fmtMoney(typical)}/yr</span> {tr("cam.typical")} · {fmtWatts(watts)} {tr("cam.drawing")}
             </p>
           </>
         ) : (
           <>
-            <div className={`text-[1.3rem] font-semibold leading-tight ${t.fog}`}>{ai.kind === "confirming" ? "Confirming…" : "Hold still to confirm"}</div>
+            <div className={`text-[1.3rem] font-semibold leading-tight ${t.fog}`}>{ai.kind === "confirming" ? tr("cam.confirming") : tr("cam.hold")}</div>
             <p className={`mt-1 text-[0.78rem] ${t.mist}`}>
               {candRows.length
-                ? `${candidateItems.filter((i) => i.kind !== "other").length} candidate${candidateItems.length > 1 ? "s" : ""} in view. Nothing is priced until the strong read confirms it.`
-                : "Point at screens, laptops, lights or appliances."}
+                ? `${candidateItems.filter((i) => i.kind !== "other").length} ${candidateItems.length > 1 ? tr("cam.candidates.in.view") : tr("cam.candidate.in.view")}. ${tr("cam.candidates.unpriced")}`
+                : tr("cam.point")}
             </p>
           </>
         )}
@@ -1048,7 +1052,7 @@ function LiveRead({
       <ul className={`mt-3 min-h-0 flex-1 space-y-1.5 overflow-y-auto ${dark ? "" : "max-h-[300px]"}`}>
         {rows.length === 0 && candRows.length === 0 && (
           <li className={`rounded-xl border border-dashed ${t.line} px-3 py-4 text-center text-[0.8rem] ${t.dim}`}>
-            Nothing powered in view yet. Point at screens, laptops, lights or appliances.
+            {tr("cam.nothing")}
           </li>
         )}
         {!confirmed &&

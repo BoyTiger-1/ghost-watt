@@ -704,3 +704,171 @@ body:has(.home) ::-webkit-scrollbar-thumb:hover { background: var(--color-pebble
     animation: none;
   }
 }
+
+/* ---- display & accessibility preferences --------------------------------
+ *
+ * Everything below keys off attributes the preferences store puts on <html>
+ * (lib/prefs.ts). Because every component is drawn from the semantic tokens,
+ * a theme is a re-mapping of those tokens and nothing else.
+ */
+
+/* Dark: the same warm family, inverted. Text clears 7:1 on the ground. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-void: #0f0f0e;
+  --color-ink: #151514;
+  --color-surface: #1d1d1b;
+  --color-surface2: #262522;
+  --color-line: #33322e;
+  --color-line2: #4a4842;
+  --color-fog: #f1ede4;
+  --color-mist: #c3bdb0;
+  --color-dim: #9a9488;
+  --color-cyan: #9fb0e0;
+  --color-cyan-deep: #c3cdee;
+  --color-lime: #7fc9a3;
+  --color-amber: #e9b45a;
+  --color-ember: #f0825f;
+  --color-paper: #151514;
+  --color-paper2: #0f0f0e;
+  --color-cream: #1d1d1b;
+  --color-graphite: #f1ede4;
+  --color-stone: #c3bdb0;
+  --color-pebble: #9a9488;
+  --color-hair: #33322e;
+  --color-haze: #262a38;
+  --color-dusk: #9fb0e0;
+  --color-moss: #7fc9a3;
+}
+:root[data-theme="dark"] body:has(.home) {
+  color-scheme: dark;
+}
+:root[data-theme="dark"] .panel {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 18px 40px -32px rgba(0, 0, 0, 0.6);
+}
+:root[data-theme="dark"] ::-webkit-scrollbar-track { background: var(--color-ink); }
+:root[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #4a4842; border-color: var(--color-ink); }
+
+/* High contrast: text goes to the extremes, lines get stronger, tints go. */
+:root[data-contrast] {
+  --color-fog: #000000;
+  --color-mist: #1a1a1a;
+  --color-dim: #333333;
+  --color-line: #8a8478;
+  --color-line2: #5c574d;
+  --color-cyan: #1f2a4d;
+  --color-lime: #14532d;
+  --color-amber: #7a4300;
+  --color-ember: #9a2a0f;
+  --color-graphite: #000000;
+  --color-stone: #1a1a1a;
+  --color-pebble: #333333;
+  --color-hair: #8a8478;
+}
+:root[data-contrast][data-theme="dark"] {
+  --color-void: #000000;
+  --color-ink: #000000;
+  --color-surface: #0a0a0a;
+  --color-surface2: #161616;
+  --color-fog: #ffffff;
+  --color-mist: #f0f0f0;
+  --color-dim: #d0d0d0;
+  --color-line: #8a8a8a;
+  --color-line2: #b0b0b0;
+  --color-cyan: #b7c6ff;
+  --color-lime: #9fe3bf;
+  --color-amber: #ffcf7a;
+  --color-ember: #ffa184;
+  --color-paper: #000000;
+  --color-paper2: #000000;
+  --color-cream: #0a0a0a;
+  --color-graphite: #ffffff;
+  --color-stone: #f0f0f0;
+  --color-pebble: #d0d0d0;
+  --color-hair: #8a8a8a;
+}
+:root[data-contrast] .grad-energy,
+:root[data-contrast] .grad-energy-live {
+  background: none;
+  -webkit-text-fill-color: var(--color-ember);
+  color: var(--color-ember);
+}
+:root[data-contrast] .text-glow {
+  text-shadow: none;
+}
+:root[data-contrast] .panel {
+  box-shadow: none;
+  border-width: 1.5px;
+}
+
+/* Text size: the root em scales, so every rem-based size follows. */
+:root[data-text="large"] { font-size: 112.5%; }
+:root[data-text="xl"] { font-size: 125%; }
+
+/* Reduce motion, chosen in the app rather than the OS: nothing moves. */
+:root[data-motion="reduce"] *,
+:root[data-motion="reduce"] *::before,
+:root[data-motion="reduce"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+:root[data-motion="reduce"] .draw-line { stroke-dashoffset: 0; }
+:root[data-motion="reduce"] .grow-y,
+:root[data-motion="reduce"] .grow-x,
+:root[data-motion="reduce"] .rise-in { opacity: 1; transform: none; }
+
+/* Colour-blind-safe meaning colours (Okabe–Ito): blue for recovered, vermilion
+   for waste, orange for estimates. Red/green never carries meaning alone. */
+:root[data-palette="safe"] {
+  --color-lime: #0072b2;
+  --color-ember: #d55e00;
+  --color-amber: #b8730a;
+  --color-sodium: #e69f00;
+  --color-sodium-deep: #b8730a;
+  --color-flare: #d55e00;
+  --color-moss: #0072b2;
+}
+:root[data-palette="safe"][data-theme="dark"] {
+  --color-lime: #56b4e9;
+  --color-ember: #ff8a4c;
+  --color-amber: #f0b64a;
+}
+
+/* Links told apart by more than colour. */
+:root[data-underline] a:not(.skip-link):not([role="tab"]):not(nav a) {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+/* Bigger targets: 44 px, the size a thumb can hit. */
+:root[data-targets] button,
+:root[data-targets] [role="tab"],
+:root[data-targets] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+:root[data-targets] select,
+:root[data-targets] summary {
+  min-height: 2.75rem;
+}
+:root[data-targets] input[type="checkbox"],
+:root[data-targets] input[type="radio"] {
+  width: 1.4rem;
+  height: 1.4rem;
+}
+
+/* Wider spacing for readers who need it. */
+:root[data-spacing] body {
+  letter-spacing: 0.04em;
+  word-spacing: 0.12em;
+  line-height: 1.65;
+}
+:root[data-spacing] p,
+:root[data-spacing] li {
+  line-height: 1.7 !important;
+}
+
+/* Focus ring on every focus, not only keyboard focus. */
+:root[data-focus] :focus {
+  outline: 2px solid var(--color-cyan);
+  outline-offset: 2px;
+}

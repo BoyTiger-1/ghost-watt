@@ -13,8 +13,11 @@ import { listActions, rankActions, simulate, type ActionItem } from "@/lib/actio
 import { fmtCo2, fmtMoney, fmtMoneyFull, fmtPayback, fmtPct } from "@/lib/energy";
 import type { AuditSettings, Offender } from "@/lib/types";
 import { DeviceGlyph } from "./DeviceGlyph";
+import { CountUp } from "./CountUp";
+import { useT } from "@/lib/i18n";
 
 export function ActionPlan({ offenders, settings }: { offenders: Offender[]; settings: AuditSettings }) {
+  const t = useT();
   const actions = useMemo(() => rankActions(listActions(offenders, settings)), [offenders, settings]);
   const [chosen, setChosen] = useState<ReadonlySet<string>>(() => new Set());
   // Moves for lines that no longer exist drop out silently.
@@ -43,31 +46,34 @@ export function ActionPlan({ offenders, settings }: { offenders: Offender[]; set
     <section className="panel ticked @container overflow-hidden" aria-label="Savings simulator">
       <header className="flex flex-wrap items-end justify-between gap-3 border-b border-line px-5 py-4 sm:px-6">
         <div>
-          <h2 className="text-lg font-semibold text-fog sm:text-xl">What to do, in order</h2>
-          <p className="mt-0.5 text-sm text-mist">Ranked by dollars saved per dollar spent. Tick moves to see the bill change.</p>
+          <h2 className="text-lg font-semibold text-fog sm:text-xl">{t("plan.title")}</h2>
+          <p className="mt-0.5 text-sm text-mist">{t("plan.sub")}</p>
         </div>
-        <span className="mono-label">{live.size} of {actions.length} chosen</span>
+        <span className="mono-label" aria-live="polite">
+          {live.size} {t("plan.of")} {actions.length} {t("plan.chosen")}
+        </span>
       </header>
 
       {/* live totals */}
-      <div className="grid grid-cols-2 gap-px border-b border-line bg-line @lg:grid-cols-5">
-        <Cell label="annual bill now" value={fmtMoneyFull(sim.before.total)} sub={`${fmtMoney(sim.before.afterHours)} after hours · ${fmtMoney(sim.before.typical)} in use`} />
-        <Cell label="after these moves" value={fmtMoneyFull(sim.after.total)} sub={`${fmtMoney(sim.after.afterHours)} after hours · ${fmtMoney(sim.after.typical)} in use`} tint="var(--color-cyan)" />
-        <Cell label="saved a year" value={fmtMoneyFull(sim.annualSavings)} sub={sim.before.total > 0 ? `${fmtPct(sim.share)} of the bill` : ""} tint="var(--color-lime)" />
-        <Cell label="up front" value={sim.upfront > 0 ? fmtMoneyFull(sim.upfront) : "nothing"} sub={sim.paybackMonths === null ? "no purchase" : sim.paybackMonths === Infinity ? "never pays back" : `pays back in ${fmtPayback(sim.paybackMonths)}`} />
-        <Cell label="CO₂ avoided" value={fmtCo2(sim.co2SavedKg)} sub="a year, at this grid's factor" />
+      {/* Numbers count to their new value so a change reads as a change; under reduced motion they jump. */}
+      <div className="grid grid-cols-2 gap-px border-b border-line bg-line @lg:grid-cols-5" aria-live="polite" aria-atomic="true">
+        <Cell label={t("plan.bill.now")} value={fmtMoneyFull(sim.before.total)} sub={`${fmtMoney(sim.before.afterHours)} ${t("plan.after.hours")} · ${fmtMoney(sim.before.typical)} ${t("plan.in.use")}`} />
+        <Cell label={t("plan.bill.after")} value={<CountUp value={sim.after.total} format={fmtMoneyFull} duration={500} />} sub={`${fmtMoney(sim.after.afterHours)} ${t("plan.after.hours")} · ${fmtMoney(sim.after.typical)} ${t("plan.in.use")}`} tint="var(--color-cyan)" />
+        <Cell label={t("plan.saved")} value={<CountUp value={sim.annualSavings} format={fmtMoneyFull} duration={500} />} sub={sim.before.total > 0 ? `${fmtPct(sim.share)} ${t("plan.of.bill")}` : ""} tint="var(--color-lime)" />
+        <Cell label={t("plan.upfront")} value={sim.upfront > 0 ? fmtMoneyFull(sim.upfront) : t("plan.nothing")} sub={sim.paybackMonths === null ? t("plan.no.purchase") : sim.paybackMonths === Infinity ? t("plan.never") : `${t("plan.pays.back")} ${fmtPayback(sim.paybackMonths)}`} />
+        <Cell label={t("plan.co2")} value={<CountUp value={sim.co2SavedKg} format={fmtCo2} duration={500} />} sub={t("plan.grid.factor")} />
       </div>
 
       <div className="flex flex-wrap gap-1.5 border-b border-line px-5 py-3 sm:px-6">
         <Quick onClick={() => pick((a) => a.savingsPerDollar === null)} active={freeCount > 0 && live.size === freeCount && [...live].every((id) => actions.find((a) => a.id === id)?.savingsPerDollar === null)}>
-          Free moves only
+          {t("plan.free.only")}
         </Quick>
-        <Quick onClick={() => pick((a) => a.paybackMonths === null || a.paybackMonths <= 12)}>Pays back within a year</Quick>
+        <Quick onClick={() => pick((a) => a.paybackMonths === null || a.paybackMonths <= 12)}>{t("plan.within.year")}</Quick>
         <Quick onClick={() => pick(() => true)} active={live.size === actions.length}>
-          Everything
+          {t("plan.everything")}
         </Quick>
         <Quick onClick={() => setChosen(new Set())} active={live.size === 0}>
-          Clear
+          {t("plan.clear")}
         </Quick>
       </div>
 
@@ -84,22 +90,22 @@ export function ActionPlan({ offenders, settings }: { offenders: Offender[]; set
                   <span className="block text-sm font-medium leading-snug text-fog">
                     {a.title}
                     <span className={`ml-2 rounded-full px-1.5 py-px text-[0.64rem] font-medium uppercase tracking-wide ${a.kind === "replace" ? "bg-amber/15 text-amber" : "bg-cyan/15 text-cyan"}`}>
-                      {a.kind === "replace" ? "swap" : "fix habit"}
+                      {a.kind === "replace" ? t("plan.swap") : t("plan.fix")}
                     </span>
                   </span>
                   <span className="mt-0.5 block text-[0.76rem] text-dim">
                     {a.label}
                     {a.count > 1 ? ` ×${a.count}` : ""} · {a.where}
-                    {a.confidence === "low" ? " · low confidence" : ""}
+                    {a.confidence === "low" ? ` · ${t("plan.low.confidence")}` : ""}
                   </span>
                   <span className="mt-1 block text-[0.76rem] leading-relaxed text-mist">{a.detail}</span>
                 </span>
                 <span className="shrink-0 text-right">
-                  <span className="block font-mono text-sm font-semibold text-lime tabular-nums">+{fmtMoney(a.annualSavings)}/yr</span>
+                  <span className="block font-mono text-sm font-semibold text-lime tabular-nums">+{fmtMoney(a.annualSavings)}{t("plan.yr")}</span>
                   <span className="block font-mono text-[0.68rem] text-dim tabular-nums">
-                    {a.savingsPerDollar === null ? "free" : `${fmtMoneyFull(a.cost)} · $${a.savingsPerDollar.toFixed(2)} back per $1`}
+                    {a.savingsPerDollar === null ? t("plan.free") : `${fmtMoneyFull(a.cost)} · $${a.savingsPerDollar.toFixed(2)} ${t("plan.back.per")}`}
                   </span>
-                  {a.paybackMonths !== null && <span className="block font-mono text-[0.68rem] text-dim tabular-nums">{fmtPayback(a.paybackMonths)} payback</span>}
+                  {a.paybackMonths !== null && <span className="block font-mono text-[0.68rem] text-dim tabular-nums">{fmtPayback(a.paybackMonths)} {t("plan.payback")}</span>}
                 </span>
               </label>
             </li>
@@ -114,7 +120,7 @@ export function ActionPlan({ offenders, settings }: { offenders: Offender[]; set
   );
 }
 
-function Cell({ label, value, sub, tint }: { label: string; value: string; sub?: string; tint?: string }) {
+function Cell({ label, value, sub, tint }: { label: string; value: React.ReactNode; sub?: string; tint?: string }) {
   return (
     <div className="bg-ink px-4 py-3">
       <div className="mono-label">{label}</div>

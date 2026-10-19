@@ -18,6 +18,7 @@ import { useStore, updateBuilding, setActiveBuilding, replaceStore } from "@/lib
 import { exportStore, importStore, downloadText } from "@/lib/export";
 import { EMPTY_STORE, type Building } from "@/lib/storage";
 import { BillScan } from "./BillScan";
+import { AccessibilityPanel } from "./AccessibilityPanel";
 
 interface KeyInfo {
   env: string;
@@ -84,6 +85,11 @@ export function SettingsPanel() {
           upgrade stored government tables to live figures.
         </span>
       </PageHeader>
+
+      {/* ---- display & accessibility ---- */}
+      <div className="mb-6">
+        <AccessibilityPanel />
+      </div>
 
       {/* ---- the vision engine ---- */}
       <div className="panel ticked p-5 sm:p-6">

@@ -5,6 +5,8 @@ import { Footer } from "@/components/Footer";
 import { ServiceWorker } from "@/components/ServiceWorker";
 import { MotionProvider } from "@/components/MotionProvider";
 import { geist, geistMono, instrument } from "@/components/home/fonts";
+import { APPLY_PREFS_SCRIPT } from "@/lib/prefs-boot";
+import { SkipLink } from "@/components/SkipLink";
 
 export const metadata: Metadata = {
   title: "Ghost Watt - the after-hours energy map nobody has",
@@ -25,7 +27,10 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#f5f2eb",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f5f2eb" },
+    { media: "(prefers-color-scheme: dark)", color: "#151514" },
+  ],
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
@@ -33,12 +38,14 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${geist.variable} ${geistMono.variable} ${instrument.variable}`}>
+    <html lang="en" className={`${geist.variable} ${geistMono.variable} ${instrument.variable}`} suppressHydrationWarning>
+      <head>
+        {/* Theme, text size and the other display preferences, applied before first paint so nothing flashes. */}
+        <script dangerouslySetInnerHTML={{ __html: APPLY_PREFS_SCRIPT }} />
+      </head>
       <body className="min-h-dvh">
         <MotionProvider>
-          <a href="#main" className="skip-link">
-            Skip to content
-          </a>
+          <SkipLink />
           <Nav />
           <main id="main" className="relative">
             {children}

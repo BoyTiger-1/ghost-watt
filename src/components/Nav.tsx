@@ -10,17 +10,19 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { EngineIndicator } from "./EngineIndicator";
 import { Mark } from "./home/HomeNav";
+import { useT, type Key } from "@/lib/i18n";
 
 const TABS = [
-  { href: "/scan", label: "Scanner", short: "Scan", icon: "scan" },
-  { href: "/portfolio", label: "Rooms", short: "Rooms", icon: "rooms" },
-  { href: "/report", label: "Brief", short: "Brief", icon: "doc" },
-  { href: "/buildings", label: "Buildings", short: "Buildings", icon: "building" },
-  { href: "/methodology", label: "Method", short: "Method", icon: "book" },
-] as const;
+  { href: "/scan", key: "nav.scanner", icon: "scan" },
+  { href: "/portfolio", key: "nav.rooms", icon: "rooms" },
+  { href: "/report", key: "nav.brief", icon: "doc" },
+  { href: "/buildings", key: "nav.buildings", icon: "building" },
+  { href: "/methodology", key: "nav.method", icon: "book" },
+] as const satisfies readonly { href: string; key: Key; icon: string }[];
 
 export function Nav() {
   const pathname = usePathname();
+  const t = useT();
 
   // The landing page brings its own header (components/home).
   if (pathname === "/") return null;
@@ -29,7 +31,7 @@ export function Nav() {
     <>
       <header className="site-header fixed inset-x-0 top-0 z-50 border-b border-line/80 bg-ink/80 backdrop-blur-xl backdrop-saturate-150">
         <div className="mx-auto grid h-14 max-w-6xl grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 sm:px-6 md:h-16">
-          <Link href="/" className="flex shrink-0 items-center gap-2.5" aria-label="Ghost Watt home">
+          <Link href="/" className="flex shrink-0 items-center gap-2.5" aria-label={t("nav.home")}>
             <Mark />
             <span className="text-[1rem] font-semibold tracking-[-0.02em] text-fog">Ghost Watt</span>
           </Link>
@@ -48,7 +50,7 @@ export function Nav() {
                       : "text-mist hover:text-fog"
                   }`}
                 >
-                  {tab.label}
+                  {t(tab.key)}
                 </Link>
               );
             })}
@@ -63,8 +65,16 @@ export function Nav() {
               <EngineIndicator compact />
             </div>
             <Link
+              href="/settings#accessibility"
+              aria-label={t("nav.accessibility")}
+              title={t("nav.accessibility")}
+              className="grid h-9 w-9 place-items-center rounded-full text-mist transition-colors hover:bg-fog/[0.06] hover:text-fog"
+            >
+              <Icon name="a11y" className="h-[1.2rem] w-[1.2rem]" />
+            </Link>
+            <Link
               href="/settings"
-              aria-label="Settings"
+              aria-label={t("nav.settings")}
               aria-current={pathname === "/settings" ? "page" : undefined}
               className={`grid h-9 w-9 place-items-center rounded-full transition-colors ${
                 pathname === "/settings" ? "bg-fog text-ink" : "text-mist hover:bg-fog/[0.06] hover:text-fog"
@@ -96,7 +106,7 @@ export function Nav() {
                   <span className={`grid h-7 w-12 place-items-center rounded-full transition-colors ${active ? "bg-fog/[0.07]" : ""}`}>
                     <Icon name={tab.icon} className="h-[1.3rem] w-[1.3rem]" />
                   </span>
-                  {tab.short}
+                  {t(tab.key)}
                 </Link>
               </li>
             );
@@ -112,6 +122,12 @@ const P = { fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLineca
 function Icon({ name, className }: { name: string; className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      {name === "a11y" && (
+        <>
+          <circle cx="12" cy="4.5" r="1.6" {...P} />
+          <path d="M5 8.5c4.7 1.2 9.3 1.2 14 0M12 9.5v4.5l-2.8 6M12 14l2.8 6" {...P} />
+        </>
+      )}
       {name === "scan" && (
         <>
           <path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2" {...P} />

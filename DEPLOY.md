@@ -16,9 +16,10 @@ GitHub Pages serves static files. It has no server, so:
   serving a public URL, a billable key published that way should be treated as
   compromised the moment it ships.
 
-A static export would still run the calculator, room-profile estimates, the portfolio
-and the methodology pages, since those are local arithmetic and `localStorage`. It
-would not run class mode, live vision, grid carbon, weather or solar.
+A static export would still run the on-device scanner, the rooms, buildings, brief
+and methodology pages, since those are local arithmetic, an in-browser detector and
+`localStorage`. It would not run Enhanced (cloud) reading, bill reading, shared class
+sessions, grid carbon, weather or solar.
 
 ## Vercel (recommended)
 
@@ -41,7 +42,7 @@ whatever order you find useful.
 | --- | --- | --- |
 | `EIA_API_KEY` | State electricity prices, and the hourly fuel mix that live grid carbon is computed from. One key, both features. | [eia.gov/opendata/register](https://www.eia.gov/opendata/register.php) |
 | `OPENWEATHER_API_KEY` | Outdoor conditions and degree days, used to weight HVAC and heater findings. | [openweathermap.org/api](https://openweathermap.org/api) |
-| `GROQ_API_KEY` | Hosted vision, so a scan reads a real photo when no local Ollama is present. **Billable — see the note below.** | [console.groq.com/keys](https://console.groq.com/keys) |
+| `GROQ_API_KEY` (or `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`) | Enhanced (cloud) reading: a scan or a bill photo is read by a hosted vision model. Without any of these the app runs in On-device mode only and the header pill says so. **Billable — see the note below.** | [console.groq.com/keys](https://console.groq.com/keys) |
 | `UPSTASH_REDIS_REST_URL` | Class mode across more than one machine. Without it, sessions live in a single instance's memory and two students may land on different instances and never see each other. | [console.upstash.com](https://console.upstash.com/) |
 | `UPSTASH_REDIS_REST_TOKEN` | The token half of the pair above. | same |
 | `NREL_API_KEY` | The specific utility serving an address and its commercial rate. Optional — works unkeyed on a shared demo key at a much lower rate limit. | [api.data.gov/signup](https://api.data.gov/signup/) |
@@ -77,7 +78,8 @@ anyone who opens devtools and reads the network tab, so `src/lib/ratelimit.ts` c
 - **2 MB request bodies.** The client downscales to 768px at q0.72, which base64s to
   roughly 100–160KB, so this refuses blob-stuffing without touching real traffic.
 
-Tripping a limit returns a room-profile estimate and an honest notice, not an error.
+Tripping a limit returns a clear error on the capture, with a "use the on-device
+reading instead" option; nothing is invented.
 Both numbers live in `RULES` in `src/lib/ratelimit.ts` and are covered by tests in
 `src/lib/ratelimit.test.ts`; change them there.
 
