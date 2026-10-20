@@ -1062,6 +1062,16 @@ body:has(.home) ::-webkit-scrollbar-thumb:hover { background: var(--color-pebble
   padding: 0.06em 0.18em 0.2em;
   margin: -0.06em -0.18em -0.2em;
 }
+/* Where supported, clip only top and bottom (all the rise needs), never the
+   sides: a headline that grows wider than its column on a big screen, like
+   "Nobody clocked in." at 1500 px and up, must not lose its last letters.
+   overflow: clip is the one value that lets the other axis stay visible. */
+@supports (overflow: clip) {
+  .line-mask {
+    overflow-x: visible;
+    overflow-y: clip;
+  }
+}
 
 /* An endless ticker. */
 @keyframes ticker {
