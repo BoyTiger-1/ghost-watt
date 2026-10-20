@@ -1,7 +1,7 @@
 "use client";
 
 // The scale of it, live, from the moment you open the site: the electricity
-// America's empty schools waste, counted in watt-hours (about 585,000 a second)
+// America's empty schools waste, counted in kilowatt-hours (about 585 a second)
 // with the dollars beside it; below, a ticker of what a single scan turns up.
 //
 // The rate is deliberately the conservative reading of the sources: about $8B a
@@ -20,10 +20,12 @@ const PER_YEAR = 8e9 * 0.3;
 const SECONDS_PER_YEAR = 365 * 24 * 3600;
 const PER_SECOND = PER_YEAR / SECONDS_PER_YEAR;
 const RATE_PER_KWH = 0.13;
-/** Watt-hours wasted a second: dollars a second over the price of a kWh, times 1000. */
-const WH_PER_SECOND = (PER_SECOND / RATE_PER_KWH) * 1000;
+/** Kilowatt-hours wasted a second: dollars a second over the price of a kWh. */
+const KWH_PER_SECOND = PER_SECOND / RATE_PER_KWH;
 /** The same energy as a steady draw, in gigawatts. */
-const GIGAWATTS = (WH_PER_SECOND * 3600) / 1e9;
+const GIGAWATTS = (KWH_PER_SECOND * 3600) / 1e6;
+/** How often the number redraws. Every frame blurs the last digits; five times a second can be read. */
+const TICK_MS = 200;
 
 const FINDS = [
   ["Room 214", "projector left on", "$221"],
@@ -95,8 +97,9 @@ function Stat({ value, label }: { value: React.ReactNode; label: string }) {
 }
 
 /**
- * Energy and money wasted since this page opened, ticking every frame. It starts
- * when you arrive, not when you scroll here, so the number is already running.
+ * Energy and money wasted since this page opened. It starts when you arrive, not
+ * when you scroll here, so the number is already running, and it redraws a few
+ * times a second so it can actually be read.
  */
 function LiveCounter() {
   const reduce = useReducedMotion();
@@ -104,21 +107,12 @@ function LiveCounter() {
 
   useEffect(() => {
     const start = performance.now();
-    let raf = 0;
-    let last = 0;
-    const tick = (t: number) => {
-      // Under reduced motion it still counts, just once a second rather than every frame.
-      if (!reduce || t - last > 1000) {
-        setSeconds((t - start) / 1000);
-        last = t;
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    // Under reduced motion it still counts, just once a second.
+    const t = setInterval(() => setSeconds((performance.now() - start) / 1000), reduce ? 1000 : TICK_MS);
+    return () => clearInterval(t);
   }, [reduce]);
 
-  const wh = seconds * WH_PER_SECOND;
+  const kwh = seconds * KWH_PER_SECOND;
   const dollars = seconds * PER_SECOND;
 
   return (
@@ -131,8 +125,8 @@ function LiveCounter() {
         className="flex flex-wrap items-baseline gap-x-3 font-editorial leading-none tracking-[-0.03em] text-[#ffc777] [text-shadow:0_0_60px_rgba(255,170,80,0.35)]"
         aria-live="off"
       >
-        <span className="text-[clamp(2.6rem,7.6vw,6.8rem)] tabular-nums">{Math.floor(wh).toLocaleString("en-US")}</span>
-        <span className="text-[clamp(1.2rem,2.4vw,2rem)] text-[#ffc777]/70">watt-hours</span>
+        <span className="text-[clamp(2.6rem,7.6vw,6.8rem)] tabular-nums">{Math.floor(kwh).toLocaleString("en-US")}</span>
+        <span className="text-[clamp(1.2rem,2.4vw,2rem)] text-[#ffc777]/70">kilowatt-hours</span>
       </motion.div>
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <span className="inline-flex items-center gap-2 rounded-full border border-[#ffc777]/25 bg-[#ffc777]/[0.08] py-1.5 pl-2.5 pr-3.5 font-numeric text-[0.88rem] tabular-nums text-[#ffc777]">
@@ -140,7 +134,7 @@ function LiveCounter() {
           ${dollars.toFixed(2)} of electricity
         </span>
         <span className="rounded-full border border-white/10 px-3 py-1.5 text-[0.82rem] text-[#f5f2eb]/60">
-          +{Math.round(WH_PER_SECOND).toLocaleString("en-US")} Wh every second
+          +{Math.round(KWH_PER_SECOND)} kWh every second
         </span>
       </div>
     </div>
