@@ -27,7 +27,7 @@ Zero config — this is a stock Next.js App Router project.
 
 1. Go to <https://vercel.com/new> and sign in with GitHub.
 2. Import `ghost-watt`. Vercel detects Next.js; change none of the build settings.
-3. Set the branch to deploy. `WebVersion` until it is merged to `main`.
+3. Set the branch to deploy to `main`.
 4. Add the environment variables below under **Settings → Environment Variables**,
    for the Production, Preview and Development scopes.
 5. Deploy.
