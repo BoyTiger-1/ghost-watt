@@ -66,7 +66,7 @@ export function SeeSection() {
 
         <div className="relative mx-auto hidden [perspective:1800px] md:block">
           {/* a pool of light on the table under the phone */}
-          <div className="absolute left-1/2 top-[55%] -z-10 h-[70%] w-[160%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(154,168,214,0.45),rgba(255,190,120,0.18)_55%,transparent)] blur-2xl" />
+          <div className="absolute left-1/2 top-[55%] -z-10 h-[70%] w-[160%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(154,168,214,0.45),rgba(255,190,120,0.18)_55%,transparent)]" />
           <motion.div style={{ rotateY, rotateX, y }} className="[transform-style:preserve-3d]">
             <Phone className="w-[17rem] sm:w-[19.5rem]">
               <TrackingFeed />

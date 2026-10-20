@@ -94,38 +94,54 @@ export function Magnetic({ children, strength = 0.35, className = "" }: { childr
 export function Flashlight({ size = 520, className = "" }: { size?: number; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
-  const mx = useMotionValue(-1000);
-  const my = useMotionValue(-1000);
+  const mx = useMotionValue(-10000);
+  const my = useMotionValue(-10000);
   const sx = useSpring(mx, { stiffness: 120, damping: 22, mass: 0.6 });
   const sy = useSpring(my, { stiffness: 120, damping: 22, mass: 0.6 });
   const [on, setOn] = useState(false);
-  const bg = useMotionTemplate`radial-gradient(${size}px circle at ${sx}px ${sy}px, var(--flashlight, rgba(255,190,110,0.16)), transparent 62%)`;
 
   useEffect(() => {
     const host = ref.current?.parentElement;
     if (!host || reduce || !window.matchMedia("(pointer: fine)").matches) return;
+    let lit = false;
     const move = (e: PointerEvent) => {
       const r = host.getBoundingClientRect();
-      mx.set(e.clientX - r.left);
-      my.set(e.clientY - r.top);
-      setOn(true);
+      // The glow is a fixed, pre-drawn circle moved by transform: the browser
+      // composites it instead of repainting a full-size gradient on every move.
+      mx.set(e.clientX - r.left - size / 2);
+      my.set(e.clientY - r.top - size / 2);
+      if (!lit) {
+        lit = true;
+        setOn(true);
+      }
     };
-    const leave = () => setOn(false);
-    host.addEventListener("pointermove", move);
+    const leave = () => {
+      lit = false;
+      setOn(false);
+    };
+    host.addEventListener("pointermove", move, { passive: true });
     host.addEventListener("pointerleave", leave);
     return () => {
       host.removeEventListener("pointermove", move);
       host.removeEventListener("pointerleave", leave);
     };
-  }, [reduce, mx, my]);
+  }, [reduce, mx, my, size]);
 
   return (
-    <motion.div
-      ref={ref}
-      aria-hidden
-      className={`pointer-events-none absolute inset-0 transition-opacity duration-700 ${on ? "opacity-100" : "opacity-0"} ${className}`}
-      style={{ background: bg }}
-    />
+    <div ref={ref} aria-hidden className={`pointer-events-none absolute inset-0 overflow-hidden ${className}`}>
+      <motion.div
+        className={`absolute left-0 top-0 rounded-full transition-opacity duration-700 will-change-transform ${on ? "opacity-100" : "opacity-0"}`}
+        style={{
+          x: sx,
+          y: sy,
+          width: size * 2,
+          height: size * 2,
+          marginLeft: -size / 2,
+          marginTop: -size / 2,
+          background: "radial-gradient(closest-side, var(--flashlight, rgba(255,190,110,0.16)), transparent 62%)",
+        }}
+      />
+    </div>
   );
 }
 

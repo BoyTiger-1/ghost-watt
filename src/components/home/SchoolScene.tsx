@@ -7,7 +7,7 @@
 // machine humming in the lobby. Each lit room carries a little price tag, which is
 // the whole product in one picture.
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { ContactShadows, Environment, Html, Lightformer, RoundedBox } from "@react-three/drei";
 import * as THREE from "three";
@@ -487,10 +487,34 @@ function Rig({ children }: { children: React.ReactNode }) {
 /* ---- the canvas --------------------------------------------------------- */
 
 export function SchoolScene({ onReady }: { onReady?: () => void }) {
+  // Render only while the scene is on screen and the tab is visible: a WebGL
+  // canvas drawing 60 frames a second below the fold was most of the page's lag.
+  const host = useRef<HTMLDivElement>(null);
+  const [live, setLive] = useState(true);
+  useEffect(() => {
+    const el = host.current;
+    if (!el) return;
+    let onScreen = true;
+    const sync = () => setLive(onScreen && document.visibilityState === "visible");
+    const io = new IntersectionObserver(([e]) => {
+      onScreen = e.isIntersecting;
+      sync();
+    });
+    io.observe(el);
+    document.addEventListener("visibilitychange", sync);
+    return () => {
+      io.disconnect();
+      document.removeEventListener("visibilitychange", sync);
+    };
+  }, []);
+
   return (
+    <div ref={host} className="h-full w-full">
     <Canvas
       shadows
-      dpr={[1, 2]}
+      frameloop={live ? "always" : "never"}
+      // 1.5x is indistinguishable from 2x at this size and draws ~44% fewer pixels.
+      dpr={[1, 1.5]}
       camera={{ fov: 28, near: 0.5, far: 80, position: [8, 6, 12] }}
       gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
       onCreated={({ gl }) => {
@@ -507,7 +531,7 @@ export function SchoolScene({ onReady }: { onReady?: () => void }) {
         intensity={2.1}
         color="#ffe1b8"
         castShadow
-        shadow-mapSize={[2048, 2048]}
+        shadow-mapSize={[1024, 1024]}
         shadow-bias={-0.0004}
         shadow-normalBias={0.02}
         shadow-camera-left={-8}
@@ -540,7 +564,9 @@ export function SchoolScene({ onReady }: { onReady?: () => void }) {
         <Tags />
       </Rig>
 
-      <ContactShadows position={[0, -0.36, 0]} scale={18} blur={2.6} opacity={0.32} far={3} resolution={512} color="#3a3328" />
+      {/* Baked once: re-rendering soft ground shadows every frame bought nothing visible. */}
+      <ContactShadows frames={1} position={[0, -0.36, 0]} scale={18} blur={2.6} opacity={0.32} far={3} resolution={512} color="#3a3328" />
     </Canvas>
+    </div>
   );
 }

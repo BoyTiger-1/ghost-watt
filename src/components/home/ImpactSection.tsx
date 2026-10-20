@@ -12,7 +12,7 @@
 // 31 GW, roughly thirty large nuclear reactors. The schools-only figure (up to
 // $2.4B a year) stays in the stats beside it.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Chapter } from "./Chapter";
 import { CountTo, Flashlight, SplitLines } from "@/components/motion/Motion";
@@ -102,42 +102,59 @@ function Stat({ value, label }: { value: React.ReactNode; label: string }) {
  */
 function LiveCounter() {
   const reduce = useReducedMotion();
-  const [seconds, setSeconds] = useState(0);
+  const box = useRef<HTMLDivElement>(null);
+  const money = useRef<HTMLSpanElement>(null);
+  const energy = useRef<HTMLSpanElement>(null);
 
+  // The digits are written straight to the page each frame rather than through
+  // React state: re-rendering a component 60 times a second was needless work.
+  // While the counter is off screen it stops drawing; the total stays right
+  // because it is worked out from the time since the page opened.
   useEffect(() => {
     const start = performance.now();
     let raf = 0;
     let last = 0;
+    let visible = true;
+    const draw = (t: number) => {
+      const sec = (t - start) / 1000;
+      if (money.current) money.current.textContent = Math.floor(sec * PER_SECOND).toLocaleString("en-US");
+      if (energy.current)
+        energy.current.textContent = (sec * MWH_PER_SECOND).toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    };
     const tick = (t: number) => {
       // Under reduced motion it still counts, just once a second.
-      if (!reduce || t - last > 1000) {
-        setSeconds((t - start) / 1000);
+      if (visible && (!reduce || t - last > 1000)) {
+        draw(t);
         last = t;
       }
       raf = requestAnimationFrame(tick);
     };
+    const io = new IntersectionObserver(([e]) => {
+      visible = e.isIntersecting;
+    });
+    if (box.current) io.observe(box.current);
     raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      io.disconnect();
+    };
   }, [reduce]);
 
-  const dollars = seconds * PER_SECOND;
-  const mwh = seconds * MWH_PER_SECOND;
-
   return (
-    <div className="mt-6">
+    <div ref={box} className="mt-6">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
         transition={{ duration: 0.9, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
-        className="flex items-baseline font-editorial text-[clamp(3rem,9vw,8rem)] leading-none tracking-[-0.03em] text-[#ffc777] [text-shadow:0_0_60px_rgba(255,170,80,0.35)]"
+        className="flex items-baseline font-editorial text-[clamp(3rem,9vw,8rem)] leading-none tracking-[-0.03em] text-[#ffc777] [text-shadow:0_0_32px_rgba(255,170,80,0.3)]"
         aria-live="off"
       >
         <span>$</span>
-        <span className="tabular-nums">{Math.floor(dollars).toLocaleString("en-US")}</span>
+        <span ref={money} className="tabular-nums">0</span>
       </motion.div>
       <p className="mt-3 flex flex-wrap items-baseline gap-x-2 font-editorial text-[clamp(1.4rem,2.8vw,2.2rem)] leading-tight text-[#f5f2eb]/85">
-        <span className="tabular-nums">{mwh.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</span>
+        <span ref={energy} className="tabular-nums">0.0</span>
         <span className="text-[#f5f2eb]/55">megawatt-hours of electricity</span>
       </p>
       <div className="mt-4 flex flex-wrap items-center gap-2">
