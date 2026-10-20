@@ -461,7 +461,7 @@ body {
   .no-print,
   nav,
   header.site-header,
-  footer.site-footer,
+  .site-footer,
   .skip-link {
     display: none !important;
   }
@@ -1093,4 +1093,20 @@ body:has(.home) ::-webkit-scrollbar-thumb:hover { background: var(--color-pebble
 :root[data-motion="reduce"] .grain::after,
 :root[data-lite] .grain::after {
   display: none;
+}
+
+/* Room stickers on paper: two to a row, never split across a page. */
+@media print {
+  .sticker-sheet {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 6mm !important;
+    margin-top: 0 !important;
+  }
+  .sticker {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }

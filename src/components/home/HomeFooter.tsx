@@ -8,6 +8,7 @@ const COLUMNS = [
       { href: "/scan", label: "Scanner" },
       { href: "/places", label: "My places" },
       { href: "/team", label: "Team scan" },
+      { href: "/stickers", label: "Room stickers" },
       { href: "/scan?view=report", label: "Printable report" },
     ],
   },

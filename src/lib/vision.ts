@@ -104,6 +104,8 @@ function isServerless(): boolean {
  */
 export interface CallOptions {
   fast?: boolean;
+  /** Text-only work (Ghosty): skip the local daemon, whose small vision model is no writer. */
+  skipLocal?: boolean;
 }
 
 /** Start the next provider if the first has not answered by then. */
@@ -409,7 +411,7 @@ export async function describeImagesAny(images: string[], prompt: string, schema
   let localConfigured = false;
 
   const localWorthTrying = forced === "ollama" || forced === "local" || !isServerless() || Boolean(process.env.OLLAMA_HOST?.trim());
-  if (forced !== "hosted" && !HOSTED.some((h) => h.id === forced) && localWorthTrying) {
+  if (!opts.skipLocal && forced !== "hosted" && !HOSTED.some((h) => h.id === forced) && localWorthTrying) {
     const local = await describeViaOllama(images, prompt, schema);
     if (local.ok && local.text.trim()) {
       return { ...local, provider: "Ollama (local)", kind: "local" };

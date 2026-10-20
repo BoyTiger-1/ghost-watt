@@ -87,10 +87,10 @@ const LIT: Lit[] = [
 ];
 
 const LABELS = [
-  { at: [colX(1), floorY(1) + 0.24, MAIN.z] as const, room: "Computer lab", what: "30 monitors", cost: "$486", tone: C.cool, delay: 1.1, stem: 14 },
-  { at: [colX(7), floorY(2) + 0.24, MAIN.z] as const, room: "Room 214", what: "projector", cost: "$255", tone: C.warm, delay: 1.6, stem: 54 },
-  { at: [colX(4), 0.68, MAIN.z + 0.3] as const, room: "Lobby", what: "vending machine", cost: "$132", tone: C.warm, delay: 2.0, stem: 18 },
-  { at: [WING.x0 + 1.0, 1.36, WING.z1] as const, room: "Gym", what: "24 high-bays", cost: "$310", tone: C.warm, delay: 2.4, stem: 30 },
+  { at: [colX(1), floorY(1) + 0.24, MAIN.z] as const, room: "Computer lab", what: "30 monitors", cost: "$796", tone: C.cool, delay: 1.1, stem: 14 },
+  { at: [colX(7), floorY(2) + 0.24, MAIN.z] as const, room: "Room 214", what: "projector", cost: "$221", tone: C.warm, delay: 1.6, stem: 54 },
+  { at: [colX(4), 0.68, MAIN.z + 0.3] as const, room: "Lobby", what: "vending machine", cost: "$194", tone: C.warm, delay: 2.0, stem: 18 },
+  { at: [WING.x0 + 1.0, 1.36, WING.z1] as const, room: "Gym", what: "8 light fixtures", cost: "$849", tone: C.warm, delay: 2.4, stem: 30 },
 ];
 
 /* ---- helpers ------------------------------------------------------------ */

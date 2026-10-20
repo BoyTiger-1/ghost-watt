@@ -196,9 +196,19 @@ function Place({ buildingId, initialTab, renameNow }: { buildingId: string; init
               {rollup.latestAt ? ` · last scan ${ago(rollup.latestAt)}` : ""}
             </p>
           </div>
-          <Link href="/scan" className="rounded-full bg-fog px-4 py-2 text-[0.85rem] font-medium text-ink transition-colors hover:bg-fog/85">
-            Scan a room
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            {rollup.rooms.length > 0 && (
+              <Link
+                href={`/stickers?building=${building.id}`}
+                className="rounded-full border border-line px-4 py-2 text-[0.85rem] text-fog transition-colors hover:border-fog/40"
+              >
+                Room stickers
+              </Link>
+            )}
+            <Link href="/scan" className="rounded-full bg-fog px-4 py-2 text-[0.85rem] font-medium text-ink transition-colors hover:bg-fog/85">
+              Scan a room
+            </Link>
+          </div>
         </div>
 
         {rollup.rooms.length > 0 ? (

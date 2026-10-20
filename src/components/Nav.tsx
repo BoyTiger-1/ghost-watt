@@ -4,15 +4,14 @@
 //
 // On a wide screen: one bar, with the sections as a segmented control. A dark
 // pill marks where you are and springs to the next section when you move; a
-// lighter one follows the pointer, so you can see where a click will land. A
-// sodium line along the bottom fills as you read down the page.
+// lighter one follows the pointer, so you can see where a click will land.
 // On a phone the sections move to a tab bar under the thumb, the way a native
 // app puts them, and the header keeps only the brand and the controls.
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { motion, useScroll, useSpring } from "framer-motion";
+import { motion } from "framer-motion";
 import { EngineIndicator } from "./EngineIndicator";
 import { Arrow, Mark } from "./home/HomeNav";
 import { useT, type Key } from "@/lib/i18n";
@@ -32,8 +31,6 @@ export function Nav() {
   const home = pathname === "/";
   const [scrolled, setScrolled] = useState(false);
   const [hover, setHover] = useState<string | null>(null);
-  const { scrollYProgress } = useScroll();
-  const progress = useSpring(scrollYProgress, { stiffness: 140, damping: 30, mass: 0.4 });
 
   useEffect(() => {
     const on = () => setScrolled(window.scrollY > 24);
@@ -142,12 +139,6 @@ export function Nav() {
             </Link>
           </div>
         </div>
-        {/* how far down the page you are */}
-        <motion.div
-          aria-hidden
-          style={{ scaleX: progress }}
-          className="absolute inset-x-0 -bottom-px h-[2px] origin-left bg-[linear-gradient(90deg,var(--color-sodium),var(--color-flare))]"
-        />
       </motion.header>
 
       {/* the phone's tab bar */}

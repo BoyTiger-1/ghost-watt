@@ -13,14 +13,14 @@ type Room = { x: number; y: number; w: number; h: number; name: string; cost?: n
 
 const ROOMS: Room[] = [
   { x: 20, y: 20, w: 100, h: 130, name: "101", who: "AM" },
-  { x: 120, y: 20, w: 100, h: 130, name: "102", cost: 64, who: "JR" },
-  { x: 220, y: 20, w: 140, h: 130, name: "Lab 108", cost: 486, who: "MK" },
+  { x: 120, y: 20, w: 100, h: 130, name: "102", cost: 159, who: "JR" },
+  { x: 220, y: 20, w: 140, h: 130, name: "Lab 108", cost: 796, who: "MK" },
   { x: 360, y: 20, w: 100, h: 130, name: "110", who: "TS" },
-  { x: 460, y: 20, w: 120, h: 130, name: "Library", cost: 141, who: "DL" },
-  { x: 20, y: 190, w: 180, h: 130, name: "Gym", cost: 310, who: "PB" },
-  { x: 200, y: 190, w: 100, h: 130, name: "Lobby", cost: 132, who: "EW" },
-  { x: 300, y: 190, w: 80, h: 130, name: "Office", cost: 58, who: "SN" },
-  { x: 380, y: 190, w: 120, h: 130, name: "Cafeteria", cost: 212, who: "RC" },
+  { x: 460, y: 20, w: 120, h: 130, name: "Library", cost: 424, who: "DL" },
+  { x: 20, y: 190, w: 180, h: 130, name: "Gym", cost: 849, who: "PB" },
+  { x: 200, y: 190, w: 100, h: 130, name: "Lobby", cost: 194, who: "EW" },
+  { x: 300, y: 190, w: 80, h: 130, name: "Office", cost: 530, who: "SN" },
+  { x: 380, y: 190, w: 120, h: 130, name: "Cafeteria", cost: 318, who: "RC" },
   { x: 500, y: 190, w: 80, h: 130, name: "Music", who: "YO" },
 ];
 
@@ -56,8 +56,8 @@ export function ClassSection() {
             their own phone, and the total for the whole place fills in as the results arrive.
           </p>
           <p className="mt-4 text-[1.05rem] leading-[1.65] text-stone">
-            No accounts, no logins, no email addresses. Photos stay on the phone that took
-            them; only the device counts travel.
+            No accounts, no logins, no email addresses. Photos are never sent to the team;
+            only the device counts travel.
           </p>
           <Link href="/team" className="group mt-8 inline-flex items-center gap-2 text-[0.95rem] text-graphite">
             <span className="underline decoration-graphite/25 underline-offset-[6px] group-hover:decoration-graphite">
@@ -116,7 +116,7 @@ export function ClassSection() {
               {ROOMS.map((r, i) => {
                 const d = 0.3 + i * 0.28;
                 const waste = r.cost !== undefined;
-                const heat = waste ? Math.min(1, (r.cost ?? 0) / 486) : 0;
+                const heat = waste ? Math.min(1, (r.cost ?? 0) / 849) : 0;
                 return (
                   <g key={r.name}>
                     <rect x={r.x} y={r.y} width={r.w} height={r.h} style={{ fill: "var(--color-cream)", stroke: "var(--color-line2)" }} strokeWidth="1.5" />
@@ -137,7 +137,7 @@ export function ClassSection() {
                       <text
                         x={r.x + 10}
                         y={r.y + r.h - 14}
-                        fontSize={waste && (r.cost ?? 0) > 200 ? 22 : 15}
+                        fontSize={waste && (r.cost ?? 0) > 400 ? 22 : 15}
                         style={{ fontFamily: "var(--font-instrument)", fill: waste ? "var(--color-amber)" : "var(--color-moss)" }}
                         fontStyle="italic"
                       >

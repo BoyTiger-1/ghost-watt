@@ -133,7 +133,7 @@ function FixListCard() {
       <div className="rounded-[1.75rem] bg-graphite p-5 text-paper">
         <p className="text-[0.8rem] text-paper/60">With the $250 the PTA has</p>
         <p className="font-editorial mt-1 text-[1.9rem] leading-[1.05]">Fix four things first.</p>
-        <p className="mt-2 text-[0.88rem] text-paper/70">$1,120 a year back. Pays for itself in 2.5 months.</p>
+        <p className="mt-2 text-[0.88rem] text-paper/70">$2,154 a year back. Pays for itself in under a month.</p>
       </div>
     </div>
   );

@@ -12,9 +12,9 @@ import { animate, useInView } from "framer-motion";
 
 /** Boxes in the room's own 300 × 650 coordinates. */
 const BOXES = [
-  { x: 122, y: 92, w: 56, h: 30, state: "on", label: "Projector", cost: "$255/yr", delay: 0.2, anchor: "top" },
-  { x: 250, y: 240, w: 52, h: 212, state: "on", label: "Vending", cost: "$132/yr", delay: 0.55, anchor: "left" },
-  { x: 40, y: 360, w: 54, h: 38, state: "on", label: "Monitor ×6", cost: "$97/yr", delay: 0.85, anchor: "top" },
+  { x: 122, y: 92, w: 56, h: 30, state: "on", label: "Projector", cost: "$221/yr", delay: 0.2, anchor: "top" },
+  { x: 250, y: 240, w: 52, h: 212, state: "on", label: "Vending", cost: "$194/yr", delay: 0.55, anchor: "left" },
+  { x: 40, y: 360, w: 54, h: 38, state: "on", label: "Monitor ×6", cost: "$109/yr", delay: 0.85, anchor: "top" },
   { x: 118, y: 360, w: 54, h: 38, state: "on", delay: 0.95 },
   { x: 196, y: 360, w: 54, h: 38, state: "standby", delay: 1.05 },
   { x: 14, y: 432, w: 84, h: 58, state: "standby", delay: 1.2 },
@@ -39,7 +39,7 @@ export function TrackingFeed({ crop = false }: { crop?: boolean }) {
 
   useEffect(() => {
     if (!inView) return;
-    const a = animate(0, 572, { duration: 2.2, delay: 0.4, ease: [0.22, 1, 0.36, 1], onUpdate: (v) => setCost(Math.round(v)) });
+    const a = animate(0, 630, { duration: 2.2, delay: 0.4, ease: [0.22, 1, 0.36, 1], onUpdate: (v) => setCost(Math.round(v)) });
     const b = animate(0, 9, { duration: 1.6, delay: 0.2, ease: "linear", onUpdate: (v) => setFound(Math.round(v)) });
     return () => {
       a.stop();
@@ -117,10 +117,10 @@ export function TrackingFeed({ crop = false }: { crop?: boolean }) {
           <span className="text-[0.72em] text-[#6f6a60]">a year, left on</span>
         </div>
         <div className="mt-[0.7em] flex h-[0.38em] gap-[2px] overflow-hidden rounded-full">
-          <span className="h-full bg-[#ff7a52]" style={{ flex: 255 }} />
-          <span className="h-full bg-[#ff9a62]" style={{ flex: 132 }} />
-          <span className="h-full bg-[#ffb35f]" style={{ flex: 97 }} />
-          <span className="h-full bg-[#ffc15c]" style={{ flex: 88 }} />
+          <span className="h-full bg-[#ff7a52]" style={{ flex: 221 }} />
+          <span className="h-full bg-[#ff9a62]" style={{ flex: 194 }} />
+          <span className="h-full bg-[#ffb35f]" style={{ flex: 109 }} />
+          <span className="h-full bg-[#ffc15c]" style={{ flex: 106 }} />
         </div>
         <div className="mt-[0.8em] flex items-center justify-between">
           <span className="text-[0.62em] text-[#6f6a60]">Hold still to audit</span>

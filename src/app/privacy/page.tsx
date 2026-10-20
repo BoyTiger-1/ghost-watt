@@ -40,11 +40,13 @@ const sections: LegalSection[] = [
             ["A photo of an electricity bill", "Only if you choose to read one, in Enhanced mode", "Sent to a vision model provider to read the printed figures; you confirm the figures before they are kept."],
             ["Scan results, rooms, buildings, fixes, bill figures, meter readings and settings", "As you use the Service", "Stored only in your browser's local storage on your device."],
             ["Approximate location", "Only if you allow it, or a photo you add contains it", "Rounded to about 1 km on our server, then used to look up your utility rate, place name, weather and solar resource."],
-            ["Room names and device rows", "Only if you join a class session", "Stored on our session store for up to 14 days so classmates' phones can add up one building."],
+            ["Room names, device rows and the display name you type", "Only if you send a scan to a team", "Shared with everyone who has that team's code, so their phones can add up one building. Kept up to 14 days (Upstash) or, on a site without it, about 12 hours on an encrypted public relay (Section 4)."],
+            ["Scan figures (device types, counts, costs and fixes) and any question you type", "Only when Ghosty Insights runs on a scan", "Sent to one AI model provider to write the insights. No picture is sent."],
+            ["A room's top devices and costs, inside a sticker's QR code", "Only if you print room stickers", "Carried in the link itself. Anyone who scans the sticker can read it; opening the link sends none of it to our server."],
             ["Technical data (IP address, browser type, request time)", "With every request, as with any website", "Processed by our hosting provider and used by our server for rate limiting (Section 6)."],
           ]}
         />
-        <p>We do not ask for, and the Service has no field for, your name, email address, phone number, age or school.</p>
+        <p>We do not ask for your email address, phone number, age or school. The only name field is the optional display name shown to your team when you send it a scan; any nickname works.</p>
       </>
     ),
   },
@@ -81,12 +83,13 @@ const sections: LegalSection[] = [
         <LegalTable
           head={["Provider", "Purpose", "What it receives"]}
           rows={[
-            ["Google (Gemini API), Groq, Mistral AI, Anthropic, OpenAI, OpenRouter", "Reading photos in Enhanced mode; only one provider is used per request, in a fixed order of preference", "The picture, a text prompt, and context you supplied (time taken, place name, any note you typed)"],
+            ["Google (Gemini API), Groq, Mistral AI, Anthropic, OpenAI, OpenRouter", "Reading photos in Enhanced mode, and writing Ghosty Insights; only one provider is used per request, in a fixed order of preference", "For a photo: the picture, a text prompt, and context you supplied (time taken, place name, any note you typed). For Ghosty: the scan's figures and your question, never a picture"],
             ["U.S. Energy Information Administration (EIA)", "Current electricity prices and grid carbon intensity", "A state code"],
             ["National Laboratory of the Rockies (NREL) / OpenEI", "Your utility's published rate", "Rounded coordinates"],
             ["OpenStreetMap Nominatim", "Place name for a location", "Rounded coordinates"],
             ["OpenWeather", "Outdoor conditions for heating and cooling findings", "Rounded coordinates"],
-            ["Upstash", "Class session storage", "Session code, room names and device rows"],
+            ["Upstash", "Team scan storage, when configured", "Team code, room names, display names and device rows"],
+            ["ntfy.sh", "Team scan relay, on a site without Upstash", "End-to-end encrypted messages under a topic derived from the team code; without the code they cannot be read"],
             ["Vercel", "Hosting the website and server", "Standard request data, including IP address"],
           ]}
         />
@@ -117,7 +120,7 @@ const sections: LegalSection[] = [
           it under Settings → Your data → Erase everything, or by clearing this site&apos;s data in your browser. Export backup creates a file you control.
         </p>
         <p>
-          <span className="font-medium text-fog">On our server.</span> Pictures are not stored. Class sessions expire automatically after 14 days. Rate-limit
+          <span className="font-medium text-fog">On our server.</span> Pictures are not stored. Teams expire automatically: after 14 days in Upstash, or after about 12 hours on the relay. Rate-limit
           counters, keyed to a network address, are kept for minutes to a day and then discarded.
         </p>
         <p>
@@ -149,7 +152,7 @@ const sections: LegalSection[] = [
       <ul className="list-disc space-y-1.5 pl-5">
         <li>Use On-device mode so no picture leaves your device.</li>
         <li>Decline location access; the Service then uses state-average prices instead.</li>
-        <li>Do not join class sessions if you do not want room names stored for 14 days.</li>
+        <li>Do not send scans to a team if you do not want room names shared with the people who have its code.</li>
         <li>Erase everything stored in your browser at any time from Settings.</li>
       </ul>
     ),

@@ -79,11 +79,27 @@ export function SettingsPanel() {
   return (
     <section className="relative z-10 mx-auto max-w-4xl px-5 pb-20 pt-24 sm:px-6 sm:pt-32">
       <PageHeader eyebrow="Settings" title="What is" accent="switched on." className="mb-10">
-        Ghost Watt scans with no API keys at all, on the device.{" "}
-        <span className="hidden sm:inline">
-          A vision key turns on Enhanced (cloud) reading, which recognises far more devices. The data providers below
-          upgrade stored government tables to live figures.
-        </span>
+        {/* Said from what this deployment actually has, not assumed. */}
+        {engine === null && keys === null ? (
+          "Checking which keys this site has…"
+        ) : hostedActive ? (
+          <>
+            Scans are read by {hostedActive.label} ({hostedActive.model}) using this site&apos;s API key, so visitors
+            don&apos;t need one of their own.{" "}
+            <span className="hidden sm:inline">
+              If the cloud is unreachable, the on-device detector takes over.{" "}
+              {configured > 0 && `${configured} data ${configured === 1 ? "provider is" : "providers are"} live as well.`}
+            </span>
+          </>
+        ) : (
+          <>
+            No vision API key is set on this site yet, so scans run on the device.{" "}
+            <span className="hidden sm:inline">
+              A vision key turns on Enhanced (cloud) reading, which recognises far more devices. The data providers below
+              upgrade stored government tables to live figures.
+            </span>
+          </>
+        )}
       </PageHeader>
 
       {/* ---- display & accessibility ---- */}

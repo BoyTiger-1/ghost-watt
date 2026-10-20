@@ -27,7 +27,7 @@ export default function OfflinePage() {
         ))}
       </ul>
       <p className="mt-8 text-[0.92rem] leading-relaxed text-dim">
-        Live prices, hourly grid carbon and class sessions need a connection, and Ghost Watt would
+        Live prices, hourly grid carbon and team scans need a connection, and Ghost Watt would
         rather say so than show a stale number that looks current.
       </p>
       <a

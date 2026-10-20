@@ -15,12 +15,12 @@ import { Arrow } from "./HomeNav";
 
 const THINGS = [
   { name: "projector", watts: 250 },
-  { name: "vending machine", watts: 400 },
-  { name: "lab of thirty monitors", watts: 750 },
+  { name: "vending machine", watts: 220 },
+  { name: "lab of thirty monitors", watts: 900 },
   { name: "hallway of lights", watts: 520 },
 ];
 
-const KG_PER_KWH = 0.385;
+const KG_PER_KWH = 0.35;
 const KG_PER_MILE = 0.4;
 
 const int = (n: number) => Math.round(n).toLocaleString("en-US");
@@ -29,7 +29,7 @@ export function CountSection() {
   const [thing, setThing] = useState(0);
   const [watts, setWatts] = useState(THINGS[0].watts);
   const [hours, setHours] = useState(6800);
-  const [rate, setRate] = useState(0.15);
+  const [rate, setRate] = useState(0.13);
   const [touched, setTouched] = useState(false);
 
   const kwh = (watts * hours) / 1000;

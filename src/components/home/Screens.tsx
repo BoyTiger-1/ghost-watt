@@ -5,11 +5,11 @@ import { DeviceGlyph } from "@/components/DeviceGlyph";
 import { Mark } from "./HomeNav";
 
 export const RANKED = [
-  { icon: "monitor", name: "Lab monitors", room: "Room 108", cost: 486, fix: "Smart strips · $45", pay: "1 mo" },
-  { icon: "ac", name: "Server closet AC", room: "B wing", cost: 410, fix: "Setpoint schedule · $0", pay: "now" },
-  { icon: "light", name: "Gym high-bays", room: "Gym", cost: 310, fix: "Occupancy sensors · $150", pay: "6 mo" },
-  { icon: "projector", name: "Projector", room: "Room 214", cost: 255, fix: "Auto-off timer · $40", pay: "2 mo" },
-  { icon: "vending", name: "Vending machine", room: "Lobby", cost: 132, fix: "Night setback · $90", pay: "8 mo" },
+  { icon: "light", name: "Gym lights", room: "Gym", cost: 849, fix: "Occupancy sensors · $50", pay: "1 mo" },
+  { icon: "monitor", name: "Lab monitors", room: "Room 108", cost: 796, fix: "Smart strips · $60", pay: "1 mo" },
+  { icon: "heater", name: "Space heater", room: "Main office", cost: 530, fix: "Smart plug · $25", pay: "1 mo" },
+  { icon: "projector", name: "Projector", room: "Room 214", cost: 221, fix: "Auto-off timer · $40", pay: "2 mo" },
+  { icon: "vending", name: "Vending machine", room: "Lobby", cost: 194, fix: "Vending controller · $180", pay: "22 mo" },
 ];
 
 /* ---- laptop: the brief for the school board ------------------------------ */
@@ -51,7 +51,7 @@ export function ReportScreen() {
           <h3 className="font-editorial mt-[0.3em] text-[2.9em] leading-[1] tracking-[-0.02em]">
             $4,820 a year, <span className="italic text-[#3a4566]">recoverable.</span>
           </h3>
-          <p className="mt-[0.5em] text-[0.85em] text-[#6f6a60]">38 offenders across 22 rooms · 11.2 t CO₂ · ranked worst first</p>
+          <p className="mt-[0.5em] text-[0.85em] text-[#6f6a60]">38 offenders across 22 rooms · 15.1 t CO₂ · ranked worst first</p>
 
           <div className="mt-[1.4em] grid grid-cols-[1.45fr_1fr] gap-[1.4em]">
             <div className="rounded-[0.9em] bg-white p-[1em] ring-1 ring-[#ebe6dc]">
@@ -69,7 +69,7 @@ export function ReportScreen() {
                       <span className="font-numeric text-[0.85em] text-[#a8610c]">${r.cost}</span>
                     </div>
                     <div className="mt-[0.35em] h-[0.3em] overflow-hidden rounded-full bg-[#f1ede5]">
-                      <div className="h-full rounded-full bg-[linear-gradient(90deg,#ef9d2e,#d9512c)]" style={{ width: `${(r.cost / 486) * 100}%` }} />
+                      <div className="h-full rounded-full bg-[linear-gradient(90deg,#ef9d2e,#d9512c)]" style={{ width: `${(r.cost / 849) * 100}%` }} />
                     </div>
                     <div className="mt-[0.3em] text-[0.72em] text-[#8b867c]">
                       {r.fix} · <span className="text-[#2e5b45]">pays back {r.pay}</span>
@@ -107,7 +107,7 @@ export function ReportScreen() {
               <div className="rounded-[0.9em] bg-[#1c1b18] p-[1em] text-white">
                 <span className="text-[0.72em] text-white/60">With a $250 budget</span>
                 <p className="font-editorial mt-[0.2em] text-[1.7em] leading-[1.05]">Fix four things first.</p>
-                <p className="mt-[0.4em] text-[0.75em] text-white/70">$1,120 a year back · pays for itself in 2.5 months</p>
+                <p className="mt-[0.4em] text-[0.75em] text-white/70">$2,154 a year back · pays for itself in under a month</p>
               </div>
             </div>
           </div>
@@ -120,11 +120,11 @@ export function ReportScreen() {
 /* ---- tablet: the budget planner ----------------------------------------- */
 
 const PLAN = [
-  { name: "Smart strips, lab", cost: 45, back: 437, on: true },
-  { name: "Occupancy sensors, gym", cost: 150, back: 248, on: true },
-  { name: "Auto-off timer, 214", cost: 40, back: 230, on: true },
-  { name: "AC setpoint schedule", cost: 0, back: 205, on: true },
-  { name: "Night setback, vending", cost: 90, back: 66, on: false },
+  { name: "Occupancy sensors, gym", cost: 50, back: 764, on: true },
+  { name: "Smart strips, lab", cost: 60, back: 756, on: true },
+  { name: "Smart plug, office heater", cost: 25, back: 424, on: true },
+  { name: "Auto-off timer, 214", cost: 40, back: 210, on: true },
+  { name: "Vending controller, lobby", cost: 180, back: 97, on: false },
 ];
 
 export function BudgetScreen() {
@@ -201,9 +201,9 @@ export function OffenderScreen() {
 
       <p className="mt-[1.1em] text-[0.78em] text-[#6f6a60]">Projector, left on</p>
       <p className="font-editorial text-[3em] leading-[1]">
-        $255<span className="text-[0.4em] text-[#6f6a60]"> / year</span>
+        $221<span className="text-[0.4em] text-[#6f6a60]"> / year</span>
       </p>
-      <p className="mt-[0.3em] text-[0.72em] text-[#6f6a60]">1,700 kWh · 654 kg CO₂ · confidence high</p>
+      <p className="mt-[0.3em] text-[0.72em] text-[#6f6a60]">1,700 kWh · 595 kg CO₂ · confidence high</p>
 
       <div className="mt-[1.1em] rounded-[1em] bg-white p-[0.9em] ring-1 ring-[#e7e2d8]">
         <p className="text-[0.66em] text-[#8b867c]">The fix</p>

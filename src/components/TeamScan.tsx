@@ -219,8 +219,9 @@ function Start({
       )}
 
       <p className="text-[0.84rem] leading-relaxed text-dim">
-        <span className="font-medium text-mist">Your photos never leave your phone.</span> A team only receives the list each scan produced: which devices,
-        how many, and what they cost. Teams delete themselves after two weeks.
+        <span className="font-medium text-mist">A team never receives your photos.</span> It only gets the list each scan produced (which devices, how
+        many, what they cost), the room name and the display name you type.{" "}
+        {via === "relay" ? `Teams on this site fade from the relay after about ${RELAY_HOURS} hours.` : "Teams delete themselves after two weeks."}
       </p>
     </div>
   );

@@ -10,8 +10,8 @@ type Token = { t: string; em?: boolean };
 
 const TEXT: Token[][] = [
   [{ t: "A school sits empty for about" }, { t: "6,800 hours", em: true }, { t: "a year." }],
-  [{ t: "In that time one projector left on can quietly burn" }, { t: "$255.", em: true }],
-  [{ t: "A lab of monitors, another" }, { t: "$486.", em: true }],
+  [{ t: "In that time one projector left on can quietly burn" }, { t: "$221.", em: true }],
+  [{ t: "A lab of monitors, another" }, { t: "$796.", em: true }],
   [{ t: "None of it shows up anywhere, because nobody is there to see it." }],
   [{ t: "Ghost Watt is how you see it." }],
 ];

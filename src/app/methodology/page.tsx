@@ -166,7 +166,9 @@ export default function MethodologyPage() {
             </p>
             <ol className="mt-8 space-y-7">
               <Engine tone="bg-lime" title="A model on your own machine" badge="live model">
-                Ollama, running locally. The photo never leaves the device.
+                Only when you run Ghost Watt yourself with Ollama installed (for development or a
+                private install). The photo never leaves that machine. The public site never uses
+                this path.
               </Engine>
               <Engine tone="bg-cyan" title="A hosted model" badge="live model">
                 If nothing local is running and the deployment holds a vision key, that provider
@@ -180,6 +182,19 @@ export default function MethodologyPage() {
                 third path: a scan that could not be read says so instead of guessing.
               </Engine>
             </ol>
+          </Section>
+
+          {/* ghosty */}
+          <Section id="ghosty" title="What Ghosty Insights does, and doesn't">
+            <p className="mt-3 text-[1rem] leading-relaxed text-mist">
+              Ghosty reads a finished scan and says what matters: the device to fix first, what can be
+              done tonight for free, what looks odd, and a note to send to whoever holds the budget. It is
+              given only the figures this page describes (devices, counts, costs, fixes and paybacks),
+              never a photo, and it does no arithmetic anyone acts on. Every dollar figure it hands back is
+              checked against the scan&apos;s own totals, and one that does not fit is dropped. With no AI
+              provider on the site, the same card is written by fixed rules over the same figures and is
+              labelled as such.
+            </p>
           </Section>
 
           {/* carbon */}

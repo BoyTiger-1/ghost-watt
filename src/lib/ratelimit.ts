@@ -58,6 +58,11 @@ export const RULES = {
   // most one request a second. Results are cached per ~1 km, so this only bites
   // a script, never a person.
   locateIp: { limit: 40, windowSeconds: 600 },
+  // Ghosty is text in, text out: cheap per call, but it runs on every finished
+  // scan and every question, so it gets its own budget and never eats into the
+  // photo-reading one.
+  ghostyIp: { limit: 60, windowSeconds: 600 },
+  ghostyGlobal: { limit: 1000, windowSeconds: 86400 },
 } as const satisfies Record<string, RateRule>;
 
 /**

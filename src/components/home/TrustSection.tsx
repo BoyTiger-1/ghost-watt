@@ -12,8 +12,8 @@ const POINTS = [
     body: "Each result is tagged as read by the model or estimated from a room profile, with a confidence level, so a guess is never dressed up as a measurement.",
   },
   {
-    lead: "It keeps your photos at home.",
-    body: "Run a vision model locally with Ollama and the audit happens on your own machine. No accounts, no tracking, and the code is open source.",
+    lead: "It lets you keep your photos.",
+    body: "In On-device mode the picture is read in your browser and never uploaded. Enhanced mode sends it to a cloud model for the scan and discards it, and the header always says which is about to run. No accounts, no tracking, and the code is open source.",
   },
 ];
 

@@ -1,4 +1,3 @@
-import { Intro } from "@/components/home/Intro";
 import { ImpactSection } from "@/components/home/ImpactSection";
 import { HomeHero } from "@/components/home/HomeHero";
 import { Manifesto } from "@/components/home/Manifesto";
@@ -14,7 +13,6 @@ import { HomeFooter } from "@/components/home/HomeFooter";
 export default function Home() {
   return (
     <div className="home bg-paper text-graphite">
-      <Intro />
       <HomeHero />
       <Manifesto />
       <ImpactSection />

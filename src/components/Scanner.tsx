@@ -13,6 +13,8 @@ import { usePrefs } from "@/lib/prefs";
 import { beep, say } from "@/lib/cues";
 import { BillCalibration } from "./BillCalibration";
 import { TeamSend } from "./scan/TeamSend";
+import { Ghosty } from "./scan/Ghosty";
+import { buildContext } from "@/lib/ghosty";
 import { WeatherContext } from "./WeatherContext";
 import { EquivalenceStrip } from "./EquivalenceStrip";
 import { BenchmarkPanel, ExportBar, LoadMixPanel } from "./AuditPanels";
@@ -835,6 +837,22 @@ export function Scanner() {
   }, [priced, t]);
 
   const actions = useMemo(() => rankActions(listActions(countedOffenders, settings)), [countedOffenders, settings]);
+  const ghostyContext = useMemo(
+    () =>
+      buildContext({
+        place,
+        buildingName: building.name,
+        ratePerKwh: settings.ratePerKwh,
+        emptyHoursPerYear: settings.unoccupiedHoursPerYear,
+        annual: totals.annualCostPerYear,
+        wasted: totals.costPerYear,
+        recoverable: totals.recoverableCost,
+        co2Kg: totals.co2KgPerYear,
+        offenders: countedOffenders,
+        actions,
+      }),
+    [place, building.name, settings.ratePerKwh, settings.unoccupiedHoursPerYear, totals, countedOffenders, actions],
+  );
   const viewerItems = useMemo(() => priced.map((p) => ({ capture: p.c, offenders: p.offenders })), [priced]);
   const deviceLines = useMemo(
     () =>
@@ -1115,6 +1133,12 @@ export function Scanner() {
       )}
 
       {hasResults && (
+        <div className="no-print mt-5">
+          <Ghosty context={ghostyContext} working={working} />
+        </div>
+      )}
+
+      {hasResults && (
         <div id="scan-tabs" className="mt-8 scroll-mt-20 space-y-5">
           <div className="no-print">
             <TabBar tab={tab} onChange={setTab} count={ranked.length} />
@@ -1173,6 +1197,20 @@ export function Scanner() {
               <ReportBrief current={currentAudit} pictures={reportPictures} />
               <div className="no-print space-y-3">
                 <ExportBar offenders={countedOffenders} settings={settings} buildingName={building.name} savedTo={ready ? building.name : undefined} roomCount={done.length} />
+                {ready && (
+                  <Link
+                    href={`/stickers?building=${building.id}`}
+                    className="panel panel-hover flex items-center justify-between gap-4 p-4 sm:p-5"
+                  >
+                    <span>
+                      <span className="block text-[0.95rem] font-semibold text-fog">Print room stickers</span>
+                      <span className="mt-0.5 block text-[0.84rem] text-mist">
+                        One per room, with what it wastes and a QR code that opens a before-you-leave checklist.
+                      </span>
+                    </span>
+                    <span aria-hidden className="text-cyan">&rarr;</span>
+                  </Link>
+                )}
               </div>
             </div>
           )}

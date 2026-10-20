@@ -101,7 +101,7 @@ against Lite2 and YOLOv8n (ONNX Runtime Web) on 40 Open Images photos.
 
 | Stage | Goes in | What happens | Comes out |
 | --- | --- | --- | --- |
-| See | Room photo (and an optional room type) | Local vision model lists devices and their on/standby/off state | Device observations |
+| See | Room photo (and an optional room type) | The in-browser detector (On-device) or a hosted vision model (Enhanced) lists devices and their on/standby/off state | Device observations |
 | Count | Device observations | Wattage table x electricity rate x empty hours x grid carbon factor | kWh, dollars, CO2 per device |
 | Recommend | Per-device cost | Match each one to a concrete fix and savings rate, work out payback | Ranked offender cards |
 

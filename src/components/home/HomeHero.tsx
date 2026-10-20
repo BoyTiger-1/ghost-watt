@@ -133,7 +133,7 @@ export function HomeHero() {
         <div className="flex items-end justify-between border-t border-graphite/10 pt-5 text-[0.85rem] text-stone">
           <p>
             <span className="text-graphite">Tonight, one middle school:</span> 4 rooms left on,{" "}
-            <span className="tabular-nums text-sodium-deep">$1,183</span> a year, ranked worst first.
+            <span className="tabular-nums text-sodium-deep">$2,060</span> a year, ranked worst first.
           </p>
           <p className="text-pebble">Free and open source · Works in any browser</p>
         </div>
@@ -145,10 +145,10 @@ export function HomeHero() {
 /* ---- the phone's hero: tonight, as a short list ------------------------- */
 
 const TONIGHT = [
-  { room: "Computer lab", what: "30 monitors", cost: 486, tone: "cool" },
-  { room: "Gym", what: "24 high-bays", cost: 310, tone: "warm" },
-  { room: "Room 214", what: "projector", cost: 255, tone: "warm" },
-  { room: "Lobby", what: "vending machine", cost: 132, tone: "warm" },
+  { room: "Gym", what: "8 light fixtures", cost: 849, tone: "warm" },
+  { room: "Computer lab", what: "30 monitors", cost: 796, tone: "cool" },
+  { room: "Room 214", what: "projector", cost: 221, tone: "warm" },
+  { room: "Lobby", what: "vending machine", cost: 194, tone: "warm" },
 ] as const;
 
 function TonightCard() {
@@ -196,7 +196,7 @@ function TonightCard() {
           <br />
           ranked worst first
         </span>
-        <span className="font-editorial text-[2.6rem] leading-none">$1,183</span>
+        <span className="font-editorial text-[2.6rem] leading-none">$2,060</span>
       </div>
     </motion.div>
   );
