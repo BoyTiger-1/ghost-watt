@@ -32,6 +32,8 @@ export interface LocateResult {
   tariff?: { name: string; since: number | null; fixedMonthly: number | null };
   /** The state average for the same sector, for comparison. */
   stateRatePerKwh: number;
+  /** 5-digit US ZIP of the rounded location, for rebate lookups. */
+  zip?: string | null;
 }
 
 const cache = new Map<string, LocateResult>();
@@ -73,6 +75,7 @@ export async function GET(req: Request) {
         utilityName: tariff.utility,
         tariff: { name: tariff.name, since: tariff.since, fixedMonthly: tariff.fixedMonthly },
         stateRatePerKwh: stateRate,
+        zip: geo.zip ?? null,
       }
     : {
         place: geo.place,
@@ -84,6 +87,7 @@ export async function GET(req: Request) {
         rateQuality: state ? "state" : "national",
         co2PerKwh: region.co2PerKwh,
         stateRatePerKwh: stateRate,
+        zip: geo.zip ?? null,
       };
 
   if (cache.size > 2000) cache.clear();
@@ -91,12 +95,12 @@ export async function GET(req: Request) {
   return NextResponse.json(result);
 }
 
-async function reverseGeocode(lat: number, lon: number): Promise<{ place: string | null; state: string | null; country: string | null }> {
+async function reverseGeocode(lat: number, lon: number): Promise<{ place: string | null; state: string | null; country: string | null; zip?: string | null }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 6000);
   try {
     const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&addressdetails=1&lat=${lat}&lon=${lon}`,
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=16&addressdetails=1&lat=${lat}&lon=${lon}`,
       {
         // Nominatim's usage policy requires an identifying user agent.
         headers: { "User-Agent": "GhostWatt/1.0 (school energy audit)", "Accept-Language": "en" },
@@ -114,7 +118,9 @@ async function reverseGeocode(lat: number, lon: number): Promise<{ place: string
     const town = a.city ?? a.town ?? a.village ?? a.suburb ?? a.county ?? null;
     const region = state ?? a.state ?? a.country ?? null;
     const place = [town, region].filter(Boolean).join(", ") || null;
-    return { place, state, country };
+    // A US ZIP, for rebate lookups. Only the 5-digit form, never a street address.
+    const zip = country === "US" && /^\d{5}/.test(a.postcode ?? "") ? a.postcode!.slice(0, 5) : null;
+    return { place, state, country, zip };
   } catch {
     return { place: null, state: null, country: null };
   } finally {

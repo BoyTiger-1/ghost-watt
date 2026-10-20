@@ -53,6 +53,7 @@ environment at build time.
 | `OPENEI_API_KEY` | The serving utility's published tariff from a photo's location (same api.data.gov key as NREL works). | [openei.org/services/api/signup](https://openei.org/services/api/signup) |
 | `UPSTASH_REDIS_REST_URL` | Team scans that last two weeks. Without it, team codes still work: they run end-to-end encrypted over the public ntfy.sh relay straight from each browser, and last about 12 hours there (the board keeps its own copy). | [console.upstash.com](https://console.upstash.com/) |
 | `UPSTASH_REDIS_REST_TOKEN` | The token half of the pair above. | same |
+| `REWIRING_AMERICA_API_KEY` | Household rebates in the "What to do" tab. Works without a key at a shared rate limit; a free key raises it. | [rewiringamerica.org/api](https://www.rewiringamerica.org/api) |
 | `NREL_API_KEY` | The specific utility serving an address and its commercial rate. Optional — works unkeyed on a shared demo key at a much lower rate limit. | [api.data.gov/signup](https://api.data.gov/signup/) |
 
 `ELECTRICITY_MAPS_KEY` is read but should be left blank. EIA-930 already provides

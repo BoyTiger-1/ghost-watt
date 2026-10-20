@@ -4,6 +4,8 @@ import { GHOSTY_SCHEMA, buildPrompt, extractJson, rulesReport, validateReport, t
 import { RULES, checkLimits, clientIp, rateHeaders } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
+
+const LANGUAGES = new Set(["English", "Spanish", "Chinese (Simplified)", "Tagalog", "Vietnamese", "French", "Korean", "Portuguese", "Hindi"]);
 export const maxDuration = 60;
 
 const num = (v: unknown, min: number, max: number) => {
@@ -70,7 +72,7 @@ function sanitize(raw: unknown): GhostyContext | null {
  * built-in rules write the card instead and it is marked as such.
  */
 export async function POST(req: Request) {
-  let body: { context?: unknown; question?: unknown };
+  let body: { context?: unknown; question?: unknown; language?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -79,6 +81,8 @@ export async function POST(req: Request) {
   const ctx = sanitize(body.context);
   if (!ctx) return NextResponse.json({ error: "No scan to read." }, { status: 400 });
   const question = str(body.question, 300) || undefined;
+  // Only a language the app offers, by its English name, goes into the prompt.
+  const language = typeof body.language === "string" && LANGUAGES.has(body.language) ? body.language : undefined;
 
   const verdict = await checkLimits([
     { key: "ghosty:" + clientIp(req), rule: RULES.ghostyIp, scope: "ip" },
@@ -91,7 +95,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const res = await describeImagesAny([], buildPrompt(ctx, question), GHOSTY_SCHEMA, { skipLocal: true });
+  const res = await describeImagesAny([], buildPrompt(ctx, question, language), GHOSTY_SCHEMA, { skipLocal: true });
   const report = res.ok ? validateReport(extractJson(res.text), ctx, res.model) : null;
   if (report) {
     // A question the model skipped still gets an answer rather than a blank.

@@ -27,6 +27,8 @@ export interface GeoContext {
   sector?: "residential" | "commercial";
   stateRatePerKwh?: number;
   tariff?: { name: string; since: number | null; fixedMonthly: number | null };
+  /** 5-digit US ZIP, for rebate lookups. */
+  zip?: string | null;
 }
 
 /** What the person scanning told us. Every field optional. */

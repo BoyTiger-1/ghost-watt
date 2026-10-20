@@ -63,6 +63,8 @@ export const RULES = {
   // photo-reading one.
   ghostyIp: { limit: 60, windowSeconds: 600 },
   ghostyGlobal: { limit: 1000, windowSeconds: 86400 },
+  // Rebate lookups go to Rewiring America's free API; results are cached by ZIP.
+  rebatesIp: { limit: 30, windowSeconds: 600 },
 } as const satisfies Record<string, RateRule>;
 
 /**

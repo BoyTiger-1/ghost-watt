@@ -15,6 +15,7 @@ import { BillCalibration } from "./BillCalibration";
 import { TeamSend } from "./scan/TeamSend";
 import { Ghosty } from "./scan/Ghosty";
 import { ManualEntry } from "./scan/ManualEntry";
+import { RebatesShop } from "./scan/RebatesShop";
 import { buildContext } from "@/lib/ghosty";
 import { WeatherContext } from "./WeatherContext";
 import { EquivalenceStrip } from "./EquivalenceStrip";
@@ -1204,6 +1205,14 @@ export function Scanner() {
           {tab === "fix" && (
             <div className="no-print space-y-5">
               <ActionPlan offenders={countedOffenders} settings={settings} />
+              <RebatesShop
+                offenders={countedOffenders}
+                actions={actions}
+                place={place}
+                zip={deviceGeo?.geo?.zip ?? captures.find((c) => c.geo?.zip)?.geo?.zip}
+                state={building.regionCode}
+                utility={deviceGeo?.geo?.utilityName ?? captures.find((c) => c.geo?.utilityName)?.geo?.utilityName}
+              />
               <BudgetPlanner offenders={countedOffenders} />
             </div>
           )}

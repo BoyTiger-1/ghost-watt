@@ -25,15 +25,29 @@ interface Line {
 
 const SEARCHABLE = DEVICE_CATALOG.filter((c) => c.id !== "other_device");
 
-/** Best matches for what's typed: a whole-name hit first, then names that start with it, then anywhere. */
+/**
+ * Best matches for what's typed. Word by word and in any order, so "monitor 24",
+ * "24 inch monitor" and "computer monitor 24" all find monitors; numbers (sizes)
+ * only rank results, never rule one out. A whole-name hit beats a name that
+ * starts with the query, which beats words found anywhere.
+ */
 export function searchCatalog(query: string, limit = 8): DeviceCategory[] {
   const q = query.trim().toLowerCase();
   if (q.length < 2) return [];
+  const words = q.split(/[^a-z0-9]+/).filter(Boolean);
+  const required = words.filter((w) => !/^\d+$/.test(w) && w !== "inch" && w.length > 1);
+  const numbers = words.filter((w) => /^\d+$/.test(w));
+  if (!required.length) return [];
   const scored: { c: DeviceCategory; s: number }[] = [];
   for (const c of SEARCHABLE) {
     let s = 0;
     for (const name of [c.label.toLowerCase(), ...c.keywords]) {
-      const v = name === q ? 100 : name.startsWith(q) ? 60 - name.length * 0.1 : name.includes(q) ? 30 - name.length * 0.1 : 0;
+      const tokens = name.split(/[^a-z0-9]+/).filter(Boolean);
+      // Every typed word must start some word of the name ("air fry" finds "air fryer").
+      if (!required.every((w) => tokens.some((t) => t.startsWith(w)))) continue;
+      let v = name === q ? 100 : name.startsWith(q) ? 70 : 40;
+      v += numbers.filter((n) => tokens.includes(n)).length * 15;
+      v -= name.length * 0.1;
       if (v > s) s = v;
     }
     if (s > 0) scored.push({ c, s });

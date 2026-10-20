@@ -46,7 +46,8 @@ export function say(p: Pick<Prefs, "speak" | "lang">, text: string) {
   try {
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = p.lang === "es" ? "es-ES" : "en-US";
+    const voices: Record<string, string> = { en: "en-US", es: "es-ES", zh: "zh-CN", tl: "fil-PH", vi: "vi-VN", fr: "fr-FR", ko: "ko-KR", pt: "pt-BR", hi: "hi-IN" };
+    u.lang = voices[p.lang] ?? "en-US";
     window.speechSynthesis.speak(u);
   } catch {
     // No speech: nothing to do.

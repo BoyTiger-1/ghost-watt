@@ -5,6 +5,7 @@
 // the app; none is a placeholder.
 
 import { DEFAULT_PREFS, resetPrefs, setPrefs, usePrefs, type Prefs } from "@/lib/prefs";
+import { LANG_NAMES } from "@/lib/i18n-more";
 import { useT } from "@/lib/i18n";
 
 export function AccessibilityPanel() {
@@ -56,10 +57,7 @@ export function AccessibilityPanel() {
           label={t("a11y.lang")}
           sub={t("a11y.lang.sub")}
           value={p.lang}
-          options={[
-            ["en", "English"],
-            ["es", "Español"],
-          ]}
+          options={Object.entries(LANG_NAMES)}
           onChange={(v) => setPrefs({ lang: v as Prefs["lang"] })}
         />
         <Toggle label={t("a11y.font")} sub={t("a11y.font.sub")} checked={p.font === "plain"} onChange={(v) => setPrefs({ font: v ? "plain" : "default" })} />

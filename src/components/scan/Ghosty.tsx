@@ -9,6 +9,12 @@ import { AnimatePresence, motion } from "framer-motion";
 import { contextKey, rulesReport, type GhostyContext, type GhostyReport, type InsightKind } from "@/lib/ghosty";
 import { fmtMoneyFull } from "@/lib/energy";
 import { Mark } from "../home/HomeNav";
+import { usePrefs } from "@/lib/prefs";
+
+/** The language Ghosty writes in, by the English name the model understands best. */
+const LANGUAGE: Record<string, string> = {
+  en: "English", es: "Spanish", zh: "Chinese (Simplified)", tl: "Tagalog", vi: "Vietnamese", fr: "French", ko: "Korean", pt: "Portuguese", hi: "Hindi",
+};
 
 const KIND: Record<InsightKind, { label: string; tint: string }> = {
   habit: { label: "Free", tint: "bg-lime/[0.12] text-lime" },
@@ -43,15 +49,15 @@ function cacheSet(key: string, r: GhostyReport) {
   }
 }
 
-async function ask(ctx: GhostyContext, question?: string): Promise<{ report: GhostyReport; note?: string }> {
-  const key = contextKey(ctx, question);
+async function ask(ctx: GhostyContext, question?: string, language = "English"): Promise<{ report: GhostyReport; note?: string }> {
+  const key = contextKey(ctx, question) + ":" + language;
   const hit = cacheGet(key);
   if (hit) return { report: hit };
   try {
     const res = await fetch("/api/ghosty", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ context: ctx, question }),
+      body: JSON.stringify({ context: ctx, question, language }),
     });
     const json = (await res.json()) as { report?: GhostyReport; note?: string };
     if (!json.report) throw new Error("empty");
@@ -70,7 +76,9 @@ export function Ghosty({ context, working }: { context: GhostyContext; working: 
   const [asked, setAsked] = useState<{ q: string; a: string | null; loading: boolean } | null>(null);
   const [ticked, setTicked] = useState<Set<number>>(new Set());
   const [copied, setCopied] = useState(false);
-  const key = useMemo(() => contextKey(context), [context]);
+  const { lang } = usePrefs();
+  const language = LANGUAGE[lang] ?? "English";
+  const key = useMemo(() => contextKey(context) + ":" + language, [context, language]);
   const latest = useRef(key);
 
   // Run once the scan has settled: not while pictures are still being read,
@@ -80,7 +88,7 @@ export function Ghosty({ context, working }: { context: GhostyContext; working: 
     if (working || !context.devices.length) return;
     const t = setTimeout(async () => {
       setPhase("loading");
-      const r = await ask(context);
+      const r = await ask(context, undefined, language);
       if (latest.current !== key) return;
       setReport(r.report);
       setNote(r.note);
@@ -88,14 +96,14 @@ export function Ghosty({ context, working }: { context: GhostyContext; working: 
       setPhase("ready");
     }, 900);
     return () => clearTimeout(t);
-  }, [key, working, context]);
+  }, [key, working, context, language]);
 
   const submit = async (q: string) => {
     const text = q.trim();
     if (!text) return;
     setQuestion("");
     setAsked({ q: text, a: null, loading: true });
-    const r = await ask(context, text);
+    const r = await ask(context, text, language);
     setAsked({ q: text, a: r.report.answer ?? "Ghosty couldn't answer that from this scan.", loading: false });
   };
 

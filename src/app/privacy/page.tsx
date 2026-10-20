@@ -42,6 +42,7 @@ const sections: LegalSection[] = [
             ["Approximate location", "Only if you allow it, or a photo you add contains it", "Rounded to about 1 km on our server, then used to look up your utility rate, place name, weather and solar resource."],
             ["Room names, device rows and the display name you type", "Only if you send a scan to a team", "Shared with everyone who has that team's code, so their phones can add up one building. Kept up to 14 days (Upstash) or, on a site without it, about 12 hours on an encrypted public relay (Section 4)."],
             ["Scan figures (device types, counts, costs and fixes) and any question you type", "Only when Ghosty Insights runs on a scan", "Sent to one AI model provider to write the insights. No picture is sent."],
+            ["ZIP code, and an income range and household size only if you choose one", "Only when you look up rebates for a home scan", "Sent to Rewiring America to find programs that apply. Not stored by us; the income range is optional."],
             ["A room's top devices and costs, inside a sticker's QR code", "Only if you print room stickers", "Carried in the link itself. Anyone who scans the sticker can read it; opening the link sends none of it to our server."],
             ["Technical data (IP address, browser type, request time)", "With every request, as with any website", "Processed by our hosting provider and used by our server for rate limiting (Section 6)."],
           ]}
@@ -89,6 +90,7 @@ const sections: LegalSection[] = [
             ["OpenStreetMap Nominatim", "Place name for a location", "Rounded coordinates"],
             ["OpenWeather", "Outdoor conditions for heating and cooling findings", "Rounded coordinates"],
             ["Upstash", "Team scan storage, when configured", "Team code, room names, display names and device rows"],
+            ["Rewiring America", "Household rebate lookups", "ZIP code, the kinds of upgrade, and an income range and household size if you chose them"],
             ["ntfy.sh", "Team scan relay, on a site without Upstash", "End-to-end encrypted messages under a topic derived from the team code; without the code they cannot be read"],
             ["Vercel", "Hosting the website and server", "Standard request data, including IP address"],
           ]}

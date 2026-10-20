@@ -13,7 +13,7 @@ export type Theme = "system" | "light" | "dark";
 export type TextSize = "normal" | "large" | "xl";
 export type Motion = "system" | "reduce";
 export type Palette = "default" | "safe";
-export type Lang = "en" | "es";
+export type Lang = keyof typeof LANG_NAMES;
 
 export type Font = "default" | "plain";
 
@@ -85,6 +85,8 @@ export const DEFAULT_PREFS: Prefs = {
 
 
 
+import { LANG_NAMES, LANG_TAGS } from "./i18n-more";
+
 export { PREFS_KEY } from "./prefs-boot";
 import { PREFS_KEY } from "./prefs-boot";
 
@@ -97,7 +99,10 @@ function read(): Prefs {
     const raw = localStorage.getItem(PREFS_KEY);
     if (!raw) return DEFAULT_PREFS;
     const p = JSON.parse(raw) as Partial<Prefs>;
-    return { ...DEFAULT_PREFS, ...p };
+    const merged = { ...DEFAULT_PREFS, ...p };
+    // A language this build no longer has falls back to English rather than breaking every label.
+    if (!(merged.lang in LANG_NAMES)) merged.lang = "en";
+    return merged;
   } catch {
     return DEFAULT_PREFS;
   }
@@ -114,7 +119,7 @@ export function applyPrefs(p: Prefs) {
   d.setAttribute("data-motion", p.motion);
   d.setAttribute("data-palette", p.palette);
   d.setAttribute("data-font", p.font);
-  d.lang = p.lang;
+  d.lang = LANG_TAGS[p.lang] ?? "en";
   for (const k of ["contrast", "underline", "targets", "spacing", "focus", "bold", "lineheight", "grayscale", "cursor", "lite"] as const) {
     if (p[k]) d.setAttribute(`data-${k}`, "");
     else d.removeAttribute(`data-${k}`);

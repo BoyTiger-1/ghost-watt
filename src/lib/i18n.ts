@@ -6,6 +6,7 @@
 // shows up as the English text rather than a blank.
 
 import { usePrefs, type Lang } from "./prefs";
+import { MORE_LANGS } from "./i18n-more";
 
 const STRINGS = {
   // navigation
@@ -225,7 +226,10 @@ export type Key = keyof typeof STRINGS;
 
 export function translate(lang: Lang, key: Key): string {
   const pair = STRINGS[key];
-  return lang === "es" ? pair[1] : pair[0];
+  if (lang === "en") return pair[0];
+  if (lang === "es") return pair[1];
+  // The other languages live in i18n-more.ts; a key not translated there shows in English.
+  return MORE_LANGS[lang]?.[key] ?? pair[0];
 }
 
 /** `t("nav.scanner")` in the current language. */

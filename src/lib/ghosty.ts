@@ -141,7 +141,7 @@ export const GHOSTY_SCHEMA = {
   required: ["headline", "insights", "checklist", "answer"],
 } as const;
 
-export function buildPrompt(ctx: GhostyContext, question?: string): string {
+export function buildPrompt(ctx: GhostyContext, question?: string, language?: string): string {
   const who =
     ctx.place === "home"
       ? "a household"
@@ -155,6 +155,9 @@ export function buildPrompt(ctx: GhostyContext, question?: string): string {
     "- Use ONLY figures that appear in the data, or sums of them. Never estimate, invent or round up a number. If you have no figure, say so or leave savings null.",
     "- Be specific: name the device, the room and the action. No generic energy-saving tips that ignore the data.",
     "- Plain words, no jargon. Say 'a year' not 'per annum'. Dollars without cents.",
+    language && language !== "English"
+      ? `- Write every text field (headline, titles, details, checklist, answer) in ${language}. Keep the JSON keys and the "kind" values in English.`
+      : "",
     "- Free habit changes first, then cheap fixes with fast payback, then upgrades.",
     "- 'watch' insights flag something that looks odd or uncertain (low confidence, something running that should not be, one device dominating).",
     "- 'schedule' insights are about timers, shutdown routines or opening hours.",
@@ -169,7 +172,9 @@ export function buildPrompt(ctx: GhostyContext, question?: string): string {
     "",
     "DATA:",
     JSON.stringify(ctx),
-  ].join("\n");
+  ]
+    .filter((line) => line !== "")
+    .join("\n");
 }
 
 const KINDS: InsightKind[] = ["quick_win", "habit", "upgrade", "watch", "schedule"];
