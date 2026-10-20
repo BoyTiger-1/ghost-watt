@@ -93,9 +93,7 @@ export function Nav() {
                       layoutId="nav-pill"
                       className="nav-pill absolute inset-0 rounded-full bg-fog"
                       transition={{ type: "spring", stiffness: 320, damping: 26, mass: 0.9 }}
-                    >
-                      <span className="absolute -bottom-[7px] left-1/2 h-[3px] w-5 -translate-x-1/2 rounded-full bg-sodium shadow-[0_0_10px_2px_rgba(239,157,46,0.6)]" />
-                    </motion.span>
+                    />
                   )}
                   <span className="relative">{t(tab.key)}</span>
                 </Link>

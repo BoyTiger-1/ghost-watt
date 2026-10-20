@@ -56,7 +56,8 @@ environment at build time.
 | `NREL_API_KEY` | The specific utility serving an address and its commercial rate. Optional — works unkeyed on a shared demo key at a much lower rate limit. | [api.data.gov/signup](https://api.data.gov/signup/) |
 
 `ELECTRICITY_MAPS_KEY` is read but should be left blank. EIA-930 already provides
-grid carbon and Electricity Maps no longer has a free tier.
+grid carbon for every US region; Electricity Maps' free tier covers a single zone,
+for non-commercial use only.
 
 The `OLLAMA_*` variables are for local development only. A serverless function cannot
 reach a daemon on your laptop, so on a deployment the vision path is hosted-only.

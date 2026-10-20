@@ -423,7 +423,7 @@ export function keyInventory(): KeyInfo[] {
       configured: Boolean(process.env.ELECTRICITY_MAPS_KEY?.trim()),
       buys:
         "Optional override for grid carbon intensity. Not needed - the EIA key above " +
-        "already provides this, and Electricity Maps no longer has a free tier.",
+        "already covers every US grid region. Electricity Maps' free tier is one zone, non-commercial use only.",
       signup: "https://portal.electricitymaps.com/",
       required: false,
       optionalNote: "Superseded by EIA-930. Leave blank.",

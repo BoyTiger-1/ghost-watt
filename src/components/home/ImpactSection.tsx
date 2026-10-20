@@ -1,21 +1,29 @@
 "use client";
 
-// The scale of it, live. One night of America's school waste plays back fast
-// (a second on screen is ten real minutes), with a clock beside it; below it, a
-// ticker of the kind of thing a single scan turns up.
+// The scale of it, live, from the moment you open the site: the electricity
+// America's empty schools waste, counted in watt-hours (about 585,000 a second)
+// with the dollars beside it; below, a ticker of what a single scan turns up.
 //
 // The rate is deliberately the conservative reading of the sources: about $8B a
 // year on K-12 energy (U.S. DOE Better Buildings; ENERGY STAR cites $6-8B), of
 // which ENERGY STAR says "as much as 30%" is wasted. So "up to" $2.4B a year,
-// about $76 a second, and the copy says "up to".
+// about $76 a second. At the U.S. commercial average of $0.13/kWh (EIA, 2024)
+// that is about 18.5 billion kWh a year: a steady 2.1 GW, roughly the output of
+// two large nuclear reactors. The copy says "up to".
 
-import { useEffect, useRef, useState } from "react";
-import { motion, useInView, useReducedMotion } from "framer-motion";
+import { useEffect, useState } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import { Chapter } from "./Chapter";
 import { CountTo, Flashlight, SplitLines } from "@/components/motion/Motion";
 
 const PER_YEAR = 8e9 * 0.3;
-const PER_SECOND = PER_YEAR / (365 * 24 * 3600);
+const SECONDS_PER_YEAR = 365 * 24 * 3600;
+const PER_SECOND = PER_YEAR / SECONDS_PER_YEAR;
+const RATE_PER_KWH = 0.13;
+/** Watt-hours wasted a second: dollars a second over the price of a kWh, times 1000. */
+const WH_PER_SECOND = (PER_SECOND / RATE_PER_KWH) * 1000;
+/** The same energy as a steady draw, in gigawatts. */
+const GIGAWATTS = (WH_PER_SECOND * 3600) / 1e9;
 
 const FINDS = [
   ["Room 214", "projector left on", "$221"],
@@ -41,13 +49,12 @@ export function ImpactSection() {
           <div className="mt-8 grid gap-12 lg:grid-cols-[1.25fr_1fr] lg:items-end">
             <div>
               <h2 className="font-editorial text-[clamp(2.4rem,5vw,4.4rem)] leading-[0.98] text-[#f5f2eb]">
-                <SplitLines inView lines={["Tonight, America’s", <span key="b" className="italic text-[#ffc777]">empty schools will pay</span>]} />
+                <SplitLines inView lines={["Since you opened this page,", <span key="b" className="italic text-[#ffc777]">America’s empty schools have wasted</span>]} />
               </h2>
               <LiveCounter />
               <p className="mt-3 max-w-[34rem] text-[0.95rem] leading-relaxed text-[#f5f2eb]/60">
-                for electricity nobody is using, from the last bell to the first. Played back fast: every second here is ten real minutes, at the
-                rate of up to $76 a second. That is the share of a ~$8 billion annual K-12 energy bill that ENERGY STAR
-                estimates is wasted (up to 30%).
+                That is a steady {GIGAWATTS.toFixed(1)} gigawatts, about the output of two nuclear reactors, running rooms nobody is in. It is the
+                share of a ~$8 billion annual K-12 energy bill that ENERGY STAR estimates is wasted (up to 30%), at the U.S. average price.
               </p>
             </div>
 
@@ -87,80 +94,54 @@ function Stat({ value, label }: { value: React.ReactNode; label: string }) {
   );
 }
 
-/** One night, 4 pm to 8 am. */
-const NIGHT_SECONDS = 16 * 3600;
-/** Each second on screen is ten real minutes. */
-const SPEED = 600;
-
 /**
- * Tonight's bill, played back fast: a clock runs from 4:00 pm to 8:00 am and the
- * dollars climb with it at the real rate times SPEED. The copy says it is sped up.
+ * Energy and money wasted since this page opened, ticking every frame. It starts
+ * when you arrive, not when you scroll here, so the number is already running.
  */
 function LiveCounter() {
-  const ref = useRef<HTMLDivElement>(null);
-  const seen = useInView(ref, { margin: "-40px" });
   const reduce = useReducedMotion();
-  // Real seconds of the night elapsed so far.
-  const [night, setNight] = useState(0);
-  const [run, setRun] = useState(0);
+  const [seconds, setSeconds] = useState(0);
 
   useEffect(() => {
-    if (!seen) return;
-    if (reduce) {
-      const t = setTimeout(() => setNight(NIGHT_SECONDS), 0);
-      return () => clearTimeout(t);
-    }
+    const start = performance.now();
     let raf = 0;
-    let start = 0;
+    let last = 0;
     const tick = (t: number) => {
-      if (!start) start = t;
-      const elapsed = Math.min(NIGHT_SECONDS, ((t - start) / 1000) * SPEED);
-      setNight(elapsed);
-      if (elapsed < NIGHT_SECONDS) raf = requestAnimationFrame(tick);
+      // Under reduced motion it still counts, just once a second rather than every frame.
+      if (!reduce || t - last > 1000) {
+        setSeconds((t - start) / 1000);
+        last = t;
+      }
+      raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [seen, reduce, run]);
+  }, [reduce]);
 
-  const dollars = night * PER_SECOND;
-  const done = night >= NIGHT_SECONDS;
-  const minutes = (16 * 60 + Math.floor(night / 60)) % (24 * 60);
-  const h = Math.floor(minutes / 60);
-  const clock = `${h % 12 || 12}:${String(minutes % 60).padStart(2, "0")} ${h < 12 ? "am" : "pm"}`;
+  const wh = seconds * WH_PER_SECOND;
+  const dollars = seconds * PER_SECOND;
 
   return (
-    <div ref={ref} className="mt-6">
+    <div className="mt-6">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
         transition={{ duration: 0.9, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
-        className="flex items-baseline font-editorial text-[clamp(2.7rem,8.6vw,7.6rem)] leading-none tracking-[-0.03em] text-[#ffc777] [text-shadow:0_0_60px_rgba(255,170,80,0.35)]"
+        className="flex flex-wrap items-baseline gap-x-3 font-editorial leading-none tracking-[-0.03em] text-[#ffc777] [text-shadow:0_0_60px_rgba(255,170,80,0.35)]"
         aria-live="off"
       >
-        <span>$</span>
-        <span className="tabular-nums">{Math.floor(dollars).toLocaleString("en-US")}</span>
+        <span className="text-[clamp(2.6rem,7.6vw,6.8rem)] tabular-nums">{Math.floor(wh).toLocaleString("en-US")}</span>
+        <span className="text-[clamp(1.2rem,2.4vw,2rem)] text-[#ffc777]/70">watt-hours</span>
       </motion.div>
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center gap-2 rounded-full border border-[#ffc777]/25 bg-[#ffc777]/[0.08] py-1.5 pl-2.5 pr-3.5 font-numeric text-[0.85rem] tabular-nums text-[#ffc777]">
-          <span className={`h-2 w-2 rounded-full bg-[#ffc777] shadow-[0_0_10px_rgba(255,199,119,0.9)] ${done ? "" : "soft-pulse"}`} />
-          {clock}
+        <span className="inline-flex items-center gap-2 rounded-full border border-[#ffc777]/25 bg-[#ffc777]/[0.08] py-1.5 pl-2.5 pr-3.5 font-numeric text-[0.88rem] tabular-nums text-[#ffc777]">
+          <span className="soft-pulse h-2 w-2 rounded-full bg-[#ffc777] shadow-[0_0_10px_rgba(255,199,119,0.9)]" />
+          ${dollars.toFixed(2)} of electricity
         </span>
         <span className="rounded-full border border-white/10 px-3 py-1.5 text-[0.82rem] text-[#f5f2eb]/60">
-          {done ? "One night, start to finish" : "Sped up: 1 second = 10 minutes"}
+          +{Math.round(WH_PER_SECOND).toLocaleString("en-US")} Wh every second
         </span>
-        {done && !reduce && (
-          <button
-            type="button"
-            onClick={() => {
-              setNight(0);
-              setRun((r) => r + 1);
-            }}
-            className="rounded-full px-3 py-1.5 text-[0.82rem] text-[#f5f2eb]/80 underline decoration-[#f5f2eb]/30 underline-offset-4 hover:decoration-[#f5f2eb]"
-          >
-            Play the night again
-          </button>
-        )}
       </div>
     </div>
   );

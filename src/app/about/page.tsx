@@ -15,39 +15,39 @@ export const metadata: Metadata = {
 
 const STEPS = [
   {
-    title: "Walk the building after hours",
-    body: "At 4pm or after close, students sweep the building and point a phone at anything still drawing power: a lit lab, an idling projector, the humming vending machine.",
+    title: "Walk around after hours",
+    body: "Go room to room once the building is mostly empty and point your phone at anything still on. Lit labs, projectors, that one space heater under a desk.",
   },
   {
-    title: "A vision model names the devices",
-    body: "It identifies each device and whether it is on, in standby or off. That is all it does. In On-device mode it happens in the browser and nothing is uploaded.",
+    title: "The model says what it sees",
+    body: "It names each device and whether it's on, asleep or off. That's its whole job. In On-device mode this happens in your browser and the photo is never uploaded.",
   },
   {
-    title: "Plain arithmetic ranks them",
-    body: "Published wattages times realistic empty hours give a dollar and CO₂ figure per device, sorted worst first, each with a costed fix and its payback.",
+    title: "Plain math does the rest",
+    body: "Published wattages, times the hours the room sits empty, times your local electricity price. You get dollars and CO₂ for each device, worst first, with a fix and how fast it pays for itself.",
   },
 ];
 
 const BELIEFS = [
   {
-    title: "What you can't see, nobody fixes",
-    body: "Nobody is careless on purpose. A projector humming at midnight is just invisible. Show people where the waste is and most of it gets switched off.",
+    title: "Nobody wastes power on purpose",
+    body: "A projector humming at midnight is invisible. Once people can actually see it, most of it gets switched off.",
   },
   {
-    title: "Plain words, not jargon",
-    body: "You shouldn't need to know what a kilowatt-hour is to save money. Every number here comes in dollars, hours and things you can picture.",
+    title: "No jargon",
+    body: "You shouldn't need to know what a kilowatt-hour is to save money. Everything is in dollars and hours.",
   },
   {
-    title: "Show the math",
-    body: "Estimates come with a range and the reason behind them. Every wattage and formula is published, so anyone can check our work.",
+    title: "Show your work",
+    body: "Every estimate comes with a range and where it came from. The wattages and formulas are public, so you can check us.",
   },
   {
-    title: "Cheapest fixes first",
-    body: "Changing a habit or setting a timer often beats buying new equipment. We rank fixes by what each dollar gets back, and free ones lead.",
+    title: "Free fixes first",
+    body: "A timer or a new habit often beats buying equipment. We sort fixes by what each dollar gets back, so the free ones end up on top.",
   },
   {
-    title: "Your photos are yours",
-    body: "No accounts and no tracking. Pictures can be read right on your device, and team scans share device lists, never photos.",
+    title: "Your photos stay yours",
+    body: "No accounts and no tracking. On-device mode never uploads a picture, and team scans only share device lists.",
   },
 ];
 
@@ -56,47 +56,47 @@ const TEAM = [
     name: "Shaurya Sahdev",
     initials: "SS",
     roles: ["Live mode", "Frontend & design"],
-    body: "Built the live camera mode that boxes and prices devices as you point at them, and designed much of how the app looks and feels.",
+    body: "Built live mode, the camera view that boxes and prices things as you point at them. Did a lot of the design too.",
   },
   {
     name: "Ronit Agarwal",
     initials: "RA",
     roles: ["AI models & training", "Backend"],
-    body: "Trains and tunes the vision models that find devices in a picture, and built the server side that reads photos and looks up prices.",
+    body: "Trains and tunes the models that find devices in a photo, and wrote the server side that reads photos and looks up prices.",
   },
   {
     name: "Vyom Joshi",
     initials: "VJ",
     roles: ["Frontend", "Testing"],
-    body: "Builds the screens people use every day and puts them through their paces, making sure they hold up on real phones in real rooms.",
+    body: "Builds the screens people actually use, then tries to break them on real phones in real rooms.",
   },
   {
     name: "Rayan Alam",
     initials: "RA",
     roles: ["Backend & data", "Testing"],
-    body: "Works on the data and services behind the numbers, from electricity prices to saved places, and tests that they add up.",
+    body: "Works on the data behind the numbers, like electricity prices and saved places, and checks that it all adds up.",
   },
 ];
 
 const NOTES: { q: string; a: ReactNode }[] = [
   {
-    q: "Why hasn't this been done?",
-    a: "Commercial energy audits cost money and happen once a decade. Carbon calculators ask you to type in guesses. Nobody had put a vision model, a wattage table and a ranked to-do list in the hands of the people who actually walk the halls.",
+    q: "Why hasn't someone done this already?",
+    a: "Honestly, we're not sure. Professional audits are expensive, so most schools rarely get one, and online carbon calculators make you type in your own guesses. Nobody had put a vision model, a wattage table and a to-do list on the phones of the people who actually walk the halls.",
   },
   {
     q: "What does it look like in practice?",
-    a: "Point a phone at a lit, empty computer lab and it says: about $340 a year and 1.2 tonnes of CO₂ here; fix it with smart power strips, about $60, paid back in two months. That is an action, not a guilt trip.",
+    a: "Point it at an empty computer lab with thirty monitors still on and it'll tell you something like: about $800 a year here. Smart power strips fix most of it for $60, and they pay for themselves in about a month.",
   },
   {
     q: "What does a school get at the end?",
-    a: "A prioritised list facilities can act on Monday (timers, occupancy sensors, power strips, a shutdown policy) and a one-page brief for whoever signs the purchase order.",
+    a: "A ranked list facilities can start on Monday (timers, motion sensors, power strips, a shutdown routine), a one-page report for whoever approves spending, and stickers for the doors.",
   },
   {
     q: "Where do the photos go?",
     a: (
       <>
-        In On-device mode, nowhere: a detector in the browser reads them and nothing is uploaded. In Enhanced mode a photo is sent to the cloud vision
-        model for the scan and then discarded. The pill in the header always says which mode is about to run, and every result is labelled{" "}
+        In On-device mode, nowhere. The detector runs in your browser. Enhanced mode sends the photo to a cloud vision model for the scan, and then it&apos;s
+        thrown away. The pill in the header always says which one is about to run, and every result is labelled{" "}
         <span className="text-fog">Enhanced · cloud</span> or <span className="text-fog">On-device</span>.
       </>
     ),
@@ -105,18 +105,18 @@ const NOTES: { q: string; a: ReactNode }[] = [
     q: "How accurate is it?",
     a: (
       <>
-        Wattage from a photo is an estimate, and Ghost Watt never pretends otherwise. But the ranking of the worst offenders holds even when individual
-        watts are fuzzy, and the ranking is what drives action. The{" "}
+        Watts from a photo are an estimate, and we say so. The ranking holds up even when individual numbers are a bit off, though, and the ranking is
+        what tells you what to fix first. Every figure and formula is on the{" "}
         <Link href="/methodology" className="text-cyan underline decoration-cyan/30 underline-offset-4 hover:decoration-cyan">
           methodology
         </Link>{" "}
-        shows every figure and formula.
+        page.
       </>
     ),
   },
   {
-    q: "Does a team scan need accounts?",
-    a: "No. Whoever starts a team gets a six-character code and a QR code for the board. Everyone scans their own rooms on their own phone, and only the device lists travel.",
+    q: "Do team scans need accounts?",
+    a: "No. Whoever starts one gets a six-character code and a QR code to put on the board. Everyone scans their own rooms on their own phone, and only the device lists get shared.",
   },
 ];
 
@@ -149,10 +149,9 @@ export default function AboutPage() {
 
       <div className="mx-auto max-w-6xl px-5 pb-12 pt-24 sm:px-6 sm:pt-32">
         <Reveal>
-          <PageHeader eyebrow="About" title="The biggest easy energy win" accent="is the one nobody measures.">
-            Everyone measures a building&apos;s daytime footprint. Almost no one measures what a school burns while it&apos;s empty: labs left on
-            overnight, projectors in standby, hallway lights all weekend, the vending machine chilling soda at 2am. Most schools have no idea what that
-            number is. Ghost Watt is how you find out.
+          <PageHeader eyebrow="About" title="We kept walking past empty rooms" accent="with the lights on.">
+            Ghost Watt started with a simple question: how much does our school pay to keep things running after everyone goes home? Nobody we asked
+            knew. There&apos;s no meter for &quot;the projector in 214 that&apos;s been on since Tuesday.&quot; So we built a way to count it with a phone.
           </PageHeader>
         </Reveal>
 
@@ -162,13 +161,12 @@ export default function AboutPage() {
           <Reveal delay={0.06}>
             <div className="space-y-4 text-[1.05rem] leading-relaxed text-mist">
               <p>
-                We noticed it walking through school after the bell: rooms full of screens still glowing, lights on in empty halls, machines humming for
-                nobody. Every one of them was costing money and putting carbon into the air, and nobody knew how much.
+                Stay at school late and you see it. A computer lab glowing with nobody in it, hallway lights on over empty floors, a vending machine
+                humming to itself. All of that costs money, and most of it could just be switched off.
               </p>
               <p>
-                Energy audits are expensive and rare, and the tools that exist assume you already speak the language of kilowatts. We wanted something
-                anyone could pick up: point a phone at a room, see what&apos;s wasting power, and know exactly what to do about it, starting with what&apos;s
-                free.
+                A real energy audit is expensive, so most schools rarely get one. The calculators online assume you already know what a kilowatt-hour
+                is and want you to type in your own guesses. We wanted something you could just point at a room.
               </p>
             </div>
             <div className="mt-8 grid grid-cols-3 gap-px overflow-hidden rounded-2xl border border-line bg-line">
@@ -188,7 +186,7 @@ export default function AboutPage() {
 
         {/* 2. how it works */}
         <section className="mt-20 border-t border-line pt-14 sm:mt-24">
-          <SectionHead eyebrow="How it works" title="A professional audit costs money and happens once a decade." accent="This costs a walk." />
+          <SectionHead eyebrow="How it works" title="An audit costs money." accent="This costs a walk." />
           <ol className="mt-10 grid gap-4 sm:grid-cols-3">
             {STEPS.map((s, i) => (
               <Reveal key={s.title} delay={i * 0.08} className="h-full">
@@ -204,7 +202,7 @@ export default function AboutPage() {
 
         {/* 3. what we believe */}
         <section className="mt-20 border-t border-line pt-14 sm:mt-24">
-          <SectionHead eyebrow="What we believe" title="Five rules" accent="we built it by." />
+          <SectionHead eyebrow="What we care about" title="How we decide" accent="what goes in." />
           <ul className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {BELIEFS.map((b, i) => (
               <Reveal key={b.title} delay={i * 0.05} className="h-full">
@@ -220,7 +218,7 @@ export default function AboutPage() {
 
         {/* 4. the team */}
         <section className="mt-20 border-t border-line pt-14 sm:mt-24">
-          <SectionHead eyebrow="The team" title="Four of us." accent="One building at a time." />
+          <SectionHead eyebrow="The team" title="Four students," accent="one very lit school." />
           <ul className="mt-10 grid gap-4 sm:grid-cols-2">
             {TEAM.map((m, i) => (
               <Reveal key={m.name} delay={i * 0.06} className="h-full">
@@ -250,7 +248,7 @@ export default function AboutPage() {
 
         {/* 5. questions */}
         <section className="mt-20 border-t border-line pt-14 sm:mt-24">
-          <SectionHead eyebrow="Questions" title="A few honest answers." />
+          <SectionHead eyebrow="FAQ" title="Questions people ask us." />
           <div className="mt-10 grid gap-4 md:grid-cols-2">
             {NOTES.map((n, i) => (
               <Reveal key={n.q} delay={(i % 2) * 0.06} className="h-full">
@@ -267,9 +265,9 @@ export default function AboutPage() {
           <div className="mt-20 flex flex-col items-start justify-between gap-6 rounded-[1.75rem] bg-fog px-7 py-9 text-ink sm:mt-24 sm:flex-row sm:items-center sm:px-10">
             <div>
               <h2 className="font-editorial text-[2rem] leading-[1.05] sm:text-[2.4rem]">
-                Your building is <span className="italic text-sodium">on right now.</span>
+                Go scan a room <span className="italic text-sodium">tonight.</span>
               </h2>
-              <p className="mt-2 text-[0.98rem] text-ink/70">Scan one room tonight. It takes a minute and costs nothing.</p>
+              <p className="mt-2 text-[0.98rem] text-ink/70">It takes about a minute, and it&apos;s free.</p>
             </div>
             <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
               <Link
@@ -279,7 +277,7 @@ export default function AboutPage() {
                 Start a scan
               </Link>
               <Link href="/methodology" className="text-[0.95rem] text-ink/80 underline decoration-ink/30 underline-offset-[6px] hover:decoration-ink">
-                Read the methodology
+                How the math works
               </Link>
             </div>
           </div>
