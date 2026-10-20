@@ -29,13 +29,15 @@ const ORDER = (() => {
 })();
 
 export function LightsOut() {
-  const ref = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({ target: ref, offset: ["start 0.9", "center 0.45"] });
+  // Keyed to the building itself, not the whole card: the windows only start going
+  // dark once the facade is on screen, and the last one goes out while it is still
+  // in view (the footer below leaves room to scroll that far).
+  const facade = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({ target: facade, offset: ["start 0.85", "end 0.5"] });
 
   return (
     <section className="px-3 pb-6 pt-10 sm:px-6">
       <div
-        ref={ref}
         className="grain relative isolate mx-auto max-w-[86rem] overflow-hidden rounded-[2rem] bg-[linear-gradient(180deg,#2a3150_0%,#1d2238_70%,#191d30_100%)] px-6 pb-16 pt-20 text-moon sm:rounded-[2.75rem] sm:px-14 sm:pt-28"
       >
         <Flashlight size={600} />
@@ -68,7 +70,7 @@ export function LightsOut() {
         </div>
 
         {/* the facade */}
-        <div className="relative mx-auto mt-20 max-w-[60rem]" aria-hidden="true">
+        <div ref={facade} className="relative mx-auto mt-20 max-w-[60rem]" aria-hidden="true">
           <div className="grid grid-cols-7 gap-2 rounded-t-xl border border-b-0 border-white/10 bg-white/[0.035] p-3 sm:p-4 md:grid-cols-14">
             {Array.from({ length: COLS * ROWS }).map((_, i) => (
               <Pane key={i} progress={scrollYProgress} rank={i === KEEP ? null : ORDER.get(i)!} hideOnPhone={i % COLS >= 7} />
