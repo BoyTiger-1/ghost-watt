@@ -169,7 +169,7 @@ function Start({
       </ol>
 
       <div className="grid gap-5 md:grid-cols-2">
-        <section className="panel p-5 sm:p-6">
+        <section className="panel min-w-0 p-5 sm:p-6">
           <h2 className="text-[1.2rem] font-semibold text-fog">Start a team</h2>
           <p className="mt-1 text-[0.88rem] leading-relaxed text-mist">Name it after the place you&apos;re all scanning.</p>
           <input
@@ -189,7 +189,7 @@ function Start({
           </button>
         </section>
 
-        <section className="panel p-5 sm:p-6">
+        <section className="panel min-w-0 p-5 sm:p-6">
           <h2 className="text-[1.2rem] font-semibold text-fog">Join a team</h2>
           <p className="mt-1 text-[0.88rem] leading-relaxed text-mist">Someone sent you a code? Type it here. A link opens the team by itself.</p>
           <div className="mt-4 flex gap-2">

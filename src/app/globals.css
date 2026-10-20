@@ -1053,11 +1053,14 @@ body:has(.home) ::-webkit-scrollbar-thumb:hover { background: var(--color-pebble
 }
 
 /* Masked line reveal: each line rises out of its own slot. */
+/* The clip box is padded out on every side and pulled back by the same amount,
+   so the line sits exactly where it did while italic overhangs (the slanted
+   "N" of "Nobody"), descenders and accents have room inside the clip. */
 .line-mask {
   display: block;
   overflow: hidden;
-  padding-bottom: 0.08em;
-  margin-bottom: -0.08em;
+  padding: 0.06em 0.18em 0.2em;
+  margin: -0.06em -0.18em -0.2em;
 }
 
 /* An endless ticker. */
