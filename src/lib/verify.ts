@@ -260,11 +260,21 @@ export function withLamps(
   /** `min`: how bright counts as lit; higher for a loose box, where a pale wall could pass. */
   lamps: readonly { box: readonly number[]; confidence: number; min?: number }[],
   px: { data: Uint8Array; w: number; h: number },
+  /**
+   * Boxes of things that glow but are not lamps: a phone, a screen, a laptop. A
+   * lit patch centred inside one is that device's screen. Without this, a phone
+   * held up to the camera was the brightest thing in the middle of the frame and
+   * came back as a lamp.
+   */
+  blockers: readonly (readonly number[])[] = [],
 ): LightBlob[] {
   const out = [...lights];
   for (const lamp of lamps) {
     const lit = litRegion(px.data, px.w, px.h, lamp.box, lamp.min);
     if (!lit) continue;
+    const lx = (lit[0] + lit[2]) / 2;
+    const ly = (lit[1] + lit[3]) / 2;
+    if (blockers.some((b) => lx >= b[0] && lx <= b[2] && ly >= b[1] && ly <= b[3])) continue;
     const covered = out.some((l) => {
       const cx = (l.box[0] + l.box[2]) / 2;
       const cy = (l.box[1] + l.box[3]) / 2;

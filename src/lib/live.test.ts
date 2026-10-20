@@ -139,10 +139,11 @@ describe("tallyView", () => {
     expect(tally.costPerYear).toBe(0);
   });
 
-  it("counts uncosted devices without inventing a price", () => {
+  it("prices a phone as a phone: a few dollars a year, never a lamp's worth", () => {
     const tally = tallyView([track("cell phone", 1)], settings);
     expect(tally.devices).toBe(1);
-    expect(tally.costPerYear).toBe(0);
+    expect(tally.costPerYear).toBeGreaterThan(0);
+    expect(tally.costPerYear).toBeLessThan(10);
   });
 
   it("maps every costed COCO class to a real catalog category", async () => {

@@ -130,6 +130,15 @@ export function MediaViewer({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={c.dataUrl} alt={c.name} className={`block h-auto max-h-[70vh] w-auto max-w-full ${working ? "opacity-60" : ""}`} />
           </div>
+        ) : c.origin === "manual" ? (
+          <div className="grid aspect-[4/3] place-items-center bg-[#151827] px-6 text-center text-white/70">
+            <div>
+              <p className="text-[0.95rem] font-medium text-white">Typed in, no photo</p>
+              <p className="mt-1 text-[0.82rem] text-white/55">
+                {(c.result?.observations ?? []).map((o) => `${o.count > 1 ? `${o.count} × ` : ""}${o.device}`).join(", ") || "No devices"}
+              </p>
+            </div>
+          </div>
         ) : (
           <div className="grid aspect-[4/3] place-items-center text-white/60">
             <Icon name="camera" className="h-8 w-8" />

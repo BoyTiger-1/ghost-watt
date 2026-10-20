@@ -125,6 +125,15 @@ describe("lamps", () => {
     expect(withLamps(once, [{ box: [0.2, 0.1, 0.8, 0.9], confidence: 0.7 }], px)).toHaveLength(1);
   });
 
+  it("never calls a glowing phone in the middle of the frame a lamp", () => {
+    // The phone's lit screen is the brightest thing in view, and the detector has boxed it.
+    const px = frame(90, [0.4, 0.3, 0.6, 0.5]);
+    const phone = [0.35, 0.2, 0.65, 0.6];
+    expect(withLamps([], [{ box: [0.2, 0.1, 0.8, 0.9], confidence: 0.9, min: 240 }], px, [phone])).toHaveLength(0);
+    // A real lamp elsewhere in the frame is still found.
+    expect(withLamps([], [{ box: [0.2, 0.1, 0.8, 0.9], confidence: 0.9 }], px, [[0, 0, 0.1, 0.1]])).toHaveLength(1);
+  });
+
   it("only reports a lamp in the middle of the frame after two reads, and holds through one miss", () => {
     const c = new CenterLamp();
     c.update(0.6);

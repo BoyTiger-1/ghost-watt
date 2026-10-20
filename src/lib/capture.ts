@@ -68,7 +68,8 @@ export interface Capture {
   id: string;
   name: string;
   kind: "photo" | "video";
-  origin: "camera" | "upload";
+  /** "manual": typed in with no picture (Type it in). */
+  origin: "camera" | "upload" | "manual";
   /** The photo, or a video's first keyframe. */
   dataUrl: string | null;
   videoUrl?: string;

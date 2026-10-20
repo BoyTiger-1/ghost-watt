@@ -42,6 +42,8 @@ export interface LiveItem {
 
 /** Screens are what brightness can judge; everything else is assumed on. */
 const SCREEN_CLASSES = new Set(["tv", "laptop"]);
+/** Things whose own display glows, so a bright patch inside them is never a light. */
+const GLOWING_CLASSES = new Set(["tv", "laptop", "cell phone"]);
 
 /**
  * The glass inside a detector box. COCO boxes take in the bezel, the stand and,
@@ -126,7 +128,12 @@ export function readItems(
     });
   }
 
+  // A bright patch inside a phone, screen or laptop is its display, not a light.
+  const glowing = dets.filter((d) => GLOWING_CLASSES.has(d.cls)).map((d) => d.box);
   for (const [i, b] of lights.entries()) {
+    const lx = (b.box[0] + b.box[2]) / 2;
+    const ly = (b.box[1] + b.box[3]) / 2;
+    if (glowing.some((g) => lx >= g[0] && lx <= g[2] && ly >= g[1] && ly <= g[3])) continue;
     const categoryId = LIGHT_CATEGORY[b.kind];
     const light = CATALOG_BY_ID[categoryId];
     const watts = light ? estimateUnitWatts(light, "on").mid : 0;

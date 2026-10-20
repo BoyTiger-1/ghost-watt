@@ -1,31 +1,30 @@
 "use client";
 
-// The scale of it, live, from the moment you open the site: the electricity
-// America's empty schools waste, counted in kilowatt-hours (about 585 a second)
-// with the dollars beside it; below, a ticker of what a single scan turns up.
+// The scale of it, live, from the moment you open the site: what America's
+// commercial buildings (offices, stores, schools: the places Ghost Watt scans)
+// spend on electricity nobody uses, in dollars, with the energy below; then a
+// ticker of what a single scan turns up.
 //
-// The rate is deliberately the conservative reading of the sources: about $8B a
-// year on K-12 energy (U.S. DOE Better Buildings; ENERGY STAR cites $6-8B), of
-// which ENERGY STAR says "as much as 30%" is wasted. So "up to" $2.4B a year,
-// about $76 a second. At the U.S. commercial average of $0.13/kWh (EIA, 2024)
-// that is about 18.5 billion kWh a year: a steady 2.1 GW, roughly the output of
-// two large nuclear reactors. The copy says "up to".
+// Commercial buildings spent $119B on electricity in 2018 (EIA, CBECS 2018), and
+// the EPA's long-standing estimate is that about 30% of the energy they use is
+// wasted. So about $35.7B a year, roughly $1,130 a second. At the U.S. commercial
+// average of $0.13/kWh (EIA, 2024) that is about 275 billion kWh a year: a steady
+// 31 GW, roughly thirty large nuclear reactors. The schools-only figure (up to
+// $2.4B a year) stays in the stats beside it.
 
 import { useEffect, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Chapter } from "./Chapter";
 import { CountTo, Flashlight, SplitLines } from "@/components/motion/Motion";
 
-const PER_YEAR = 8e9 * 0.3;
+const PER_YEAR = 119e9 * 0.3;
 const SECONDS_PER_YEAR = 365 * 24 * 3600;
 const PER_SECOND = PER_YEAR / SECONDS_PER_YEAR;
 const RATE_PER_KWH = 0.13;
-/** Kilowatt-hours wasted a second: dollars a second over the price of a kWh. */
-const KWH_PER_SECOND = PER_SECOND / RATE_PER_KWH;
+/** Megawatt-hours wasted a second: dollars a second over the price of a kWh, over 1000. */
+const MWH_PER_SECOND = PER_SECOND / RATE_PER_KWH / 1000;
 /** The same energy as a steady draw, in gigawatts. */
-const GIGAWATTS = (KWH_PER_SECOND * 3600) / 1e6;
-/** How often the number redraws. Every frame blurs the last digits; five times a second can be read. */
-const TICK_MS = 200;
+const GIGAWATTS = (MWH_PER_SECOND * 3600) / 1000;
 
 const FINDS = [
   ["Room 214", "projector left on", "$221"],
@@ -51,12 +50,12 @@ export function ImpactSection() {
           <div className="mt-8 grid gap-12 lg:grid-cols-[1.25fr_1fr] lg:items-end">
             <div>
               <h2 className="font-editorial text-[clamp(2.4rem,5vw,4.4rem)] leading-[0.98] text-[#f5f2eb]">
-                <SplitLines inView lines={["Since you opened this page,", <span key="b" className="italic text-[#ffc777]">America’s empty schools have wasted</span>]} />
+                <SplitLines inView lines={["Since you opened this page,", <span key="b" className="italic text-[#ffc777]">America’s offices, stores and schools have wasted</span>]} />
               </h2>
               <LiveCounter />
               <p className="mt-3 max-w-[34rem] text-[0.95rem] leading-relaxed text-[#f5f2eb]/60">
-                That is a steady {GIGAWATTS.toFixed(1)} gigawatts, about the output of two nuclear reactors, running rooms nobody is in. It is the
-                share of a ~$8 billion annual K-12 energy bill that ENERGY STAR estimates is wasted (up to 30%), at the U.S. average price.
+                on electricity nobody used. {`That is a steady ${Math.round(GIGAWATTS)} gigawatts, about`} thirty nuclear reactors&apos; worth. Commercial
+                buildings spend $119 billion a year on electricity (EIA), and the EPA estimates about 30% of their energy is wasted.
               </p>
             </div>
 
@@ -97,9 +96,9 @@ function Stat({ value, label }: { value: React.ReactNode; label: string }) {
 }
 
 /**
- * Energy and money wasted since this page opened. It starts when you arrive, not
- * when you scroll here, so the number is already running, and it redraws a few
- * times a second so it can actually be read.
+ * Money and energy wasted since this page opened. It starts when you arrive, not
+ * when you scroll here, and rolls every frame: the dollars climb about $1,130 a
+ * second, so the thousands are easy to read while the last digits spin.
  */
 function LiveCounter() {
   const reduce = useReducedMotion();
@@ -107,13 +106,22 @@ function LiveCounter() {
 
   useEffect(() => {
     const start = performance.now();
-    // Under reduced motion it still counts, just once a second.
-    const t = setInterval(() => setSeconds((performance.now() - start) / 1000), reduce ? 1000 : TICK_MS);
-    return () => clearInterval(t);
+    let raf = 0;
+    let last = 0;
+    const tick = (t: number) => {
+      // Under reduced motion it still counts, just once a second.
+      if (!reduce || t - last > 1000) {
+        setSeconds((t - start) / 1000);
+        last = t;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
   }, [reduce]);
 
-  const kwh = seconds * KWH_PER_SECOND;
   const dollars = seconds * PER_SECOND;
+  const mwh = seconds * MWH_PER_SECOND;
 
   return (
     <div className="mt-6">
@@ -122,19 +130,23 @@ function LiveCounter() {
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
         transition={{ duration: 0.9, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
-        className="flex flex-wrap items-baseline gap-x-3 font-editorial leading-none tracking-[-0.03em] text-[#ffc777] [text-shadow:0_0_60px_rgba(255,170,80,0.35)]"
+        className="flex items-baseline font-editorial text-[clamp(3rem,9vw,8rem)] leading-none tracking-[-0.03em] text-[#ffc777] [text-shadow:0_0_60px_rgba(255,170,80,0.35)]"
         aria-live="off"
       >
-        <span className="text-[clamp(2.6rem,7.6vw,6.8rem)] tabular-nums">{Math.floor(kwh).toLocaleString("en-US")}</span>
-        <span className="text-[clamp(1.2rem,2.4vw,2rem)] text-[#ffc777]/70">kilowatt-hours</span>
+        <span>$</span>
+        <span className="tabular-nums">{Math.floor(dollars).toLocaleString("en-US")}</span>
       </motion.div>
+      <p className="mt-3 flex flex-wrap items-baseline gap-x-2 font-editorial text-[clamp(1.4rem,2.8vw,2.2rem)] leading-tight text-[#f5f2eb]/85">
+        <span className="tabular-nums">{mwh.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</span>
+        <span className="text-[#f5f2eb]/55">megawatt-hours of electricity</span>
+      </p>
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center gap-2 rounded-full border border-[#ffc777]/25 bg-[#ffc777]/[0.08] py-1.5 pl-2.5 pr-3.5 font-numeric text-[0.88rem] tabular-nums text-[#ffc777]">
+        <span className="inline-flex items-center gap-2 rounded-full border border-[#ffc777]/25 bg-[#ffc777]/[0.08] py-1.5 pl-2.5 pr-3.5 font-numeric text-[0.85rem] tabular-nums text-[#ffc777]">
           <span className="soft-pulse h-2 w-2 rounded-full bg-[#ffc777] shadow-[0_0_10px_rgba(255,199,119,0.9)]" />
-          ${dollars.toFixed(2)} of electricity
+          +${Math.round(PER_SECOND).toLocaleString("en-US")} every second
         </span>
         <span className="rounded-full border border-white/10 px-3 py-1.5 text-[0.82rem] text-[#f5f2eb]/60">
-          +{Math.round(KWH_PER_SECOND)} kWh every second
+          +{MWH_PER_SECOND.toFixed(1)} MWh every second
         </span>
       </div>
     </div>

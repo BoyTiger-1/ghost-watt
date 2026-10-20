@@ -11,6 +11,7 @@
 
 import type { DeviceCategory } from "./types";
 import { EXTRA_DEVICES } from "./devices-extra";
+import { APPLIANCES, OTHER_DEVICE } from "./appliances";
 
 /** The original classroom-and-office core. */
 export const CORE_DEVICES: DeviceCategory[] = [
@@ -380,7 +381,40 @@ export const CORE_DEVICES: DeviceCategory[] = [
 // so the specific extras must be tested before the core entries, several of which
 // carry deliberately broad keywords ("light", "computer", "cooler") that would
 // otherwise swallow a walk-in freezer or a parking-lot floodlight.
-export const DEVICE_CATALOG: DeviceCategory[] = [...EXTRA_DEVICES, ...CORE_DEVICES];
+//
+// After the curated entries comes the long tail (appliances.ts): a thousand more
+// named devices, so almost anything with a plug is priced rather than dropped. The
+// longest keyword still wins, so "desk lamp" finds the desk lamp rather than the
+// overhead-lighting entry's "lamp"; on a tie the curated entry, listed first, wins.
+// OTHER_DEVICE, with no keywords, is what an unrecognised device is filed under.
+const CURATED: DeviceCategory[] = [...EXTRA_DEVICES, ...CORE_DEVICES];
+
+/**
+ * Drop long-tail names that only restate a curated device. A long-tail name that
+ * contains a curated keyword ("gaming monitor" contains "monitor") is the same
+ * device when it is in the same group at a similar wattage, and then the curated
+ * entry, with its benchmarks and typical hours, should answer. It is a different
+ * device when the group differs ("desk lamp" vs the overhead-lighting "lamp") or
+ * the wattage is far apart ("incandescent bulb" at 60 W vs a 10 W LED downlight),
+ * and then the more specific name stays.
+ */
+function pruneLongTail(curated: DeviceCategory[], tail: DeviceCategory[]): DeviceCategory[] {
+  return tail
+    .map((a) => ({
+      ...a,
+      keywords: a.keywords.filter((kw) => {
+        let best: DeviceCategory | null = null;
+        let len = 0;
+        for (const c of curated) for (const ck of c.keywords) if (ck.length > len && kw.includes(ck)) [best, len] = [c, ck.length];
+        if (!best) return true;
+        const ratio = a.wattsOn / Math.max(0.1, best.wattsOn);
+        return a.group !== best.group || ratio > 2.5 || ratio < 0.4;
+      }),
+    }))
+    .filter((a) => a.keywords.length > 0);
+}
+
+export const DEVICE_CATALOG: DeviceCategory[] = [...CURATED, ...pruneLongTail(CURATED, APPLIANCES), OTHER_DEVICE];
 
 export const CATALOG_BY_ID = Object.fromEntries(DEVICE_CATALOG.map((c) => [c.id, c]));
 

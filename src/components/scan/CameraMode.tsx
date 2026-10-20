@@ -520,7 +520,7 @@ export function CameraMode({
           if (!scene.outdoor) {
             const lamps: { box: number[]; confidence: number; min?: number }[] = lampTracks.map((t) => ({ box: frac(t), confidence: 0.75 }));
             if (centerLamp.confidence) lamps.push({ box: CENTER_ROI, confidence: 0.5 + centerLamp.confidence / 2, min: 240 });
-            lights = withLamps(lights, lamps, luma);
+            lights = withLamps(lights, lamps, luma, blockers);
           }
           sceneRef.current = { ...scene, lights, lighting: lights.length ? "on" : scene.dark ? "off" : "unclear" };
         }

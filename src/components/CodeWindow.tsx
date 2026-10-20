@@ -195,7 +195,7 @@ export const ENERGY_TS: CodeFile = {
 export const DEVICES_TS: CodeFile = {
   name: "devices.ts",
   path: "src/lib",
-  startLine: 17,
+  startLine: 18,
   code: `  {
     id: "projector",
     label: "Projector",

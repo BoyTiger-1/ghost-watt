@@ -23,6 +23,8 @@ export interface StillRead {
   timing: { detect: number; verify: number; scene: number; total: number };
 }
 
+const GLOWING = new Set(["tv", "laptop", "cell phone"]);
+
 /** Read a still (a data URL, or a canvas / image already in hand) on the device. */
 export async function readStill(src: string | HTMLCanvasElement | HTMLImageElement, settings: AuditSettings): Promise<StillRead> {
   const el = typeof src === "string" ? await loadImage(src) : src;
@@ -36,7 +38,9 @@ export async function readStill(src: string | HTMLCanvasElement | HTMLImageEleme
   const scene = px ? readScene(px.data, px.w, px.h, px.rgba) : null;
   const t3 = performance.now();
   if (scene && px && lamps.length) {
-    scene.lights = withLamps(scene.lights, lamps.map((box) => ({ box, confidence: 0.7 })), px);
+    // A glowing phone, screen or laptop is not a lamp.
+    const blockers = dets.filter((d) => GLOWING.has(d.cls)).map((d) => d.box);
+    scene.lights = withLamps(scene.lights, lamps.map((box) => ({ box, confidence: 0.7 })), px, blockers);
     if (scene.lights.length) scene.lighting = "on";
   }
   const items = readItems(dets, scene?.lights ?? [], settings, px ?? undefined);

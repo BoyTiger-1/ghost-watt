@@ -6,6 +6,7 @@
 // not exist.
 
 import { DEVICE_CATALOG, NUMBER_WORDS } from "./devices";
+import { OTHER_DEVICE } from "./appliances";
 import type { DeviceObservation, DeviceState } from "./types";
 import { cleanBoxes, FULL_FRAME, type Frame } from "./boxes";
 
@@ -39,6 +40,10 @@ export function matchCategory(label: string): string | null {
   }
   return bestId;
 }
+
+/** Labels a model sometimes lists that draw no power: furniture, people, paper. */
+const NOT_ELECTRIC =
+  /(?:^|\s)(?:chairs?|desks?|tables?|people|persons?|students?|books?|papers?|plants?|windows?|doors?|walls?|bags?|backpacks?|boxes?|shelves?|cabinets?|whiteboards?|chalkboards?|posters?|cups?|bottles?|pens?|pencils?|curtains?|rugs?|carpets?|sofas?|couch(?:es)?|beds?|pillows?|mirrors?|clothes|shoes?|trash cans?|bins?|crowd)$/i;
 
 function normalizeState(raw: unknown): DeviceState {
   const s = String(raw ?? "").toLowerCase();
@@ -119,8 +124,13 @@ function fromJson(arr: unknown[], frame: Frame): CategorizedObservation[] {
     // The model was asked to assert it can see the thing. "visible": false is an
     // inference about the room, not a reading of the picture, and is dropped.
     if (rec.visible === false) continue;
-    const categoryId = matchCategory(label);
-    if (!categoryId) continue;
+    // Something powered the catalog has no name for is still a reading: it is
+    // filed as "other powered device", priced from the model's own watt reading
+    // inside a very wide band, and marked low confidence. Things that are not
+    // electrical at all are left out.
+    const matched = matchCategory(label);
+    if (!matched && NOT_ELECTRIC.test(label)) continue;
+    const categoryId = matched ?? OTHER_DEVICE.id;
     const count =
       typeof rec.count === "number"
         ? Math.max(1, Math.round(rec.count))

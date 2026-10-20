@@ -69,7 +69,7 @@ export const VISION_SCHEMA = {
 } as const;
 
 const WATT_GUIDE =
-  "24-inch LED monitor ~20, 27-inch ~30, old CCFL monitor ~45, CRT ~80, desktop tower idle ~60, laptop charging ~30, lamp projector ~280, laser projector ~160, 75-inch interactive panel ~200, LED troffer ~35, 4-lamp T8 fluorescent troffer ~110, LED recessed downlight ~10, LED pendant ~15, CFL/LED bulb ~10, 27-inch all-in-one computer ~70, vending machine ~400, mini fridge ~70";
+  "smartphone charging ~5, tablet ~8, 55-inch LED TV ~80, space heater ~1500, kettle or air fryer ~1500, toaster ~900, desk lamp ~10, game console ~150, 24-inch LED monitor ~20, 27-inch ~30, old CCFL monitor ~45, CRT ~80, desktop tower idle ~60, laptop charging ~30, lamp projector ~280, laser projector ~160, 75-inch interactive panel ~200, LED troffer ~35, 4-lamp T8 fluorescent troffer ~110, LED recessed downlight ~10, LED pendant ~15, CFL/LED bulb ~10, 27-inch all-in-one computer ~70, vending machine ~400, mini fridge ~70";
 
 /**
  * The perception prompt, told exactly how much of the square is photo.
@@ -115,12 +115,12 @@ Also give "boxes": where each unit is, as [x1, y1, x2, y2] pixel coordinates in 
     ? `[{"device":"computer monitor","count":24,"state":"on","confidence":0.8,"visible":true,"watts":22,"evidence":"screens lit, login page"},{"device":"overhead lights","count":12,"state":"on","confidence":0.9,"visible":true,"watts":35,"evidence":"LED panels lit"}]`
     : `[{"device":"computer monitor","count":12,"state":"on","confidence":0.85,"visible":true,"watts":22,"technology":"LED","evidence":"screens lit, 24-inch LED","where":"two rows of desks, centre","boxes":[[112,388,201,470],[236,392,318,468]]},{"device":"overhead lights","count":6,"state":"on","confidence":0.9,"visible":true,"watts":35,"technology":"LED","evidence":"LED troffers lit","where":"ceiling, whole room","boxes":[[300,20,420,60]]},{"device":"projector","count":1,"state":"standby","confidence":0.5,"visible":true,"watts":250,"evidence":"amber standby light, partly hidden","where":"ceiling mount, front","boxes":[[480,90,560,140]]}]`;
 
-  return `You are auditing ${video ? "a video walkthrough" : "a photo"} of a room in a school or office, ideally taken after hours. Your job is to spot electrical devices and appliances that are left running or drawing power, and to judge how much each draws.
+  return `You are auditing ${video ? "a video walkthrough" : "a photo"} of a room in a school, office, home or other building, ideally taken after hours. Your job is to spot electrical devices and appliances that are left running or drawing power, and to judge how much each draws.
 
 ${layout}
 ${context.length ? "\n" + context.join("\n") + "\n" : ""}
 List every electrical device or appliance you can see in the picture - lights included - and nothing you cannot see. For each give:
-- "device": be specific. Use these names where they fit: ${DEVICE_NAMES}. Say which kind of light (recessed downlights, globe pendant lights, LED panels, track lights, a desk lamp) rather than just "lights". Each distinct kind gets its own entry, even when two kinds sit side by side.
+- "device": be specific. Use these names where they fit: ${DEVICE_NAMES}. For anything else, name the exact appliance the way a person would ("air fryer", "label maker", "electric kettle", "phone"), never a vague word like "appliance", "device" or "electronics". Anything with a plug, a battery charger or a power cord counts. Say which kind of light (recessed downlights, globe pendant lights, LED panels, track lights, a desk lamp) rather than just "lights". Each distinct kind gets its own entry, even when two kinds sit side by side.
 - "count": how many you can see.
 - "state": ON (lit, running, display showing something), STANDBY (dark but with an indicator light or clock), or OFF.
 - "confidence": 0 to 1, how sure you are of the device and the count.
@@ -129,6 +129,11 @@ List every electrical device or appliance you can see in the picture - lights in
 - "technology": the kind of unit if you can tell, e.g. "LED", "halogen", "incandescent", "CFL", "T8 fluorescent", "T12 fluorescent", "CRT", "CCFL LCD", "plasma", "lamp projector", "laser projector". Omit if unsure.
 - "evidence": a few words on what you saw that decided the state and wattage.
 - "where": where in the picture the units are, in a few words ("ceiling, left half", "desk under the window"), so a person can walk to them.
+
+Identity rules - these are the mistakes models make most:
+- A phone, tablet, laptop, TV or monitor with a bright screen is that device, NEVER a lamp or a light. Only call something a lamp or light if it is a light fixture or bulb.
+- A screen's reflection, a lit doorway and a bright window are not devices.
+- An object you cannot identify confidently still gets your best specific guess with a low confidence, so a person can correct it. Never invent objects that are not there.
 
 Counting rules - these are where audits go wrong:
 - Count every light fixture individually, including small recessed downlights far down a corridor, pendant globes hanging from the ceiling and lamps on desks. Report each kind of light as its own entry (troffers, downlights, pendants), never lumped together. A light that is visibly lit is ON; a fixture that is clearly dark is OFF.

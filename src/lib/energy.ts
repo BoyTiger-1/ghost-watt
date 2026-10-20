@@ -149,7 +149,8 @@ export function scoreObservation(
   return {
     id: `${source}-${cat.id}-${index}`,
     categoryId: cat.id,
-    label: cat.label,
+    // An unrecognised device keeps the name the model gave it.
+    label: cat.id === "other_device" && obs.device ? obs.device.charAt(0).toUpperCase() + obs.device.slice(1, 60) : cat.label,
     icon: cat.icon,
     count,
     state: obs.state,
@@ -165,7 +166,7 @@ export function scoreObservation(
     fixCost,
     annualSavings,
     paybackMonths,
-    confidence: confidenceFor(obs.state, cat, unit.basis),
+    confidence: cat.id === "other_device" ? "low" : confidenceFor(obs.state, cat, unit.basis),
     source,
     basis: unit.basis,
     hoursPerYear: hours,

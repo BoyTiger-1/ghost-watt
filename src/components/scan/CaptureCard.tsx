@@ -277,7 +277,7 @@ export function CaptureCard({
                   aria-label="Name"
                   className="min-w-0 flex-1 rounded-xl border border-line bg-surface px-3 py-2 text-base text-fog outline-none focus:border-cyan sm:text-[0.85rem]"
                 />
-                {(noteChanged || c.result?.mode === "on-device") && (
+                {c.origin !== "manual" && (noteChanged || c.result?.mode === "on-device") && (
                   <button
                     onClick={() => {
                       setSentNote(c.details.note ?? "");

@@ -14,6 +14,7 @@ import { beep, say } from "@/lib/cues";
 import { BillCalibration } from "./BillCalibration";
 import { TeamSend } from "./scan/TeamSend";
 import { Ghosty } from "./scan/Ghosty";
+import { ManualEntry } from "./scan/ManualEntry";
 import { buildContext } from "@/lib/ghosty";
 import { WeatherContext } from "./WeatherContext";
 import { EquivalenceStrip } from "./EquivalenceStrip";
@@ -42,7 +43,7 @@ import { ON_DEVICE_ENGINE, describeAnalyzeError, useEngine } from "@/lib/engine"
 import { aggregate, counted } from "@/lib/energy";
 import { crossCheck } from "@/lib/crosscheck";
 import { costRange, RATE_SIGMA, type RateQuality } from "@/lib/estimate";
-import { regionOrDefault, regionRate } from "@/lib/grid";
+import { REGION_BY_CODE, regionOrDefault, regionRate } from "@/lib/grid";
 import { occupiedHours, unoccupiedHours, SCHEDULE_BY_ID, SCHEDULE_PRESETS } from "@/lib/schedule";
 import { contextForBuildingType, type UsageContext } from "@/lib/usage";
 import { EfficiencyPanel } from "./EfficiencyPanel";
@@ -62,7 +63,7 @@ import {
   type GeoContext,
 } from "@/lib/capture";
 import type { Building, SavedAudit } from "@/lib/storage";
-import { addBuilding, currentStore, newBuilding, setActiveBuilding, removeAudit, removeCalibration, upsertAudit, upsertCalibration, useStore } from "@/lib/useStore";
+import { addBuilding, currentStore, newBuilding, setActiveBuilding, updateBuilding, removeAudit, removeCalibration, upsertAudit, upsertCalibration, useStore } from "@/lib/useStore";
 import { BUILDING_TYPE_BY_ID } from "@/lib/benchmark";
 import type { AnalysisResult, AnalyzeError, AuditSettings } from "@/lib/types";
 
@@ -150,6 +151,7 @@ export function Scanner() {
     prefsRef.current = prefs;
   }, [prefs]);
   const [mode, setMode] = useState<Mode>("camera");
+  const [manualOpen, setManualOpen] = useState(false);
   const [captures, setCaptures] = useState<Capture[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [tab, setTab] = useState<ResultTab>("devices");
@@ -294,6 +296,28 @@ export function Scanner() {
         const geo = await locate(lat, lon, sectorRef.current);
         setDeviceGeo({ lat, lon, geo });
         setGeoBusy(false);
+        // The place takes the location on (state, coordinates), so its default
+        // price, grid carbon, weather and solar all follow; a place someone has
+        // already located keeps theirs. Pictures with no location of their own
+        // are priced where the phone is.
+        const st = currentStore();
+        const b = st.buildings.find((x) => x.id === st.activeBuildingId) ?? st.buildings[0];
+        if (b && (b.lat === undefined || b.lon === undefined)) {
+          const state = geo?.state;
+          updateBuilding(b.id, {
+            lat: Number(lat.toFixed(4)),
+            lon: Number(lon.toFixed(4)),
+            ...(state && REGION_BY_CODE[state] ? { regionCode: state } : {}),
+          });
+          if (geo?.place || state) setToast(`Prices, carbon and weather set for ${[geo?.place, state].filter(Boolean).join(", ")}.`);
+        }
+        if (geo) {
+          setCaptures((prev) =>
+            prev.map((c) =>
+              !c.geo && c.meta.lat === undefined ? { ...c, geo, meta: { ...c.meta, lat, lon, locationFrom: "device" as const } } : c,
+            ),
+          );
+        }
       },
       () => {
         setGeoBusy(false);
@@ -303,13 +327,20 @@ export function Scanner() {
     );
   }, []);
 
-  // Ask only if the browser already allows it: a permission prompt on page load is rude.
+  // Ask for the location straight away: without it every price, carbon factor,
+  // the weather and the solar figures fall back to a default state. Someone who
+  // has already said no is not asked again; the browser remembers that.
   useEffect(() => {
+    if (!navigator.permissions?.query) {
+      const t = setTimeout(requestLocation, 0);
+      return () => clearTimeout(t);
+    }
     navigator.permissions
-      ?.query({ name: "geolocation" as PermissionName })
-      .then((p) => p.state === "granted" && requestLocation())
-      .catch(() => {});
+      .query({ name: "geolocation" as PermissionName })
+      .then((p) => p.state !== "denied" && requestLocation())
+      .catch(() => requestLocation());
   }, [requestLocation]);
+
 
   // Switching home / school / office changes the price sector: re-price every
   // located capture, and the phone's own location, for the new one.
@@ -427,6 +458,24 @@ export function Scanner() {
 
   function blank(kind: Capture["kind"], origin: Capture["origin"], name: string): Capture {
     return { id: captureId(), name, kind, origin, dataUrl: null, meta: {}, details: {}, adjust: {}, roomType: "unknown", status: "pending" };
+  }
+
+  /** Typed in: an already-read capture with no picture, added to the current place. */
+  function onManual(room: string, roomType: string, observations: CategorizedObservation[]) {
+    const c: Capture = {
+      ...blank("photo", "manual", room),
+      roomType,
+      status: "done",
+      meta: {
+        takenAt: nowLocal(),
+        ...(deviceGeo ? { lat: deviceGeo.lat, lon: deviceGeo.lon, locationFrom: "device" as const } : {}),
+      },
+      geo: deviceGeo?.geo ?? undefined,
+      result: { mode: "on-device", engine: "Entered by hand", source: room, offenders: [], observations },
+    };
+    setCaptures((prev) => [c, ...prev]);
+    setSelectedId(c.id);
+    if (ready) setAdded((prev) => ({ ...prev, [c.id]: { buildingId: building.id, room } }));
   }
 
   function onPhoto(shot: PhotoShot) {
@@ -1017,8 +1066,9 @@ export function Scanner() {
         </PageHeader>
         <h1 className="sr-only">{t("nav.scanner")}</h1>
         <div className="flex items-center justify-between gap-2 md:flex-col md:items-end">
-          <div data-tour="mode">
+          <div data-tour="mode" className="flex items-center gap-2">
             <ModeSwitch mode={mode} onChange={setMode} />
+            <TypeItIn onClick={() => setManualOpen(true)} />
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
             {roomChip}
@@ -1030,8 +1080,9 @@ export function Scanner() {
       ) : (
         <div className="no-print mb-4 flex flex-wrap items-center justify-between gap-2.5">
           <h1 className="sr-only">{t("nav.scanner")}</h1>
-          <div data-tour="mode">
+          <div data-tour="mode" className="flex items-center gap-2">
             <ModeSwitch mode={mode} onChange={setMode} />
+            <TypeItIn onClick={() => setManualOpen(true)} />
           </div>
           <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
             {roomChip}
@@ -1217,6 +1268,8 @@ export function Scanner() {
         </div>
       )}
 
+      <ManualEntry open={manualOpen} onClose={() => setManualOpen(false)} defaultRoom={`Room ${captures.length + 1}`} onAdd={onManual} />
+
       {/* ---- the place and the figures everything is priced with ---- */}
       <Drawer open={showSettings} onClose={() => setShowSettings(false)} title="Building and prices" sub="What every number on this page is priced with.">
         <div className="space-y-7">
@@ -1371,6 +1424,23 @@ function PlacePicker({ place, onChange, label = true }: { place: UsageContext; o
         ))}
       </div>
     </div>
+  );
+}
+
+/** The way in when there's no camera, or you'd rather just say what's there. */
+function TypeItIn({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title="Add devices by name, no camera needed"
+      className="flex shrink-0 items-center gap-1.5 rounded-full border border-line px-3 py-2 text-[0.82rem] font-medium text-mist transition-colors hover:border-fog/30 hover:text-fog md:px-4 md:py-2.5 md:text-[0.9rem]"
+    >
+      <svg viewBox="0 0 24 24" className="h-[1.05rem] w-[1.05rem]" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4" />
+      </svg>
+      Type it in
+    </button>
   );
 }
 
