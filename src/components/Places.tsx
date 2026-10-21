@@ -197,6 +197,9 @@ function Place({ buildingId, initialTab, renameNow }: { buildingId: string; init
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Link href="/campus" className="rounded-full border border-line px-4 py-2 text-[0.85rem] text-fog transition-colors hover:border-fog/40">
+              3D school
+            </Link>
             {rollup.rooms.length > 0 && (
               <Link
                 href={`/stickers?building=${building.id}`}

@@ -14,6 +14,7 @@
 import type { AnalysisMode, AuditSettings, Offender } from "./types";
 import type { WeeklySchedule } from "./schedule";
 import type { UtilityBill } from "./calibration";
+import type { Campus } from "./campus";
 
 export const SCHEMA_VERSION = 1;
 const KEY = "ghostwatt.store.v1";
@@ -93,6 +94,8 @@ export interface Building {
    * averages and says so.
    */
   bill?: UtilityBill;
+  /** The 3D school: real outline, floor plans and rooms drawn on them (lib/campus.ts). */
+  campus?: Campus;
 }
 
 /**

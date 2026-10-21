@@ -65,6 +65,12 @@ export const RULES = {
   ghostyGlobal: { limit: 1000, windowSeconds: 86400 },
   // Rebate lookups go to Rewiring America's free API; results are cached by ZIP.
   rebatesIp: { limit: 30, windowSeconds: 600 },
+  // Building outlines come from OpenStreetMap's free Overpass service, which
+  // asks for light use; results are cached by location.
+  footprintIp: { limit: 20, windowSeconds: 600 },
+  planRoomsIp: { limit: 20, windowSeconds: 600 },
+  // School-name search goes to Nominatim (one request a second, cached).
+  schoolSearchIp: { limit: 40, windowSeconds: 600 },
 } as const satisfies Record<string, RateRule>;
 
 /**
