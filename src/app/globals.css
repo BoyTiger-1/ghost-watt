@@ -1121,3 +1121,224 @@ body:has(.home) ::-webkit-scrollbar-thumb:hover { background: var(--color-pebble
 }
 .row-in { animation: row-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both; }
 @media (prefers-reduced-motion: reduce) { .row-in { animation: none; } }
+
+/* ---- launch screen (components/Splash.tsx) ---------------------------------
+   0.3s the ghost's outline traces in · 1.15s faint leaders feel their way down
+   · 1.47s lightning strikes the ghost's head: the screen flashes and shakes,
+   sparks fly, a shock ring spreads · 1.6s the charge stays crackling inside,
+   the room warms, the name writes itself in · 3.1s the mark zooms through into
+   the page while the light floods out from the middle. */
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 1.6rem;
+  background: #06070a;
+  pointer-events: auto;
+  /* The way out: a hole opens from the middle, as if the light floods the room. */
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, transparent var(--splash-hole), #000 calc(var(--splash-hole) + 48px));
+  mask-image: radial-gradient(circle at 50% 50%, transparent var(--splash-hole), #000 calc(var(--splash-hole) + 48px));
+  animation: splash-room 0.9s ease-out 1.6s forwards, splash-out 0.9s cubic-bezier(0.55, 0, 0.45, 1) 3.5s forwards;
+}
+@property --splash-hole { syntax: "<length>"; inherits: false; initial-value: -48px; }
+:root[data-splash="off"] .splash { display: none; }
+
+/* The strike lights the whole screen, twice, cold blue-white like real lightning. */
+.splash-flash {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 30%, rgba(225, 235, 255, 0.7), rgba(140, 170, 255, 0.16) 50%, transparent 82%);
+  opacity: 0;
+  animation: splash-flash 0.75s linear 1.5s forwards;
+}
+.splash-glow {
+  position: absolute;
+  width: 36rem;
+  height: 36rem;
+  max-width: 125vw;
+  max-height: 125vw;
+  left: 50%;
+  top: 50%;
+  translate: -50% -58%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 170, 60, 0.3), rgba(255, 140, 40, 0.07) 55%, transparent 72%);
+  opacity: 0;
+  scale: 0.5;
+  animation: splash-glow 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) 1.6s forwards;
+}
+.splash-mark {
+  position: relative;
+  width: clamp(6rem, 24vw, 8rem);
+  opacity: 0;
+  scale: 0.9;
+  animation:
+    splash-mark-in 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) 0.15s forwards,
+    splash-zoom 0.95s cubic-bezier(0.55, 0, 0.75, 0.35) 3.05s forwards;
+}
+.splash-svg { display: block; width: 100%; height: auto; overflow: visible; }
+/* Struck from above, the ghost squashes down onto its hem and springs back. */
+.splash-body { transform-box: fill-box; transform-origin: 50% 100%; animation: splash-squash 0.75s linear 1.57s; }
+
+/* The ghost: a bold, clean line, a soft glow around it once it is charged. */
+.splash-outline {
+  fill: none;
+  stroke: #f4efe4;
+  stroke-width: 1.05;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: splash-trace 1.2s cubic-bezier(0.5, 0, 0.3, 1) 0.3s forwards, splash-seal 0.01s linear 1.5s forwards, splash-hit-line 0.9s ease-out 1.57s forwards;
+}
+.splash-outline-glow { fill: none; stroke: #ffc070; stroke-width: 1.35; opacity: 0; animation: splash-outline-glow 1.1s ease-out 1.57s forwards; }
+.splash-haze { fill: #ffb347; opacity: 0; animation: splash-haze 1s ease-out 1.6s forwards; }
+
+/* Lightning: a jagged path drawn in a blink, three strokes deep. */
+.splash-zap { fill: none; stroke-linecap: round; stroke-linejoin: miter; stroke-miterlimit: 2; stroke-dasharray: 1; stroke-dashoffset: 1; }
+.splash-zap-glow { stroke-width: 1.25; opacity: 0.9; }
+.splash-zap-body { stroke-width: 0.58; }
+.splash-zap-core { stroke: #ffffff; stroke-width: 0.3; }
+.splash-fork .splash-zap-glow { stroke-width: 1.1; }
+.splash-fork .splash-zap-body { stroke-width: 0.36; }
+.splash-fork .splash-zap-core { stroke-width: 0.13; }
+.splash-twig .splash-zap-glow { stroke-width: 0.7; }
+.splash-twig .splash-zap-body { stroke-width: 0.22; }
+.splash-twig .splash-zap-core { stroke-width: 0.08; }
+/* The strike from the sky is cold electric blue; the charge it leaves is the brand's amber. */
+.splash-leader .splash-zap-glow, .splash-strike .splash-zap-glow { stroke: #6f9bff; }
+.splash-leader .splash-zap-body, .splash-strike .splash-zap-body { stroke: #dfe8ff; }
+.splash-core .splash-zap-glow { stroke: #ff9a2a; }
+.splash-core .splash-zap-body { stroke: #ffc861; }
+
+.splash-leader { opacity: 0.55; }
+.splash-leader .splash-zap { animation: splash-leader 0.34s linear 1.13s forwards; }
+.splash-strike .splash-zap { animation: splash-draw 0.1s cubic-bezier(0.3, 0, 0.7, 1) 1.47s forwards; }
+.splash-strike { animation: splash-strike 0.95s steps(1, end) 1.47s forwards; }
+
+.splash-ring {
+  fill: none;
+  stroke: #d8e4ff;
+  stroke-width: 0.18;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: splash-ring 0.65s cubic-bezier(0.1, 0.7, 0.3, 1) 1.57s forwards;
+}
+/* Sparks: thrown sideways off the impact, up a little, then down under gravity. */
+.splash-spark-x { animation: splash-spark-x 1.3s cubic-bezier(0.15, 0.6, 0.4, 1) calc(1.57s + var(--d)) both; }
+.splash-spark {
+  fill: #fff4d8;
+  filter: drop-shadow(0 0 0.6px #ffb347) drop-shadow(0 0 1.4px #ff8a1f);
+  opacity: 0;
+  animation: splash-spark-y 1.3s linear calc(1.57s + var(--d)) both;
+}
+
+.splash-core .splash-zap { animation: splash-draw 0.12s cubic-bezier(0.3, 0, 0.7, 1) 1.57s forwards; }
+/* It stutters for a moment as it lands, then holds perfectly still. */
+.splash-core { animation: splash-crackle 0.55s steps(1, end) 1.57s forwards; }
+
+.splash-shadow {
+  position: absolute;
+  left: 50%;
+  bottom: -1.2rem;
+  width: 58%;
+  height: 0.5rem;
+  translate: -50% 0;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 170, 60, 0.45), transparent);
+  opacity: 0;
+  animation: splash-fill 0.6s ease-out 1.7s forwards;
+}
+
+/* The name writes itself in, letter by letter, out of a blur. */
+.splash-word {
+  display: flex;
+  font-family: var(--font-instrument), "Times New Roman", Georgia, serif;
+  font-size: clamp(2rem, 7vw, 2.6rem);
+  line-height: 1;
+  letter-spacing: 0.01em;
+  color: #f2ede2;
+  animation: splash-fade 0.3s ease 2.9s forwards;
+}
+.splash-letter {
+  display: inline-block;
+  opacity: 0;
+  filter: blur(6px);
+  translate: 0 0.25em;
+  animation: splash-letter 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) calc(1.95s + var(--i) * 0.055s) forwards;
+}
+.splash-letter-watt { font-style: italic; color: #ffc35a; }
+
+@keyframes splash-room { to { background: #111218; } }
+@keyframes splash-out {
+  0% { --splash-hole: -48px; }
+  85% { opacity: 1; }
+  100% { --splash-hole: 150vmax; opacity: 0; visibility: hidden; pointer-events: none; }
+}
+@keyframes splash-flash {
+  0% { opacity: 0; }
+  5% { opacity: 1; }
+  18% { opacity: 0.1; }
+  28% { opacity: 0.8; }
+  100% { opacity: 0; }
+}
+@keyframes splash-glow { to { opacity: 1; scale: 1; } }
+@keyframes splash-mark-in { to { opacity: 1; scale: 1; } }
+/* Leaving: the mark zooms through into the page, the way an app opens from its icon. */
+@keyframes splash-zoom { 0% { opacity: 1; scale: 1; } 70% { opacity: 0.95; } 100% { opacity: 0; scale: 8; } }
+@keyframes splash-squash {
+  0% { scale: 1 1; animation-timing-function: cubic-bezier(0.2, 0.8, 0.4, 1); }
+  14% { scale: 1.09 0.86; animation-timing-function: cubic-bezier(0.4, 0, 0.4, 1); }
+  42% { scale: 0.96 1.05; animation-timing-function: cubic-bezier(0.4, 0, 0.4, 1); }
+  68% { scale: 1.015 0.985; animation-timing-function: cubic-bezier(0.4, 0, 0.4, 1); }
+  100% { scale: 1 1; }
+}
+@keyframes splash-trace { to { stroke-dashoffset: 0; } }
+/* Once traced, a solid line: no seam where the dash started and ended. */
+@keyframes splash-seal { to { stroke-dasharray: none; } }
+/* Struck: the line blazes white, then settles warm. */
+@keyframes splash-hit-line { 0% { stroke: #ffffff; } 100% { stroke: #ffe6bd; } }
+@keyframes splash-outline-glow { 0% { opacity: 1; } 100% { opacity: 0.38; } }
+@keyframes splash-haze { to { opacity: 0.1; } }
+@keyframes splash-draw { to { stroke-dashoffset: 0; } }
+/* Stepped leaders: a dim stab partway down, gone, a longer one, gone. */
+@keyframes splash-leader {
+  0% { stroke-dashoffset: 1; opacity: 0; }
+  8% { stroke-dashoffset: 0.72; opacity: 1; }
+  28% { stroke-dashoffset: 0.72; opacity: 0; }
+  46% { stroke-dashoffset: 0.45; opacity: 1; }
+  70%, 100% { stroke-dashoffset: 0.45; opacity: 0; }
+}
+/* The strike: blinding, gone, back once, gone for good. */
+@keyframes splash-strike {
+  0% { opacity: 1; }
+  18% { opacity: 0.1; }
+  28% { opacity: 1; }
+  44%, 100% { opacity: 0; }
+}
+@keyframes splash-ring { 0% { opacity: 0.9; scale: 0.3; } 100% { opacity: 0; scale: 8; } }
+@keyframes splash-spark-x { from { translate: 0 0; } to { translate: var(--dx) 0; } }
+@keyframes splash-spark-y {
+  0% { translate: 0 0; opacity: 1; animation-timing-function: cubic-bezier(0.25, 0.7, 0.55, 1); }
+  /* Past the top of its arc, a plain quadratic ease-in: that is what gravity looks like. */
+  20% { translate: 0 var(--up); opacity: 1; animation-timing-function: cubic-bezier(0.33, 0, 0.67, 0.33); }
+  85% { opacity: 0.9; }
+  100% { translate: 0 var(--fall); opacity: 0; }
+}
+
+/* The charge left inside: it stutters, then holds, then never quite sits still. */
+@keyframes splash-crackle {
+  0% { opacity: 1; }
+  12% { opacity: 0.2; }
+  20% { opacity: 1; }
+  34% { opacity: 0.45; }
+  42% { opacity: 1; }
+  58% { opacity: 0.7; }
+  66%, 100% { opacity: 1; }
+}
+@keyframes splash-fade { to { opacity: 0; } }
+@keyframes splash-fill { to { opacity: 1; } }
+@keyframes splash-letter { to { opacity: 1; filter: blur(0); translate: 0 0; } }
