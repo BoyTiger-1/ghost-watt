@@ -8,6 +8,7 @@ import { geist, geistMono, instrument } from "@/components/home/fonts";
 import { APPLY_PREFS_SCRIPT } from "@/lib/prefs-boot";
 import { SkipLink } from "@/components/SkipLink";
 import { ReadingGuide } from "@/components/ReadingGuide";
+import { Splash, SPLASH_SCRIPT } from "@/components/Splash";
 
 export const metadata: Metadata = {
   title: "Ghost Watt - the after-hours energy map nobody has",
@@ -43,8 +44,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         {/* Theme, text size and the other display preferences, applied before first paint so nothing flashes. */}
         <script dangerouslySetInnerHTML={{ __html: APPLY_PREFS_SCRIPT }} />
+        {/* After the preferences, so "reduce motion" set in the app skips the launch screen too. */}
+        <script dangerouslySetInnerHTML={{ __html: SPLASH_SCRIPT }} />
       </head>
       <body className="min-h-dvh">
+        <Splash />
         <MotionProvider>
           <SkipLink />
           <Nav />
