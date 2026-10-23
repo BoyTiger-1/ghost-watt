@@ -1066,8 +1066,8 @@ export function Scanner() {
           .
         </PageHeader>
         <h1 className="sr-only">{t("nav.scanner")}</h1>
-        <div className="flex items-center justify-between gap-2 md:flex-col md:items-end">
-          <div data-tour="mode" className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 md:flex-col md:flex-nowrap md:items-end">
+          <div data-tour="mode" className="flex shrink-0 items-center gap-2">
             <ModeSwitch mode={mode} onChange={setMode} />
             <TypeItIn onClick={() => setManualOpen(true)} />
           </div>
@@ -1081,7 +1081,7 @@ export function Scanner() {
       ) : (
         <div className="no-print mb-4 flex flex-wrap items-center justify-between gap-2.5">
           <h1 className="sr-only">{t("nav.scanner")}</h1>
-          <div data-tour="mode" className="flex items-center gap-2">
+          <div data-tour="mode" className="flex shrink-0 items-center gap-2">
             <ModeSwitch mode={mode} onChange={setMode} />
             <TypeItIn onClick={() => setManualOpen(true)} />
           </div>

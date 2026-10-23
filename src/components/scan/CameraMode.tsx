@@ -34,7 +34,9 @@ import { nowLocal } from "@/lib/exif";
 import { useEngine } from "@/lib/engine";
 import type { WeeklySchedule } from "@/lib/schedule";
 import type { AnalysisMode, AnalysisResult, AnalyzeError, AuditSettings } from "@/lib/types";
+import { applyFixes, boxToPx, easeAll, hitTest, placeTag, relabel, unstack, wattsInView, drawing, type HitRect, type TagFix } from "@/lib/wattTags";
 import { Icon } from "./icons";
+import { TagCard } from "./TagCard";
 
 /**
  * Bright things inside these are not lights: glare on a car's paint or windscreen,
@@ -176,6 +178,18 @@ export function CameraMode({
   }, [prefs]);
   /** Set by the Confirm button or the C key: the next steady frame is sent whatever the gates say. */
   const manualRef = useRef(false);
+  // Wattage tags: the eased number on each, what was tapped, and what the person corrected.
+  const shownWattsRef = useRef(new Map<string, number>());
+  const hitsRef = useRef<{ tags: HitRect[]; boxes: HitRect[] }>({ tags: [], boxes: [] });
+  const selectedRef = useRef<string | null>(null);
+  const [selected, setSelected] = useState<{ key: string; snap: LiveItem } | null>(null);
+  const [fixes, setFixes] = useState<Map<string, TagFix>>(() => new Map());
+  const fixesRef = useRef(fixes);
+  useEffect(() => {
+    fixesRef.current = fixes;
+  }, [fixes]);
+  const meterRef = useRef<HTMLSpanElement>(null);
+  const sparkRef = useRef<SVGPathElement>(null);
   const viewRef = useRef<HTMLDivElement>(null);
   // Null until mounted: the page is prerendered, and a build-time clock would not match.
   const [now, setNow] = useState<string | null>(null);
@@ -268,6 +282,8 @@ export function CameraMode({
       if (gen !== genRef.current) return;
       ok = true;
       const id = (viewsRef.current.at(-1)?.id ?? 0) + 1;
+      // Keys unique to this view, so a correction made on one view never lands on another.
+      items = items.map((i) => ({ ...i, key: `v${id}:${i.key}` }));
       viewsRef.current = [...viewsRef.current, { id, sig, items, mode }].slice(-MAX_VIEWS);
       beep(prefsRef.current, "confirmed");
       buzz(prefsRef.current, [8, 30, 8]);
@@ -393,6 +409,10 @@ export function CameraMode({
     let prevSig: Float32Array | null = null;
     let steadySince = 0;
     let view: AuditedView | null = null;
+    let lastEase = 0;
+    let meterShown = 0;
+    let lastSpark = 0;
+    const spark: number[] = [];
 
     const frame = () => {
       raf = requestAnimationFrame(frame);
@@ -539,9 +559,32 @@ export function CameraMode({
         candidate: true,
       }));
       // On a confirmed view, the confirmed answer replaces the candidates.
-      itemsRef.current = view ? view.items : candidates;
+      // What the person corrected by tapping a tag wins over either.
+      itemsRef.current = applyFixes(view ? view.items : candidates, fixesRef.current, settingsRef.current);
       const holdProgress = view || aiRef.current.inFlight ? 0 : steadySince ? Math.min(1, (now - steadySince) / STEADY_MS) : 0;
-      drawOverlay(canvas, sw, sh, itemsRef.current, now, mirroredRef.current, aiRef.current.inFlight, holdProgress, prefsRef.current.minimalOverlay);
+
+      // Tag numbers and the meter ease toward the reading rather than jump.
+      const edt = lastEase ? now - lastEase : 16;
+      lastEase = now;
+      easeAll(shownWattsRef.current, new Map(itemsRef.current.map((i) => [i.key, drawing(i) ? i.watts : 0])), edt);
+      const total = wattsInView(itemsRef.current);
+      meterShown += (total - meterShown) * (1 - Math.exp(-edt / 140));
+      if (Math.abs(total - meterShown) < 0.5) meterShown = total;
+      if (meterRef.current) meterRef.current.textContent = fmtWatts(meterShown);
+      if (now - lastSpark > 250) {
+        lastSpark = now;
+        spark.push(total);
+        if (spark.length > 48) spark.shift();
+        const top = Math.max(50, ...spark);
+        const d = spark.map((w, i) => `${i ? "L" : "M"}${((i / 47) * 72).toFixed(1)},${(22 - (w / top) * 19).toFixed(1)}`).join("");
+        sparkRef.current?.setAttribute("d", d);
+      }
+
+      drawOverlay(canvas, sw, sh, itemsRef.current, now, mirroredRef.current, aiRef.current.inFlight, holdProgress, prefsRef.current.minimalOverlay, {
+        shown: shownWattsRef.current,
+        selected: selectedRef.current,
+        hits: hitsRef.current,
+      });
 
       const dt = now - lastFrame;
       lastFrame = now;
@@ -733,8 +776,20 @@ export function CameraMode({
   return (
     <div ref={rootRef} className="lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-4">
       {/* ---- viewfinder ---- */}
+      {/* A tap anywhere on the picture that is not a control opens the tag under the finger. */}
       <div
         ref={viewRef}
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest("button, a, input, select, textarea, [role=radio], [data-no-tap]")) return;
+          const c = canvasRef.current;
+          if (!c || recording || phase !== "live") return;
+          const b = c.getBoundingClientRect();
+          const key = hitTest(hitsRef.current.tags, hitsRef.current.boxes, e.clientX - b.left, e.clientY - b.top);
+          const snap = key ? itemsRef.current.find((i) => i.key === key) : undefined;
+          selectedRef.current = snap ? key : null;
+          setSelected(snap && key ? { key, snap } : null);
+          if (snap) buzz(prefsRef.current, 6);
+        }}
         className={`overflow-hidden bg-[#07090c] text-white ${
           full
             ? "fixed inset-0 z-[200] h-[100dvh] w-screen"
@@ -814,6 +869,63 @@ export function CameraMode({
           </div>
         </div>
 
+        {/* the meter: watts drawing in view right now, with the last twelve seconds */}
+        {phase === "live" && !recording && (
+          <div
+            className={`pointer-events-none absolute left-3 sm:left-4 ${full ? "top-[calc(3.9rem+env(safe-area-inset-top))]" : "top-[3.9rem]"}`}
+            aria-hidden
+          >
+            <div className="rounded-2xl bg-black/50 px-3 pb-2 pt-1.5 backdrop-blur-md">
+              <div className="font-mono text-[0.58rem] uppercase tracking-[0.16em] text-white/60">Drawing in view</div>
+              <div className="mt-0.5 flex items-end gap-2.5">
+                <span ref={meterRef} className="min-w-[4.5ch] font-mono text-[1.55rem] font-bold leading-none tabular-nums">
+                  0 W
+                </span>
+                <svg width="72" height="22" viewBox="0 0 72 22" className="mb-0.5 overflow-visible">
+                  <path ref={sparkRef} d="" fill="none" stroke="#ffd84d" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />
+                </svg>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* a tapped tag, opened */}
+        <AnimatePresence>
+          {selected && phase === "live" && !recording && (
+            <motion.div
+              key="tag-card"
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.18 }}
+              data-no-tap
+              className={`absolute right-3 z-10 w-[min(22rem,calc(100%-1.5rem))] sm:right-4 ${full ? "top-[calc(3.9rem+env(safe-area-inset-top))]" : "top-[3.9rem]"}`}
+            >
+              <TagCard
+                item={(() => {
+                  const base = items.find((i) => i.key === selected.key) ?? selected.snap;
+                  const f = fixes.get(selected.key);
+                  return f ? relabel(base, f, settings) : base;
+                })()}
+                inView={items.some((i) => i.key === selected.key)}
+                fixed={fixes.has(selected.key)}
+                settings={settings}
+                onFix={(fix) => {
+                  const next = new Map(fixes);
+                  if (fix) next.set(selected.key, fix);
+                  else next.delete(selected.key);
+                  fixesRef.current = next;
+                  setFixes(next);
+                }}
+                onClose={() => {
+                  selectedRef.current = null;
+                  setSelected(null);
+                }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* starting / error */}
         {phase !== "live" && (
           <div className="absolute inset-0 grid place-items-center p-6">
@@ -847,6 +959,7 @@ export function CameraMode({
         {/* phone: the live read, as a sheet over the picture */}
         {phase === "live" && !recording && (
           <div
+            data-no-tap
             className={`absolute inset-x-3 ${
               full ? "bottom-[calc(7.5rem+env(safe-area-inset-bottom))] mx-auto max-w-md" : "bottom-[7.25rem] lg:hidden"
             }`}
@@ -1256,13 +1369,21 @@ function bracket(ctx: CanvasRenderingContext2D, x: number, y: number, w: number,
   ctx.stroke();
 }
 
-function label(it: ViewItem): string {
-  if (it.kind === "person") return "person · room in use";
-  if (it.candidate && it.state !== "off") return `${it.label} · ${fmtWatts(it.watts)} · ~${fmtMoney(it.typicalCostPerYear)}/yr`;
-  if (it.state === "off") return `${it.label} · off`;
-  const state = it.why === "screen dark" ? " · dark" : it.state === "standby" ? " · standby" : it.why === "screen lit" ? " · lit" : "";
-  // Typical use on the picture: the honest everyday figure. The panel adds the left-on one.
-  return `${it.label}${state} · ${fmtWatts(it.watts)} · ${fmtMoney(it.typicalCostPerYear)}/yr typ`;
+/** A tag's two lines: the draw, big, and what it is under it. */
+function tagText(it: ViewItem, watts: number): { main: string; sub: string } {
+  if (it.kind === "person") return { main: "in use", sub: "person" };
+  if (it.state === "off") return { main: "off", sub: `${it.label} · 0 W` };
+  const state = it.why === "set by you" ? (it.state === "standby" ? " · standby" : "") + " · yours" : it.why === "screen dark" ? " · dark" : it.state === "standby" ? " · standby" : it.why === "screen lit" ? " · lit" : "";
+  // Typical use under the watts: the honest everyday figure. The card adds the left-on one.
+  return { main: fmtWatts(watts), sub: `${it.label}${state} · ${it.candidate ? "~" : ""}${fmtMoney(it.typicalCostPerYear)}/yr typ` };
+}
+
+interface TagCtx {
+  /** The eased number each tag shows. */
+  shown: ReadonlyMap<string, number>;
+  selected: string | null;
+  /** Filled with where each tag and box was drawn, for tapping. */
+  hits: { tags: HitRect[]; boxes: HitRect[] };
 }
 
 /**
@@ -1282,11 +1403,16 @@ function drawOverlay(
   holdProgress = 0,
   /** Boxes only: no sweep, reticle or labels. */
   minimal = false,
+  tags?: TagCtx,
 ) {
   const { ctx, cw, ch } = prepare(canvas);
   if (!ctx) return;
   const r = coverRect(sw, sh, cw, ch);
   const small = cw < 520;
+  if (tags) {
+    tags.hits.tags = [];
+    tags.hits.boxes = items.filter((i) => i.kind !== "other").map((i) => ({ key: i.key, ...boxToPx(i.box, r, mirrored) }));
+  }
   if (minimal) {
     drawBoxesOnly(ctx, r, items, mirrored);
     return;
@@ -1326,23 +1452,9 @@ function drawOverlay(
     ctx.stroke();
   }
 
-  // Label only the costliest few: forty chips bury the picture.
-  const labelled = new Set(
-    [...items]
-      .filter((i) => i.kind !== "other")
-      .sort((a, b) => (b.kind === "person" ? 1 : 0) - (a.kind === "person" ? 1 : 0) || b.costPerYear - a.costPerYear)
-      .slice(0, small ? 5 : 9)
-      .map((i) => i.key),
-  );
-
   const placed = items
     .filter((i) => i.kind !== "other")
-    .map((it) => {
-      const [bx1, y1, bx2, y2] = it.box;
-      const x1 = mirrored ? 1 - bx2 : bx1;
-      const x2 = mirrored ? 1 - bx1 : bx2;
-      return { it, x: r.x + x1 * r.w, y: r.y + y1 * r.h, w: (x2 - x1) * r.w, h: (y2 - y1) * r.h, color: itemColor(it) };
-    });
+    .map((it) => ({ it, ...boxToPx(it.box, r, mirrored), color: itemColor(it) }));
 
   for (const p of placed) {
     const { it, x, y, w, h, color } = p;
@@ -1374,27 +1486,91 @@ function drawOverlay(
     ctx.fillRect(x, y + h - 2, w * it.score, 2);
   }
 
-  ctx.font = `600 ${small ? 10 : 11.5}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+  const selKey = tags?.selected ?? null;
+  const sel = placed.find((p) => p.it.key === selKey);
+  if (sel) {
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([]);
+    ctx.strokeRect(sel.x - 3, sel.y - 3, sel.w + 6, sel.h + 6);
+  }
+
+  // Every powered thing gets its watts. The biggest draws (and the tapped one)
+  // get the full tag with what it is and costs; the rest a small watts chip,
+  // so forty full tags never bury the picture.
+  const shown = (p: (typeof placed)[number]) => tags?.shown.get(p.it.key) ?? p.it.watts;
+  const order = [...placed].sort((a, b) => (b.it.key === selKey ? 1 : 0) - (a.it.key === selKey ? 1 : 0) || b.it.watts - a.it.watts);
+  const chips = order.slice(0, small ? 10 : 16);
+  const fullCount = small ? 4 : 7;
+  const bigFont = `700 ${small ? 15 : 18}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+  const subFont = `500 ${small ? 9.5 : 10.5}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+  const chipFont = `700 ${small ? 10 : 11}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+
+  const laid = chips.map((p, i) => {
+    const full = i < fullCount || p.it.key === selKey;
+    const text = tagText(p.it, shown(p));
+    let tw: number;
+    let th: number;
+    if (full) {
+      ctx.font = bigFont;
+      const mw = ctx.measureText(text.main).width + 14;
+      ctx.font = subFont;
+      tw = Math.ceil(Math.max(mw, ctx.measureText(text.sub).width) + 18);
+      th = small ? 36 : 42;
+    } else {
+      ctx.font = chipFont;
+      tw = Math.ceil(ctx.measureText(text.main).width + 16);
+      th = small ? 18 : 20;
+    }
+    return { p, full, text, w: tw, h: th, ...placeTag(p, tw, th, cw, ch) };
+  });
+  unstack(laid, ch);
+
   ctx.textBaseline = "middle";
-  for (const p of placed) {
-    if (!labelled.has(p.it.key)) continue;
-    const text = label(p.it);
-    const tw = ctx.measureText(text).width + 12;
-    const th = small ? 18 : 20;
-    let lx = Math.max(4, Math.min(p.x, cw - tw - 4));
-    let ly = p.y - th - 3;
-    if (ly < 4) ly = p.y + p.h + 3;
-    if (ly + th > ch - 4) ly = p.y + 3;
-    lx = Math.round(lx);
-    ly = Math.round(ly);
-    ctx.fillStyle = "rgba(5,7,10,0.78)";
-    roundRect(ctx, lx, ly, tw, th, 6);
+  for (const t of laid) {
+    const { p, full, text, x, y, w, h } = t;
+    const off = p.it.state === "off" || p.it.kind === "person";
+    const isSel = p.it.key === selKey;
+    ctx.fillStyle = "rgba(5,7,10,0.82)";
+    roundRect(ctx, x, y, w, h, 7);
     ctx.fill();
+    if (isSel) {
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
     ctx.fillStyle = p.color;
-    roundRect(ctx, lx, ly, 3, th, 1.5);
+    roundRect(ctx, x, y, 3, h, 1.5);
     ctx.fill();
-    ctx.fillStyle = "#fff";
-    ctx.fillText(text, lx + 8, ly + th / 2 + 0.5);
+
+    if (full) {
+      const line1 = y + (small ? 13 : 15);
+      ctx.font = bigFont;
+      ctx.fillStyle = off ? "rgba(255,255,255,0.6)" : "#fff";
+      ctx.fillText(text.main, x + 9, line1);
+      if (!off && p.it.watts > 0) {
+        // A dot that pulses faster the more it draws: the size of the load at a glance.
+        const mw = ctx.measureText(text.main).width;
+        const f = 0.5 + 2.5 * Math.min(1, Math.log10(1 + p.it.watts) / 3.3);
+        ctx.globalAlpha = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin((now / 1000) * Math.PI * 2 * f));
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(x + 9 + mw + 7, line1, small ? 2.5 : 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        // How big the draw is on a log scale, 1 W to 2 kW, along the bottom.
+        ctx.fillStyle = p.color + "cc";
+        ctx.fillRect(x + 9, y + h - 4, (w - 15) * Math.min(1, Math.log10(1 + p.it.watts) / Math.log10(2001)), 2);
+      }
+      ctx.font = subFont;
+      ctx.fillStyle = "rgba(255,255,255,0.68)";
+      ctx.fillText(text.sub, x + 9, y + (small ? 26 : 30));
+    } else {
+      ctx.font = chipFont;
+      ctx.fillStyle = off ? "rgba(255,255,255,0.6)" : "#fff";
+      ctx.fillText(text.main, x + 9, y + h / 2 + 0.5);
+    }
+    tags?.hits.tags.push({ key: p.it.key, x, y, w, h });
   }
 }
 
