@@ -151,7 +151,7 @@ function highlight(line: string) {
 export const ENERGY_TS: CodeFile = {
   name: "energy.ts",
   path: "src/lib",
-  startLine: 86,
+  startLine: 116,
   code: `  // The state this device is in through the building's empty hours. What was seen
   // is the answer when the picture was taken after hours (or the time is unknown);
   // a device seen running during the day is assumed to drop to standby at night
@@ -166,25 +166,49 @@ export const ENERGY_TS: CodeFile = {
     afterHoursBasis = "assumed-standby";
   }
 
+  // Everything the engine said about this unit, for the technology and screen-size
+  // readers in lib/tech.ts. A photo that shows a T8 tube or a 65-inch panel has
+  // already answered the question the catalog band is vague about, and the old
+  // version of this file read that field only to print it on the card.
+  //
+  // The category's own name is deliberately not evidence. It names the class, so
+  // it cannot say which member of the class this is - and two of them read as a
+  // technology if you let them: "Refrigerator / mini-fridge" contains
+  // "mini-fridge" and "Copier / large MFP" contains "MFP". A device the user
+  // re-identified carries the catalog label as its description (lib/capture.ts),
+  // so without this guard every full-size fridge in the app would quietly be
+  // priced as the little one under the desk.
+  const described = obs.device && obs.device.trim().toLowerCase() !== cat.label.toLowerCase() ? obs.device : undefined;
+  const words = evidenceWords([obs.tech, obs.evidence, described]);
+
   // A user's wattage is the draw in the observed state; it only applies after hours
   // if the after-hours state is that same state.
   const userWatts = afterHoursState === obs.state ? obs.userWatts : undefined;
-  const unit = estimateUnitWatts(cat, afterHoursState, { aiWatts: obs.wattsHint, userWatts });
+  const unit = estimateUnitWatts(cat, afterHoursState, { aiWatts: obs.wattsHint, userWatts, words });
   const perUnitWatts = unit.mid;
   const totalWatts = perUnitWatts * count;
   // Seen on, off at night, draws nothing in standby: nothing to cost after hours.
   // The device is still reported (typical use is real) with zero waste.
   const standbyUnit = estimateUnitWatts(cat, "standby", {});
 
+  // Waste is billed in the empty hours, which on a time-of-use tariff are the
+  // cheap ones; normal use is billed mostly in the expensive ones. Both fall back
+  // to the flat rate, so a building with one price gets exactly what it always got.
+  const emptyRate = wasteRate(settings);
+  const openRate = occupiedRate(settings);
+  // Its heat is a load on the building too - or a gift to it in a heating season.
+  const interaction = hvacInteraction(cat, settings);
+  const hvac = interaction.factor;
+
   const hoursKnown = obs.hoursPerYear !== undefined && Number.isFinite(obs.hoursPerYear) && obs.hoursPerYear >= 0;
   const hours = hoursKnown ? Math.min(8760, obs.hoursPerYear!) : settings.unoccupiedHoursPerYear;
   const kwhPerYear = (totalWatts / 1000) * hours;
-  const standbyCostPerYear = ((standbyUnit.mid * count) / 1000) * settings.unoccupiedHoursPerYear * settings.ratePerKwh;
-  const costPerYear = kwhPerYear * settings.ratePerKwh;
-  const co2KgPerYear = kwhPerYear * settings.co2PerKwh;
+  const standbyCostPerYear = ((standbyUnit.mid * count) / 1000) * settings.unoccupiedHoursPerYear * emptyRate * hvac;
+  const costPerYear = kwhPerYear * emptyRate * hvac;
+  const co2KgPerYear = kwhPerYear * settings.co2PerKwh * hvac;
 
-  const costLowPerYear = ((unit.low * count) / 1000) * hours * settings.ratePerKwh;
-  const costHighPerYear = ((unit.high * count) / 1000) * hours * settings.ratePerKwh;
+  const costLowPerYear = ((unit.low * count) / 1000) * hours * emptyRate * hvac;
+  const costHighPerYear = ((unit.high * count) / 1000) * hours * emptyRate * hvac;
 
   const annualSavings = costPerYear * cat.action.savingsFraction;
   const fixCost = cat.action.cost;
@@ -222,10 +246,16 @@ export const DEVICES_TS: CodeFile = {
 export const ENERGY_TS_SHORT: CodeFile = {
   name: "energy.ts",
   path: "src/lib",
-  startLine: 110,
+  startLine: 164,
   code: `  const hoursKnown = obs.hoursPerYear !== undefined && Number.isFinite(obs.hoursPerYear) && obs.hoursPerYear >= 0;
   const hours = hoursKnown ? Math.min(8760, obs.hoursPerYear!) : settings.unoccupiedHoursPerYear;
   const kwhPerYear = (totalWatts / 1000) * hours;
-  const standbyCostPerYear = ((standbyUnit.mid * count) / 1000) * settings.unoccupiedHoursPerYear * settings.ratePerKwh;
-  const costPerYear = kwhPerYear * settings.ratePerKwh;`,
+  const standbyCostPerYear = ((standbyUnit.mid * count) / 1000) * settings.unoccupiedHoursPerYear * emptyRate * hvac;
+  const costPerYear = kwhPerYear * emptyRate * hvac;
+  const co2KgPerYear = kwhPerYear * settings.co2PerKwh * hvac;`,
 };
+
+
+
+
+

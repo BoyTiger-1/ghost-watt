@@ -97,12 +97,55 @@ against Lite2 and YOLOv8n (ONNX Runtime Web) on 40 Open Images photos.
   With an AI key, the model reports each unit's technology (halogen, T12, CRT...), so
   grades reflect the actual unit rather than a typical one.
 
+### Four corrections most estimates leave out
+
+Each is the identity until its input exists, so a scan with nothing but a photo gets
+the plain `watts x hours x rate` and nothing invented on top of it.
+
+- **Which unit it is** ([`src/lib/tech.ts`](src/lib/tech.ts)). The band for overhead
+  lighting runs 40 W to 250 W, and that is not imprecision - it is two different
+  objects. A four-lamp T12 troffer draws about 180 W; the LED panel that replaced it
+  draws about 40 W. A vision model answers *which technology is this* well and *how
+  many watts is it* badly, so the first is weighted above the second, and a stated
+  screen diagonal goes through the area law display power actually follows. The same
+  table grades the device and prices it, so a card's verdict and its dollars can
+  never rest on different wattages.
+- **The watt you pay for twice** ([`src/lib/thermal.ts`](src/lib/thermal.ts)). Every
+  watt a device draws leaves it as heat, so in a cooled building its real cost is its
+  electricity plus the cooling that removes the heat - about a third as much again -
+  and in an electrically heated one part of that comes back in winter. Sized from the
+  state's degree days ([`src/lib/climate.ts`](src/lib/climate.ts)), and applied only
+  once the building says how it is heated and cooled. Nothing is applied to the
+  heating and cooling plant itself, whose consumption already *is* the conditioning.
+- **The price of the empty hours** ([`src/lib/tariff.ts`](src/lib/tariff.ts)).
+  Everything here is about the hours a building is empty, and on a time-of-use tariff
+  those are not billed at the average of the year. Which way it goes is not something
+  you can assume: a school that shuts at four is closed through an evening peak (so
+  its overnight waste costs about a tenth *more* than the average said) and open
+  through a midday one (about a fifth less). The tariff sheet has a price per hour and
+  the schedule says which hours are empty; crossing the two is the whole calculation.
+- **Answering to the meter** ([`src/lib/reconcile.ts`](src/lib/reconcile.ts)). A bill
+  is the only hard measurement in the chain. If the lines add up to more plug and
+  lighting energy than the meter leaves room for, the estimate comes down - each line
+  giving up ground in proportion to its own size times its own uncertainty, so a wide
+  catalog guess absorbs most of it and a plug-meter reading moves by about a
+  thousandth as much. If it fits, nothing moves, and the fit is reported.
+
+The cost range is a Monte Carlo over all of it, with the errors correlated the way
+they actually are: one price for the building, one schedule, and one shared catalog
+error per device class - because if the table's monitor figure is 20% high it is 20%
+high for all twenty-eight monitors at once, and sampling them independently reports a
+band several times narrower than the evidence supports
+([`src/lib/estimate.ts`](src/lib/estimate.ts)).
+
 ### The pipeline at a glance
 
 | Stage | Goes in | What happens | Comes out |
 | --- | --- | --- | --- |
-| See | Room photo (and an optional room type) | The in-browser detector (On-device) or a hosted vision model (Enhanced) lists devices and their on/standby/off state | Device observations |
-| Count | Device observations | Wattage table x electricity rate x empty hours x grid carbon factor | kWh, dollars, CO2 per device |
+| See | Room photo (and an optional room type) | The in-browser detector (On-device) or a hosted vision model (Enhanced) lists devices, their on/standby/off state, and what each one looks like | Device observations |
+| Weigh | Device observations | Catalog band, the technology read off the photo, a screen size, the model's own watt guess and any meter reading, combined as log-normal beliefs | Per-unit watts, with a spread |
+| Count | Per-unit watts | x empty hours x the price in *those* hours x what its heat does to the building x grid carbon factor | kWh, dollars, CO2 per device |
+| Check | Per-device cost | Reconcile the total against a real bill; propagate the spread by correlated Monte Carlo | Corrected figures and an honest range |
 | Recommend | Per-device cost | Match each one to a concrete fix and savings rate, work out payback | Ranked offender cards |
 
 You set the assumptions yourself (electricity rate, grid carbon intensity, how many hours a
@@ -266,6 +309,13 @@ src/
     parse.ts      Model output into categorized observations
     devices.ts    Wattage lookup table (the deterministic backbone)
     energy.ts     The energy, cost, and carbon math plus ranking
+    estimate.ts   Per-unit watts from every source of evidence, and the cost range
+    tech.ts       Technology and screen-size readings: which unit it is
+    thermal.ts    What a device's heat costs the building, or saves it
+    climate.ts    State degree days, which size that correction
+    tariff.ts     The utility's own tariff, split into open and empty hours
+    demand.ts     Peak-demand charges, with a coincidence factor per device class
+    reconcile.ts  Making the estimate answer to a real meter reading
     types.ts      Shared types
 ```
 

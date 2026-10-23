@@ -42,10 +42,12 @@ import { analysisSquare } from "@/lib/image";
 import type { CategorizedObservation } from "@/lib/parse";
 import { ON_DEVICE_ENGINE, describeAnalyzeError, useEngine } from "@/lib/engine";
 import { aggregate, counted } from "@/lib/energy";
+import { applyReconciliation, reconcile, reconcileLines } from "@/lib/reconcile";
 import { crossCheck } from "@/lib/crosscheck";
 import { costRange, RATE_SIGMA, type RateQuality } from "@/lib/estimate";
 import { REGION_BY_CODE, regionOrDefault, regionRate } from "@/lib/grid";
 import { occupiedHours, unoccupiedHours, SCHEDULE_BY_ID, SCHEDULE_PRESETS } from "@/lib/schedule";
+import { climateOf } from "@/lib/climate";
 import { contextForBuildingType, type UsageContext } from "@/lib/usage";
 import { EfficiencyPanel } from "./EfficiencyPanel";
 import { nowLocal } from "@/lib/exif";
@@ -116,13 +118,18 @@ const PLACEHOLDER_BUILDING: Building = {
 type Sector = "residential" | "commercial";
 
 // ~1 km cache: every capture from one building shares one lookup per sector.
+// The schedule is part of the key as well as the query, because it decides how
+// the tariff is split into open-hours and empty-hours prices, and two buildings
+// on the same tariff with different opening hours do not pay the same for
+// overnight waste.
 const geoCache = new Map<string, Promise<GeoContext | null>>();
-function locate(lat: number, lon: number, sector: Sector): Promise<GeoContext | null> {
-  const key = `${lat.toFixed(2)},${lon.toFixed(2)},${sector}`;
+function locate(lat: number, lon: number, sector: Sector, scheduleId?: string): Promise<GeoContext | null> {
+  const key = `${lat.toFixed(2)},${lon.toFixed(2)},${sector},${scheduleId ?? "-"}`;
   if (!geoCache.has(key)) {
+    const q = scheduleId ? `&schedule=${encodeURIComponent(scheduleId)}` : "";
     geoCache.set(
       key,
-      fetch(`/api/locate?lat=${lat}&lon=${lon}&sector=${sector}`)
+      fetch(`/api/locate?lat=${lat}&lon=${lon}&sector=${sector}${q}`)
         .then((r) => (r.ok ? (r.json() as Promise<GeoContext>) : null))
         .catch(() => null),
     );
@@ -241,11 +248,25 @@ export function Scanner() {
   const sector: Sector = place === "home" ? "residential" : "commercial";
   const schedule =
     place === contextForBuildingType(building.typeId) ? building.schedule : SCHEDULE_BY_ID[place].schedule;
+  // The preset name the tariff lookup needs, so the server can split the sheet
+  // by this building's own open and empty hours. Only a named preset travels: a
+  // hand-drawn schedule stays on the device.
+  const scheduleId =
+    place === contextForBuildingType(building.typeId)
+      ? (BUILDING_TYPE_BY_ID[building.typeId]?.schedulePreset ?? place)
+      : place;
   // A real bill beats every lookup: dollars ÷ kWh off the paper is the price this building pays.
   const billRate = building.bill && building.bill.kwh > 0 && building.bill.dollars > 0 ? building.bill.dollars / building.bill.kwh : undefined;
-  const settings: AuditSettings = useMemo(
-    () => ({
-      ratePerKwh: override.ratePerKwh ?? billRate ?? liveRate?.ratePerKwh ?? regionRate(region, sector),
+  const settings: AuditSettings = useMemo(() => {
+    const flat = override.ratePerKwh ?? billRate ?? liveRate?.ratePerKwh ?? regionRate(region, sector);
+    // No shaped pair at this level, on purpose. A typed rate, a bill and the
+    // state-average lookup are each one blended price for the whole year, and
+    // inventing a peak and off-peak split for one of them would be making a
+    // number up. The split only exists on a tariff looked up from a capture's own
+    // location, which lib/capture.ts applies per capture.
+    const climate = climateOf(building.regionCode);
+    return {
+      ratePerKwh: flat,
       co2PerKwh: override.co2PerKwh ?? region.co2PerKwh,
       unoccupiedHoursPerYear: override.unoccupiedHoursPerYear ?? unoccupiedHours(schedule),
       occupiedHoursPerYear: occupiedHours(schedule),
@@ -254,13 +275,19 @@ export function Scanner() {
       buildingTypeId: building.typeId,
       floorAreaSqFt: building.floorAreaSqFt,
       demandChargePerKw: override.demandChargePerKw,
-    }),
-    [override, billRate, liveRate, region, building, place, sector, schedule],
-  );
+      ...(building.heating ? { heating: building.heating } : {}),
+      ...(building.cooling ? { cooling: building.cooling } : {}),
+      ...(climate ? { hdd65: climate.hdd65, cdd65: climate.cdd65 } : {}),
+    };
+  }, [override, billRate, liveRate, region, building, place, sector, schedule]);
   const sectorRef = useRef(sector);
   useEffect(() => {
     sectorRef.current = sector;
   }, [sector]);
+  const scheduleIdRef = useRef(scheduleId);
+  useEffect(() => {
+    scheduleIdRef.current = scheduleId;
+  }, [scheduleId]);
   const settingsRef = useRef(settings);
   useEffect(() => {
     settingsRef.current = settings;
@@ -294,7 +321,7 @@ export function Scanner() {
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const { latitude: lat, longitude: lon } = pos.coords;
-        const geo = await locate(lat, lon, sectorRef.current);
+        const geo = await locate(lat, lon, sectorRef.current, scheduleIdRef.current);
         setDeviceGeo({ lat, lon, geo });
         setGeoBusy(false);
         // The place takes the location on (state, coordinates), so its default
@@ -349,13 +376,13 @@ export function Scanner() {
     let alive = true;
     for (const c of capturesRef.current) {
       if (c.meta.lat === undefined || c.meta.lon === undefined || (c.geo && c.geo.sector === sector)) continue;
-      locate(c.meta.lat, c.meta.lon, sector).then((geo) => {
+      locate(c.meta.lat, c.meta.lon, sector, scheduleId).then((geo) => {
         if (alive && geo) setCaptures((prev) => prev.map((x) => (x.id === c.id ? { ...x, geo } : x)));
       });
     }
     const d = deviceGeoRef.current;
     if (d && d.geo?.sector !== sector) {
-      locate(d.lat, d.lon, sector).then((geo) => {
+      locate(d.lat, d.lon, sector, scheduleId).then((geo) => {
         if (alive) setDeviceGeo({ lat: d.lat, lon: d.lon, geo });
       });
     }
@@ -618,7 +645,7 @@ export function Scanner() {
         let geo = c.geo;
         if (geo === undefined && meta.lat !== undefined && meta.lon !== undefined) {
           patch(id, { stage: "Finding the local utility" });
-          geo = await locate(meta.lat, meta.lon, sectorRef.current);
+          geo = await locate(meta.lat, meta.lon, sectorRef.current, scheduleIdRef.current);
           patch(id, { geo });
         }
 
@@ -764,7 +791,10 @@ export function Scanner() {
           categoryId: key.categoryId,
           label: line.label,
           estimatedWatts: estimated,
-          estimateBasis: line.basis === "ai" ? "ai" : "catalog",
+          // Kept apart so the calibration record can say which kind of estimate
+          // the meter was checking: a technology read off the photo, the model's
+          // own watt guess, or the class average with nothing to narrow it.
+          estimateBasis: line.basis === "ai" || line.basis === "tech" ? line.basis : "catalog",
           measuredWatts: a.watts,
           at: new Date().toISOString(),
         });
@@ -777,11 +807,31 @@ export function Scanner() {
     );
   };
 
-  /** Every line, unverified ones included, for the list. */
-  const offenders = useMemo(() => ranked.map((r) => r.offender), [ranked]);
+  /** Every line, unverified ones included, before the meter has had its say. */
+  const bottomUp = useMemo(() => ranked.map((r) => r.offender), [ranked]);
+  /**
+   * The audit reconciled against the bill, when there is one.
+   *
+   * The bill is the only measurement in the whole chain. If the bottom-up
+   * estimate adds up to more plug and lighting energy than the meter leaves room
+   * for, the estimate is wrong and comes down - taken out of the least certain
+   * lines first, and never out of a line somebody measured with a plug-in meter.
+   * When it fits, nothing moves and the fit itself is reported, because it is the
+   * only independent check the model could have failed.
+   */
+  const billReconciliation = useMemo(() => {
+    const bill = building.bill;
+    if (!bill || !(bill.kwh > 0) || !(bill.days > 0)) return null;
+    const annualKwh = (bill.kwh / bill.days) * 365;
+    return reconcile(reconcileLines(counted(bottomUp)), annualKwh, building.typeId);
+  }, [building.bill, building.typeId, bottomUp]);
+  const offenders = useMemo(
+    () => applyReconciliation(bottomUp, billReconciliation),
+    [bottomUp, billReconciliation],
+  );
   /** The lines that count toward totals, plans and exports. */
   const countedOffenders = useMemo(() => counted(offenders), [offenders]);
-  const totals = useMemo(() => aggregate(offenders), [offenders]);
+  const totals = useMemo(() => aggregate(offenders, settings), [offenders, settings]);
   const done = priced.filter((p) => p.c.result);
   const rateQuality = useMemo<RateQuality>(() => {
     // The loosest price among the captures bounds the whole range.
@@ -800,6 +850,12 @@ export function Scanner() {
             costLowPerYear: k ? o.costLowPerYear * k : a * 0.7,
             costHighPerYear: k ? o.costHighPerYear * k : a * 1.4,
             hoursKnown: o.hoursKnown,
+            // So the Monte Carlo knows which lines share a catalog figure: if the
+            // table's monitor wattage is 20% high it is 20% high for every monitor
+            // in the building at once, and sampling them independently would let
+            // that error average itself into a falsely narrow band.
+            categoryId: o.categoryId,
+            basis: o.basis,
           };
         }),
         rateQuality,
@@ -1248,6 +1304,7 @@ export function Scanner() {
                 assumedRate={settings.ratePerKwh}
                 floorAreaSqFt={building.floorAreaSqFt}
                 typeId={building.typeId}
+                reconciliation={billReconciliation}
               />
             </div>
           )}

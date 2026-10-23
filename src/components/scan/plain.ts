@@ -66,11 +66,16 @@ export function confidenceWords(c: Offender["confidence"]): string {
 
 /** How the wattage was known, in words. */
 export function basisWords(o: Offender): string {
-  return o.basis === "measured"
-    ? "You measured it"
-    : o.basis === "ai"
-      ? "Read from the photo by AI, checked against published figures"
-      : "A typical figure for this kind of device";
+  if (o.basis === "measured") return "You measured it";
+  if (o.basis === "tech") {
+    // The strongest thing short of a meter: the photo showed which kind of unit
+    // this is, and the figure is for that kind rather than for the class average.
+    return o.techLabel
+      ? `Recognised from the photo as ${o.techLabel}, and priced as one`
+      : "Recognised from the photo, and priced as that kind of unit";
+  }
+  if (o.basis === "ai") return "Read from the photo by AI, checked against published figures";
+  return "A typical figure for this kind of device";
 }
 
 /** How the after-hours behaviour was decided, in words. */

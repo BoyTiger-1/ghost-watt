@@ -90,6 +90,37 @@ export const SOURCES: Source[] = [
     used: "Television viewing of roughly 4–5 hours a day per household, used as a home TV's typical in-use hours.",
   },
   {
+    id: "degree-days",
+    label: "Annual heating and cooling degree days, base 65 °F",
+    publisher: "NOAA NCEI 1991–2020 U.S. Climate Normals, in the pattern of EIA's State Energy Data System",
+    year: "1991–2020 normals",
+    url: "https://www.ncei.noaa.gov/products/land-based-station/us-climate-normals",
+    used: "How much of the year a building is heating and how much it is cooling (lib/climate.ts), which sets the size and the sign of the heating-and-cooling interaction term. Washington: about 4,700 heating and 300 cooling degree days, so a device's waste heat is far more often useful there than it is a burden.",
+    caveat:
+      "A compiled, population-weighted state table, approximate like the price and carbon tables, and not read from the primary release for this build. It weights a correction of order ±20%, so a few hundred degree days either way moves no headline figure.",
+  },
+  {
+    id: "hvac-interaction",
+    label: "Interactive effects between internal loads and HVAC",
+    publisher: "Lighting-retrofit and measurement-and-verification practice",
+    year: "long-standing",
+    url: "https://www.csemag.com/articles/factoring-lighting-into-cooling-loads/",
+    used:
+      "Every watt a device draws leaves it as heat, so in a cooled space its true cost is its own electricity plus the cooling that removes that heat, and in an electrically heated one part of it comes back. The cooling side is taken as 1/COP at a seasonal COP of 3.2, which is 0.31 - within rounding of the 0.33 cooling adjustment factor long used in retrofit practice, and of the separately reported figure that each kWh saved on lighting saves about another 0.4 kWh on HVAC.",
+    caveat:
+      "The 0.33 figure is widely used and widely attributed to ASHRAE modelling practice, but it was not verified against an ASHRAE document for this build. The heating credit is deliberately halved (lib/thermal.ts): the cooling penalty is unavoidable, while a credit needs the heat to arrive where somebody wanted it, and the device being costed is one nobody is using in a room nobody is in. Nothing is applied at all until the building states how it is heated and cooled.",
+  },
+  {
+    id: "tou-shaping",
+    label: "Commercial time-of-use rate structures",
+    publisher: "OpenEI Utility Rate Database, with the hourly period schedules published on each tariff sheet",
+    year: "current",
+    url: "https://openei.org/wiki/Utility_Rate_Database",
+    used:
+      "The price in the hours a building is empty, as distinct from the all-hours average. Published commercial on-peak to off-peak ratios run from about 1.3:1 to 3:1, so the gap is worth tens of percent on the only figure this app asks anyone to act on. Which way it goes depends on where the peak window falls against the building's opening hours, so it is computed hour by hour from the sheet rather than assumed.",
+    caveat: "Only available when a tariff was looked up from the building's location. A price typed in or taken off a bill is one blended figure, and is not split.",
+  },
+  {
     id: "catalog",
     label: "Device wattage catalogue",
     publisher: "This app (src/lib/devices.ts)",
@@ -97,6 +128,17 @@ export const SOURCES: Source[] = [
     url: "/methodology#table",
     used: "Representative running draw and a published low–high band for each device class, with its source note in the table. The band, not the midpoint, is what the cost ranges come from.",
     caveat: "Representative figures, not nameplate maxima. A plug-in meter reading entered for a device replaces them.",
+  },
+  {
+    id: "tech-table",
+    label: "Technology and screen-size wattages by device class",
+    publisher: "This app (src/lib/tech.ts), from lamp and ballast ratings, ENERGY STAR specifications and manufacturer figures",
+    year: "maintained",
+    url: "/methodology#tech",
+    used:
+      "Which member of a device class this one is. A four-lamp T12 troffer with a magnetic ballast draws about 180 W and the LED panel that replaced it about 40 W; both are \"overhead lighting\", and the catalog band spans them both. When the photo shows which it is, that reading is worth more than the class average and more than the model's own guess at a wattage - naming a lamp type is a perceptual judgement a vision model makes well, estimating a wattage is arithmetic it cannot do. Display power is taken as proportional to panel area, fitted to the catalog's own sized rows: a monitor at 0.098 W per square inch, a television at 0.045, an interactive panel at 0.083.",
+    caveat:
+      "A technology the model names, not one anybody confirmed. It is blended with the published band rather than replacing it, so a misread moves the figure part of the way and never all of it; a plug-in meter reading replaces both.",
   },
 ];
 

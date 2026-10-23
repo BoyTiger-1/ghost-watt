@@ -26,7 +26,16 @@ export interface GeoContext {
   /** Residential or commercial: a house and a school a street apart pay different prices. */
   sector?: "residential" | "commercial";
   stateRatePerKwh?: number;
-  tariff?: { name: string; since: number | null; fixedMonthly: number | null };
+  /**
+   * The tariff's price in the hours the building is open, and in the hours it is
+   * empty. Present only when the serving utility's sheet varies by time of day.
+   * This is the pair that matters most: everything this app calls waste happens
+   * in the empty hours, and on a time-of-use tariff those are not billed at the
+   * average of the whole year.
+   */
+  occupiedRatePerKwh?: number;
+  unoccupiedRatePerKwh?: number;
+  tariff?: { name: string; since: number | null; fixedMonthly: number | null; periodSpread?: number };
   /** 5-digit US ZIP, for rebate lookups. */
   zip?: string | null;
 }
@@ -121,7 +130,15 @@ export function captureSettings(
   if (baseQuality === "utility") return { settings: base, rateQuality: "utility" };
   if (c.geo) {
     return {
-      settings: { ...base, ratePerKwh: c.geo.ratePerKwh, co2PerKwh: c.geo.co2PerKwh },
+      settings: {
+        ...base,
+        ratePerKwh: c.geo.ratePerKwh,
+        co2PerKwh: c.geo.co2PerKwh,
+        // The shaped pair, when the sheet had hours in it. Absent leaves the
+        // building default in place rather than silently flattening it.
+        ...(c.geo.occupiedRatePerKwh ? { occupiedRatePerKwh: c.geo.occupiedRatePerKwh } : {}),
+        ...(c.geo.unoccupiedRatePerKwh ? { unoccupiedRatePerKwh: c.geo.unoccupiedRatePerKwh } : {}),
+      },
       rateQuality: c.geo.rateQuality,
     };
   }

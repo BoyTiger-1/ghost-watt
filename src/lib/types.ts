@@ -3,6 +3,15 @@
 export type DeviceState = "on" | "standby" | "off";
 
 /**
+ * How the space is heated, which decides whether a device's waste heat is worth
+ * anything. Resistance heat gives back the whole watt, a heat pump a fraction of
+ * it, a gas boiler no kilowatt-hours at all. See lib/thermal.ts.
+ */
+export type HeatingFuel = "electric-resistance" | "heat-pump" | "gas" | "none";
+/** Whether anything has to pay to remove a device's heat from the space. */
+export type CoolingKind = "electric" | "none";
+
+/**
  * Where on the photo a device was seen: [x1, y1, x2, y2] as fractions (0-1) of the
  * photo's width and height, top-left corner first. Fractions rather than pixels so
  * the overlay is correct at whatever size the photo is drawn.
@@ -158,6 +167,30 @@ export interface AuditSettings {
    * Null or absent: unknown, so the observed state is assumed to persist.
    */
   capturedAfterHours?: boolean | null;
+  /**
+   * The price in the hours the building is empty, USD per kWh, when the tariff
+   * varies by time of day. This, not ratePerKwh, is what overnight waste is
+   * actually billed at. Whether it is above or below the all-hours average
+   * depends on where the tariff's peak window falls against the building's
+   * opening hours, so it is computed rather than assumed (lib/tariff.ts).
+   * Absent: no shaping is known, and ratePerKwh prices everything, as before.
+   */
+  unoccupiedRatePerKwh?: number;
+  /** The price in the hours the building is open, USD per kWh. Absent: ratePerKwh. */
+  occupiedRatePerKwh?: number;
+  /**
+   * How the building is heated and cooled. Without both of these no heating or
+   * cooling interaction is applied to any device, because a correction nobody can
+   * check is worse than no correction. See lib/thermal.ts.
+   */
+  heating?: HeatingFuel;
+  cooling?: CoolingKind;
+  /** Seasonal COP of the cooling and heating plant, when better than the defaults is known. */
+  coolingCop?: number;
+  heatingCop?: number;
+  /** Annual degree days, base 65 F. Derived from regionCode when absent. */
+  hdd65?: number;
+  cdd65?: number;
 }
 
 /** A single ranked offender after the energy math is applied. */
@@ -191,8 +224,16 @@ export interface Offender {
   source: string;
   /** Where on the source photo these units were seen. Absent for estimates. */
   boxes?: Box[];
-  /** Where the per-unit wattage came from: a measurement, the AI's read blended with the catalog, or the catalog. */
-  basis?: "measured" | "ai" | "catalog";
+  /**
+   * Where the per-unit wattage came from. "measured": a meter or nameplate.
+   * "tech": a technology or screen size read off the photo, which says which
+   * member of the class this is - the strongest evidence short of a measurement.
+   * "ai": the model's own watt figure, blended with the catalog band.
+   * "catalog": the published figure for the class, with nothing to narrow it.
+   */
+  basis?: "measured" | "tech" | "ai" | "catalog";
+  /** The technology or size that moved the wattage, e.g. "T8 fluorescent", "65-inch panel". */
+  techLabel?: string;
   /** Shown but not counted: the reading could not be cross-checked and the user has not confirmed it. */
   unverified?: boolean;
   /** The model's confidence, 0-1, when it gave one. */
@@ -224,6 +265,21 @@ export interface Offender {
   usageBasis?: string;
   /** Source id (lib/sources.ts) behind the typical hours, or "estimate". */
   usageSource?: string;
+  /**
+   * The heating-and-cooling interaction factor applied to this line: 1.12 means
+   * its heat costs the building another 12% on top of its own electricity, 0.9
+   * that it gives a tenth of it back by displacing electric heat. 1, or absent,
+   * means no correction was applied. See lib/thermal.ts.
+   */
+  hvacFactor?: number;
+  /** That factor in words, for the card. */
+  hvacBasis?: string;
+  /** The price the after-hours waste on this line was costed at, USD/kWh. */
+  wasteRatePerKwh?: number;
+  /** What this line adds to the monthly peak demand charge, USD/yr. See lib/demand.ts. */
+  demandCostPerYear?: number;
+  /** The factor a bill reconciliation brought this line down by, when one did. */
+  reconciledBy?: number;
 }
 
 export interface AnalysisResult {

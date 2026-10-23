@@ -9,6 +9,7 @@
 // Nothing here ever displays a key value; the server only reports booleans.
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { PageHeader } from "./PageHeader";
 import { motion } from "framer-motion";
 import { ScheduleEditor } from "./PlaceEditor";
@@ -373,6 +374,70 @@ export function SettingsPanel() {
                 ))}
               </select>
             </label>
+          </div>
+
+          {/*
+            Two dropdowns that buy more accuracy than anything else on this page.
+            Every watt a device draws leaves it as heat, so in a cooled building its
+            real cost is its electricity plus the cooling that removes the heat, and
+            in an electrically heated one part of that comes back in winter. Nothing
+            is applied until both are answered: a correction nobody can check is
+            worse than no correction.
+          */}
+          <div className="mt-5 grid gap-4 border-t border-line pt-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="mono-label">Heated by</span>
+              <select
+                value={building.heating ?? ""}
+                onChange={(e) =>
+                  updateBuilding(building.id, {
+                    heating: (e.target.value || undefined) as Building["heating"],
+                  })
+                }
+                className="mt-1.5 w-full border border-line bg-surface px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan rounded-xl"
+              >
+                <option value="" className="bg-surface">Not sure</option>
+                <option value="gas" className="bg-surface">Gas or oil</option>
+                <option value="heat-pump" className="bg-surface">Heat pump</option>
+                <option value="electric-resistance" className="bg-surface">Electric baseboard or furnace</option>
+                <option value="none" className="bg-surface">Not heated</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="mono-label">Cooled by</span>
+              <select
+                value={building.cooling ?? ""}
+                onChange={(e) =>
+                  updateBuilding(building.id, {
+                    cooling: (e.target.value || undefined) as Building["cooling"],
+                  })
+                }
+                className="mt-1.5 w-full border border-line bg-surface px-3 py-2 font-mono text-sm text-fog outline-none focus:border-cyan rounded-xl"
+              >
+                <option value="" className="bg-surface">Not sure</option>
+                <option value="electric" className="bg-surface">Air conditioning</option>
+                <option value="none" className="bg-surface">No cooling</option>
+              </select>
+            </label>
+            <p className="text-[0.78rem] leading-relaxed text-dim sm:col-span-2">
+              {building.heating && building.cooling ? (
+                <>
+                  Costs now include what the building spends reacting to each
+                  device&apos;s heat — about a third of a watt of cooling per watt in
+                  summer, and a credit against electric heat in winter.{" "}
+                  <Link href="/methodology#hvac" className="text-cyan underline-offset-4 hover:underline">
+                    How that is worked out
+                  </Link>
+                  .
+                </>
+              ) : (
+                <>
+                  Answer both and every cost gains a term most estimates leave out: a
+                  device&apos;s heat is a load on the building too. Left unanswered, no
+                  heating or cooling correction is applied at all.
+                </>
+              )}
+            </p>
           </div>
 
           <div className="mt-5 border-t border-line pt-4">

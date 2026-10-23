@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CATALOG_BY_ID } from "./devices";
-import { catalogWatts, costRange, estimateUnitWatts } from "./estimate";
+import { SYSTEMATIC_VARIANCE_SHARE, catalogWatts, costRange, estimateUnitWatts } from "./estimate";
 import { effectiveWatts, effectiveWattsRange, scoreObservation } from "./energy";
 import { DEFAULT_SETTINGS } from "./types";
 
@@ -55,6 +55,55 @@ describe("estimateUnitWatts", () => {
   it("reports off as zero", () => {
     expect(estimateUnitWatts(monitor, "off", { userWatts: 20 }).mid).toBe(0);
   });
+
+  // The single biggest correction in this rewrite. The catalog band for overhead
+  // lighting runs 40 W to 250 W, and that is not imprecision - it is two
+  // different objects. The model was already reading which one it was; nothing
+  // downstream of it was listening.
+  it("reads the technology the model named, which the cost engine used to discard", () => {
+    const light = CATALOG_BY_ID["ceiling_light"];
+    const plain = estimateUnitWatts(light, "on");
+    const t12 = estimateUnitWatts(light, "on", { words: "old t12 fluorescent troffers" });
+    const led = estimateUnitWatts(light, "on", { words: "led troffer panels" });
+    expect(plain.basis).toBe("catalog");
+    expect(t12.basis).toBe("tech");
+    expect(t12.techLabel).toBe("T12 fluorescent");
+    expect(led.techLabel).toBe("LED");
+    // The fixtures a photo cannot confuse must not be priced the same.
+    expect(t12.mid / led.mid).toBeGreaterThan(3);
+    expect(t12.mid).toBeGreaterThan(plain.mid);
+    expect(led.mid).toBeLessThan(plain.mid);
+  });
+
+  it("trusts a named technology more than a guessed wattage", () => {
+    // Naming a backlight is a perceptual call a vision model makes well; guessing
+    // a wattage is arithmetic it cannot do. Asked both at once, the technology
+    // should win - which is the opposite of what weighting them equally gives.
+    const tech = estimateUnitWatts(monitor, "on", { words: "crt monitor" });
+    const ai = estimateUnitWatts(monitor, "on", { aiWatts: 75 });
+    const prior = catalogWatts(monitor, "on").mid;
+    expect(tech.mid - prior).toBeGreaterThan(ai.mid - prior);
+  });
+
+  it("reads a screen diagonal through the area law, and ignores a stray number", () => {
+    const sized = estimateUnitWatts(monitor, "on", { words: "32 inch monitor" });
+    const small = estimateUnitWatts(monitor, "on", { words: "22-inch monitor" });
+    expect(sized.mid).toBeGreaterThan(small.mid);
+    expect(sized.techLabel).toBe("32-inch panel");
+    // Power goes with area, so doubling the diagonal is nearer four times the draw.
+    expect(estimateUnitWatts(monitor, "standby", { words: "24 in the corner" }).basis).toBe("catalog");
+    expect(estimateUnitWatts(monitor, "on", { words: "24 in the corner" }).basis).toBe("catalog");
+  });
+
+  it("still takes a measurement over any reading of the photo", () => {
+    const est = estimateUnitWatts(monitor, "on", { words: "crt monitor", aiWatts: 90, userWatts: 22 });
+    expect(est.basis).toBe("measured");
+    expect(est.mid).toBeCloseTo(22, 6);
+  });
+
+  it("does not read a technology into a standby figure, which no photo shows", () => {
+    expect(estimateUnitWatts(monitor, "standby", { words: "crt monitor" }).basis).toBe("catalog");
+  });
 });
 
 describe("scoreObservation with evidence", () => {
@@ -78,9 +127,31 @@ describe("scoreObservation with evidence", () => {
       "a",
       0,
     )!;
-    expect(o.basis).toBe("ai");
+    // "lamp glowing" is not just a phrase for the card: a projector with a lamp
+    // in it is a lamp-based projector, not a laser one, and that is worth nearly
+    // twice as much. The evidence line is now read as well as displayed, so the
+    // basis is the technology rather than the model's watt guess.
+    expect(o.basis).toBe("tech");
+    expect(o.techLabel).toBe("lamp-based");
     expect(o.evidence).toBe("lamp glowing");
     expect(o.confidence).toBe("high");
+  });
+
+  it("reads the evidence phrase, not only the technology field", () => {
+    const laser = scoreObservation(
+      { device: "projector", count: 1, state: "on", categoryId: "projector", evidence: "laser projector, no lamp door" },
+      DEFAULT_SETTINGS,
+      "a",
+      0,
+    )!;
+    const lamp = scoreObservation(
+      { device: "projector", count: 1, state: "on", categoryId: "projector", evidence: "lamp hours warning on screen" },
+      DEFAULT_SETTINGS,
+      "a",
+      0,
+    )!;
+    expect(laser.perUnitWatts).toBeLessThan(lamp.perUnitWatts);
+    expect(laser.techLabel).toBe("laser");
   });
 });
 
@@ -92,7 +163,7 @@ describe("costRange", () => {
   });
 
   it("is zero for nothing", () => {
-    expect(costRange([])).toEqual({ p10: 0, p50: 0, p90: 0, spread: 0 });
+    expect(costRange([])).toEqual({ p10: 0, p50: 0, p90: 0, spread: 0, mean: 0, systematicShare: 0 });
   });
 
   it("brackets the headline and is narrower than summing every extreme", () => {
@@ -114,5 +185,43 @@ describe("costRange", () => {
 
   it("is deterministic for a given seed", () => {
     expect(costRange([line(300), line(80)])).toEqual(costRange([line(300), line(80)]));
+  });
+
+  // The part that was wrong before, and wrong in the dangerous direction.
+  //
+  // A catalog wattage error is not an accident of one unit, it is an error in the
+  // published figure - so it applies to every monitor in the building at once and
+  // cannot average itself away. Sampling the lines independently let it do exactly
+  // that, and reported a band several times narrower than the evidence supports.
+  it("does not let one catalog error average itself away across a class", () => {
+    const many = Array.from({ length: 28 }, () => ({ ...line(100), categoryId: "monitor" }));
+    const correlated = costRange(many);
+    // The same twenty-eight lines, but each its own class: errors now independent.
+    const independent = costRange(many.map((l, i) => ({ ...l, categoryId: `monitor-${i}` })));
+    expect(correlated.spread).toBeGreaterThan(independent.spread * 1.4);
+    // The medians still agree within sampling noise: this widens the band, it
+    // does not move the headline.
+    expect(correlated.p50 / independent.p50).toBeCloseTo(1, 1);
+  });
+
+  it("reports how much of the spread is systematic, and exempts a measurement", () => {
+    const catalogLines = Array.from({ length: 6 }, () => ({ ...line(100), categoryId: "monitor" }));
+    expect(costRange(catalogLines).systematicShare).toBeCloseTo(SYSTEMATIC_VARIANCE_SHARE, 6);
+    const measured = catalogLines.map((l) => ({ ...l, basis: "measured" as const }));
+    expect(costRange(measured).systematicShare).toBe(0);
+  });
+
+  it("shares one schedule error across every line that leans on the schedule", () => {
+    // Lines whose hours the user gave escape the schedule error; lines that take
+    // the building's empty hours on faith all move together when it is wrong, so
+    // a room full of them is no better known than one of them.
+    const guessed = Array.from({ length: 10 }, (_, i) => ({ ...line(100), categoryId: `k${i}` }));
+    const told = guessed.map((l) => ({ ...l, hoursKnown: true }));
+    expect(costRange(guessed).spread).toBeGreaterThan(costRange(told).spread);
+  });
+
+  it("puts the mean above the median, because cost is multiplicative", () => {
+    const r = costRange([{ ...line(1000), categoryId: "monitor" }]);
+    expect(r.mean).toBeGreaterThan(r.p50);
   });
 });

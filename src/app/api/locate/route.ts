@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { REGION_BY_CODE, RATE_TABLE_SOURCE, regionOrDefault, regionRate } from "@/lib/grid";
 import { lookupTariff, type Sector } from "@/lib/tariff";
+import { SCHEDULE_BY_ID, isOccupiedAt, type WeeklySchedule } from "@/lib/schedule";
 import { RULES, checkLimits, clientIp } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
@@ -17,6 +18,12 @@ export const runtime = "nodejs";
  * for the right sector - a home is not on a commercial rate - and the state's
  * 2026 average for that sector when no tariff is found. Carbon is the state
  * grid's. Every step degrades rather than fails.
+ *
+ * ?schedule=school|office|home|... additionally splits the tariff into the price
+ * it charges while the building is open and the price it charges while it is
+ * empty. That split is the single most valuable thing on this route for a
+ * time-of-use customer: everything this app costs as waste happens in the empty
+ * hours, which are the off-peak ones, and an all-hours average overstates it.
  */
 export interface LocateResult {
   place: string | null;
@@ -29,7 +36,10 @@ export interface LocateResult {
   rateQuality: "utility" | "state" | "national";
   co2PerKwh: number;
   utilityName?: string;
-  tariff?: { name: string; since: number | null; fixedMonthly: number | null };
+  tariff?: { name: string; since: number | null; fixedMonthly: number | null; periodSpread?: number };
+  /** The tariff's price while the building is open, and while it is empty. */
+  occupiedRatePerKwh?: number;
+  unoccupiedRatePerKwh?: number;
   /** The state average for the same sector, for comparison. */
   stateRatePerKwh: number;
   /** 5-digit US ZIP of the rounded location, for rebate lookups. */
@@ -45,19 +55,24 @@ export async function GET(req: Request) {
   const lat = Math.round(Number(url.searchParams.get("lat")) * 100) / 100;
   const lon = Math.round(Number(url.searchParams.get("lon")) * 100) / 100;
   const sector: Sector = url.searchParams.get("sector") === "commercial" ? "commercial" : "residential";
+  // A named preset from lib/schedule.ts, so the hour-by-hour split of the tariff
+  // is made against the hours this building is actually open.
+  const scheduleId = url.searchParams.get("schedule") ?? "";
+  const schedule: WeeklySchedule | undefined = SCHEDULE_BY_ID[scheduleId]?.schedule;
   if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
     return NextResponse.json({ error: "Pass lat and lon." }, { status: 400 });
   }
 
   // ~1 km: the same building, and the same utility, whichever corner it was shot from.
-  const key = `${lat.toFixed(2)},${lon.toFixed(2)},${sector}`;
+  const key = `${lat.toFixed(2)},${lon.toFixed(2)},${sector},${schedule ? scheduleId : "-"}`;
   const hit = cache.get(key);
   if (hit) return NextResponse.json(hit);
 
   const verdict = await checkLimits([{ key: "locate:" + clientIp(req), rule: RULES.locateIp, scope: "ip" }]);
   if (!verdict.ok) return NextResponse.json({ error: "Too many lookups; try again shortly." }, { status: 429 });
 
-  const [geo, tariff] = await Promise.all([reverseGeocode(lat, lon), lookupTariff(lat, lon, sector)]);
+  const occupied = schedule ? (weekday: number, hour: number) => isOccupiedAt(schedule, weekday, hour) : undefined;
+  const [geo, tariff] = await Promise.all([reverseGeocode(lat, lon), lookupTariff(lat, lon, sector, occupied)]);
   const state = geo.state && REGION_BY_CODE[geo.state] ? geo.state : null;
   const region = regionOrDefault(state ?? undefined);
   const stateRate = regionRate(region, sector);
@@ -73,7 +88,9 @@ export async function GET(req: Request) {
         rateQuality: "utility",
         co2PerKwh: region.co2PerKwh,
         utilityName: tariff.utility,
-        tariff: { name: tariff.name, since: tariff.since, fixedMonthly: tariff.fixedMonthly },
+        tariff: { name: tariff.name, since: tariff.since, fixedMonthly: tariff.fixedMonthly, ...(tariff.periodSpread !== undefined ? { periodSpread: tariff.periodSpread } : {}) },
+        ...(tariff.occupiedRatePerKwh !== undefined ? { occupiedRatePerKwh: tariff.occupiedRatePerKwh } : {}),
+        ...(tariff.unoccupiedRatePerKwh !== undefined ? { unoccupiedRatePerKwh: tariff.unoccupiedRatePerKwh } : {}),
         stateRatePerKwh: stateRate,
         zip: geo.zip ?? null,
       }

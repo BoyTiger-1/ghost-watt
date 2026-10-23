@@ -4,7 +4,10 @@
 
 import { CATALOG_BY_ID } from "./devices";
 import { estimateUnitWatts } from "./estimate";
+import { evidenceWords } from "./tech";
+import { hvacInteraction } from "./thermal";
 import { typicalUse } from "./usage";
+import { coincidenceFactor, demandCost, demandLines, describeDemand } from "./demand";
 import type {
   AuditSettings,
   DeviceCategory,
@@ -13,6 +16,31 @@ import type {
   DeviceState,
   Offender,
 } from "./types";
+
+// Peak demand lives in its own file now - it needs a coincidence factor per
+// device class, which is a table, not a line of arithmetic - but it is part of
+// the money math, so it is re-exported from here where callers look for it.
+export { coincidenceFactor, demandCost, demandLines, describeDemand };
+
+/**
+ * The price a kilowatt-hour costs in the hours the building is empty.
+ *
+ * On a time-of-use tariff this differs materially from the all-hours average,
+ * in whichever direction the building's opening hours and the tariff's peak
+ * window imply - see lib/tariff.ts, where it is computed. Falls back to the flat
+ * rate when nothing shaped is known, which is every flat tariff and every
+ * building whose price came off a bill.
+ */
+export function wasteRate(settings: AuditSettings): number {
+  const shaped = settings.unoccupiedRatePerKwh;
+  return shaped !== undefined && Number.isFinite(shaped) && shaped > 0 ? shaped : settings.ratePerKwh;
+}
+
+/** The price in the hours the building is open. Falls back to the flat rate. */
+export function occupiedRate(settings: AuditSettings): number {
+  const shaped = settings.occupiedRatePerKwh;
+  return shaped !== undefined && Number.isFinite(shaped) && shaped > 0 ? shaped : settings.ratePerKwh;
+}
 
 /** Effective continuous draw (W) for one unit in its observed state. */
 export function effectiveWatts(cat: DeviceCategory, state: DeviceState): number {
@@ -63,9 +91,11 @@ export function effectiveWattsRange(
 function confidenceFor(
   state: DeviceState,
   cat: DeviceCategory,
-  basis: "measured" | "ai" | "catalog",
+  basis: NonNullable<Offender["basis"]>,
 ): Offender["confidence"] {
   if (basis === "measured") return "high";
+  // A named technology resolves the one thing a generic class is vague about.
+  if (basis === "tech") return "high";
   // Generic catch-all categories (lights, computer) are slightly less certain.
   if (basis === "catalog" && (cat.id === "ceiling_light" || cat.id === "desktop")) return "medium";
   return state === "on" ? "high" : "medium";
@@ -97,25 +127,49 @@ export function scoreObservation(
     afterHoursBasis = "assumed-standby";
   }
 
+  // Everything the engine said about this unit, for the technology and screen-size
+  // readers in lib/tech.ts. A photo that shows a T8 tube or a 65-inch panel has
+  // already answered the question the catalog band is vague about, and the old
+  // version of this file read that field only to print it on the card.
+  //
+  // The category's own name is deliberately not evidence. It names the class, so
+  // it cannot say which member of the class this is - and two of them read as a
+  // technology if you let them: "Refrigerator / mini-fridge" contains
+  // "mini-fridge" and "Copier / large MFP" contains "MFP". A device the user
+  // re-identified carries the catalog label as its description (lib/capture.ts),
+  // so without this guard every full-size fridge in the app would quietly be
+  // priced as the little one under the desk.
+  const described = obs.device && obs.device.trim().toLowerCase() !== cat.label.toLowerCase() ? obs.device : undefined;
+  const words = evidenceWords([obs.tech, obs.evidence, described]);
+
   // A user's wattage is the draw in the observed state; it only applies after hours
   // if the after-hours state is that same state.
   const userWatts = afterHoursState === obs.state ? obs.userWatts : undefined;
-  const unit = estimateUnitWatts(cat, afterHoursState, { aiWatts: obs.wattsHint, userWatts });
+  const unit = estimateUnitWatts(cat, afterHoursState, { aiWatts: obs.wattsHint, userWatts, words });
   const perUnitWatts = unit.mid;
   const totalWatts = perUnitWatts * count;
   // Seen on, off at night, draws nothing in standby: nothing to cost after hours.
   // The device is still reported (typical use is real) with zero waste.
   const standbyUnit = estimateUnitWatts(cat, "standby", {});
 
+  // Waste is billed in the empty hours, which on a time-of-use tariff are the
+  // cheap ones; normal use is billed mostly in the expensive ones. Both fall back
+  // to the flat rate, so a building with one price gets exactly what it always got.
+  const emptyRate = wasteRate(settings);
+  const openRate = occupiedRate(settings);
+  // Its heat is a load on the building too - or a gift to it in a heating season.
+  const interaction = hvacInteraction(cat, settings);
+  const hvac = interaction.factor;
+
   const hoursKnown = obs.hoursPerYear !== undefined && Number.isFinite(obs.hoursPerYear) && obs.hoursPerYear >= 0;
   const hours = hoursKnown ? Math.min(8760, obs.hoursPerYear!) : settings.unoccupiedHoursPerYear;
   const kwhPerYear = (totalWatts / 1000) * hours;
-  const standbyCostPerYear = ((standbyUnit.mid * count) / 1000) * settings.unoccupiedHoursPerYear * settings.ratePerKwh;
-  const costPerYear = kwhPerYear * settings.ratePerKwh;
-  const co2KgPerYear = kwhPerYear * settings.co2PerKwh;
+  const standbyCostPerYear = ((standbyUnit.mid * count) / 1000) * settings.unoccupiedHoursPerYear * emptyRate * hvac;
+  const costPerYear = kwhPerYear * emptyRate * hvac;
+  const co2KgPerYear = kwhPerYear * settings.co2PerKwh * hvac;
 
-  const costLowPerYear = ((unit.low * count) / 1000) * hours * settings.ratePerKwh;
-  const costHighPerYear = ((unit.high * count) / 1000) * hours * settings.ratePerKwh;
+  const costLowPerYear = ((unit.low * count) / 1000) * hours * emptyRate * hvac;
+  const costHighPerYear = ((unit.high * count) / 1000) * hours * emptyRate * hvac;
 
   const annualSavings = costPerYear * cat.action.savingsFraction;
   const fixCost = cat.action.cost;
@@ -124,7 +178,11 @@ export function scoreObservation(
 
   // Typical use, for contrast with after-hours waste: hours in use where it is,
   // standby the rest. The user's own hours win when given.
-  const active = estimateUnitWatts(cat, "on", { aiWatts: obs.wattsHint, userWatts: obs.state === "on" ? obs.userWatts : undefined }).mid;
+  const active = estimateUnitWatts(cat, "on", {
+    aiWatts: obs.wattsHint,
+    userWatts: obs.state === "on" ? obs.userWatts : undefined,
+    words,
+  }).mid;
   const typical = typicalUse(
     cat,
     active,
@@ -137,11 +195,21 @@ export function scoreObservation(
   // and its after-hours waste is honestly the standby figure.
   if (obs.state === "off" && !cat.thermostatic) return null;
   const typicalHoursPerDay = hoursKnown && !cat.thermostatic ? hours / 365 : typical.hoursPerDay;
-  const typicalKwhPerUnit = hoursKnown && !cat.thermostatic
-    ? (hours * active + (8760 - hours) * cat.wattsStandby) / 1000
-    : typical.kwhPerYear;
+  // A thermostatic device cycles for all 8,760 of them, which is what a 24 h/day
+  // figure already comes to; everything else draws standby for the rest.
+  const activeHours = Math.max(0, Math.min(8760, typicalHoursPerDay * 365));
+  const standbyHours = cat.thermostatic ? 0 : Math.max(0, 8760 - activeHours);
+  const typicalKwhPerUnit = (activeHours * active + standbyHours * cat.wattsStandby) / 1000;
   const typicalKwhPerYear = typicalKwhPerUnit * count;
-  const typicalCostPerYear = typicalKwhPerYear * settings.ratePerKwh;
+  // Priced at the price each part is billed at. In-use hours are occupied hours,
+  // so they pay the open-hours price; standby happens when nobody is there, so it
+  // pays the empty-hours one. A device that cycles around the clock pays the
+  // time-weighted blend. All three collapse to one figure on a flat tariff.
+  const emptyShare = Math.max(0, Math.min(1, settings.unoccupiedHoursPerYear / 8760));
+  const blendedRate = openRate * (1 - emptyShare) + emptyRate * emptyShare;
+  const activeRate = cat.thermostatic || hoursKnown ? blendedRate : openRate;
+  const typicalCostPerYear =
+    ((activeHours * active * activeRate + standbyHours * cat.wattsStandby * emptyRate) / 1000) * count * hvac;
   // Typical use already pays for standby through the empty hours; leaving a
   // device on adds only the draw above standby on top of it.
   const annualCostPerYear = thermostaticTotal(cat, costPerYear, typicalCostPerYear) ?? typicalCostPerYear + Math.max(0, costPerYear - standbyCostPerYear);
@@ -181,6 +249,9 @@ export function scoreObservation(
     annualCostPerYear,
     usageBasis: hoursKnown && !cat.thermostatic ? "Your hours" : typical.basis,
     usageSource: hoursKnown && !cat.thermostatic ? "user" : typical.source,
+    wasteRatePerKwh: emptyRate,
+    ...(unit.techLabel ? { techLabel: unit.techLabel } : {}),
+    ...(interaction.known ? { hvacFactor: hvac, hvacBasis: interaction.basis } : {}),
     ...(obs.tech ? { tech: obs.tech } : {}),
     ...(obs.evidence ? { evidence: obs.evidence } : {}),
     ...(obs.boxes?.length ? { boxes: obs.boxes } : {}),
@@ -257,9 +328,16 @@ export interface AuditTotals {
   topOffender: Offender | null;
   /** Annual cost of the lines left out of the total because nobody could confirm them. */
   unverifiedCost: number;
+  /**
+   * Peak-demand charges attributable to what was found, USD/yr. Zero unless the
+   * building is on a tariff with a demand charge, which a home never is. Kept
+   * apart from costPerYear because it is a different line on the bill and a fix
+   * that saves kilowatt-hours overnight does not touch it.
+   */
+  demandCostPerYear: number;
 }
 
-export function aggregate(all: Offender[]): AuditTotals {
+export function aggregate(all: Offender[], settings?: AuditSettings): AuditTotals {
   // Unverified lines are shown, not summed: a total that quietly included a
   // device nobody could confirm would be the exact failure this app exists to avoid.
   const offenders = counted(all);
@@ -292,7 +370,8 @@ export function aggregate(all: Offender[]): AuditTotals {
   const topOffender = offenders.length
     ? offenders.reduce((a, b) => (b.costPerYear > a.costPerYear ? b : a))
     : null;
-  return { ...totals, topOffender, unverifiedCost };
+  const demandCostPerYear = settings ? demandCost(offenders, settings) : 0;
+  return { ...totals, topOffender, unverifiedCost, demandCostPerYear };
 }
 
 // ---- breakdowns ---------------------------------------------------------
@@ -354,22 +433,11 @@ export function concentration(offenders: Offender[], topN = 3): number {
   return top / total;
 }
 
-/**
- * Peak-demand cost, for buildings on a commercial tariff with a demand charge.
- *
- * Most schools pay for their highest 15-minute draw of the month as well as for
- * energy, and that line item is invisible on a per-kWh estimate. Loads left running
- * during the day contribute to it; loads left running overnight usually do not,
- * so this is deliberately conservative and only counts non-thermostatic "on" loads.
- */
-export function demandCost(offenders: Offender[], settings: AuditSettings): number {
-  const rate = settings.demandChargePerKw ?? 0;
-  if (rate <= 0) return 0;
-  const contributingWatts = offenders
-    .filter((o) => o.state === "on")
-    .reduce((s, o) => s + o.totalWatts, 0);
-  return (contributingWatts / 1000) * rate * 12;
-}
+// Peak-demand cost now lives in lib/demand.ts, re-exported at the top of this
+// file. It used to live here, and it charged the building for every watt it found
+// as though the projector, the kiln and the rooftop unit all peaked in the same
+// quarter of an hour. They do not, and a demand charge computed that way can
+// overstate itself threefold.
 
 // ---- formatting helpers -------------------------------------------------
 

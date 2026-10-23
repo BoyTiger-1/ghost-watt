@@ -24,7 +24,7 @@
 import { listActions, rankActions, type ActionItem } from "./actions";
 import { counted } from "./energy";
 import { SOURCE_BY_ID, type Source } from "./sources";
-import type { Offender } from "./types";
+import type { AuditSettings, Offender } from "./types";
 import type { SavedAudit, Building } from "./storage";
 
 /** One device category, merged across every area it was seen in. */
@@ -158,14 +158,25 @@ function mergeItems(offenders: Offender[]): BriefItem[] {
 }
 
 /** The documents behind this audit's figures, in the order a reader would want them. */
-function sourcesFor(offenders: Offender[], building: Building | undefined): Source[] {
+function sourcesFor(offenders: Offender[], building: Building | undefined, settings: AuditSettings): Source[] {
   const ids: string[] = [];
   const add = (id: string | undefined) => {
     if (id && SOURCE_BY_ID[id] && !ids.includes(id)) ids.push(id);
   };
   add("catalog");
+  // Only cited when something in this audit actually leaned on it, so the list a
+  // reader follows is the list of documents behind these numbers and not a
+  // bibliography of everything the app can do.
+  if (offenders.some((o) => o.basis === "tech")) add("tech-table");
   if (!building?.bill) add("eia-table4-2024");
+  // Cited only when the empty hours were actually priced apart from the rest of
+  // the year, which needs a looked-up tariff whose sheet varies by hour.
+  if (offenders.some((o) => o.wasteRatePerKwh !== undefined && Math.abs(o.wasteRatePerKwh - settings.ratePerKwh) > 1e-6)) add("tou-shaping");
   add("egrid");
+  if (offenders.some((o) => o.hvacFactor !== undefined && o.hvacFactor !== 1)) {
+    add("hvac-interaction");
+    add("degree-days");
+  }
   if (offenders.some((o) => o.afterHoursState === "standby" || o.state === "standby")) add("lbnl-standby");
   if (offenders.some((o) => o.categoryId === "microwave")) add("doe-microwave-standby");
   for (const o of offenders) add(o.usageSource);
@@ -308,7 +319,7 @@ export function buildBrief(audit: SavedAudit, building?: Building): Brief {
     typicalCost: offenders.reduce((s, o) => s + (o.typicalCostPerYear ?? 0), 0),
     co2KgPerYear: offenders.reduce((s, o) => s + o.co2KgPerYear, 0),
     topActions,
-    sources: sourcesFor(offenders, building),
+    sources: sourcesFor(offenders, building, audit.settings),
     unverifiedLeftOut: audit.offenders.length - offenders.length,
 
     free,

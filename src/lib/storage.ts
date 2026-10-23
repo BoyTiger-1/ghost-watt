@@ -11,7 +11,7 @@
 // landing page literally true. The schema is versioned so a future migration has
 // something to migrate from.
 
-import type { AnalysisMode, AuditSettings, Offender } from "./types";
+import type { AnalysisMode, AuditSettings, CoolingKind, HeatingFuel, Offender } from "./types";
 import type { WeeklySchedule } from "./schedule";
 import type { UtilityBill } from "./calibration";
 import type { Campus } from "./campus";
@@ -94,6 +94,19 @@ export interface Building {
    * averages and says so.
    */
   bill?: UtilityBill;
+  /**
+   * How the building is heated and cooled.
+   *
+   * Two dropdowns, and they buy more accuracy than any other pair of answers in
+   * the app. Every watt a device draws comes out of it as heat, so in a cooled
+   * building its cost is its electricity plus the cooling that removes the heat,
+   * and in an electrically heated one part of that cost comes back in winter. The
+   * correction runs from about -20% to +20% and lib/thermal.ts will not apply it
+   * at all until both of these are answered, because a figure nobody can check is
+   * worse than no figure.
+   */
+  heating?: HeatingFuel;
+  cooling?: CoolingKind;
   /** The 3D school: real outline, floor plans and rooms drawn on them (lib/campus.ts). */
   campus?: Campus;
 }
@@ -112,7 +125,7 @@ export interface CalibrationRecord {
   label: string;
   /** The app's per-unit estimate before the reading, W, and where it came from. */
   estimatedWatts: number;
-  estimateBasis: "ai" | "catalog";
+  estimateBasis: "ai" | "tech" | "catalog";
   /** What the meter said, W per unit. */
   measuredWatts: number;
   /** ISO timestamp. */

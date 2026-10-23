@@ -16,6 +16,7 @@
 // would actually see.
 
 import { CATALOG_BY_ID } from "./devices";
+import { evidenceWords, readTech } from "./tech";
 import type { AuditSettings, Offender } from "./types";
 
 export type Grade = "A" | "B" | "C" | "D" | "F";
@@ -28,8 +29,6 @@ interface Benchmark {
   /** What to buy, and roughly what one costs installed, USD. 0: not a buy-a-new-one fix. */
   replaceWith: string;
   replaceCost: number;
-  /** Technology words the vision model may report, and the draw they imply. */
-  tech?: [RegExp, number, string][];
   note?: string;
 }
 
@@ -39,29 +38,26 @@ const BENCHMARKS: Record<string, Benchmark> = {
     efficientLabel: "an LED bulb (~9 W)",
     replaceWith: "LED bulbs or retrofit downlights",
     replaceCost: 6,
-    tech: [[/incandescent/i, 60, "incandescent"], [/halogen/i, 50, "halogen"], [/\bcfl\b|compact fluor/i, 14, "CFL"], [/\bled\b/i, 9, "LED"]],
   },
   ceiling_light: {
     efficientWatts: 35,
     efficientLabel: "an LED troffer or panel (~35 W)",
     replaceWith: "LED troffer retrofit kits",
     replaceCost: 90,
-    tech: [[/\bt-?12\b/i, 150, "T12 fluorescent"], [/\bt-?8\b/i, 110, "T8 fluorescent"], [/\bt-?5\b/i, 80, "T5 fluorescent"], [/fluor/i, 110, "fluorescent"], [/incandescent|halogen/i, 150, "incandescent"], [/\bled\b/i, 35, "LED"]],
   },
-  exterior_light: { efficientWatts: 70, efficientLabel: "an LED area light (~70 W)", replaceWith: "LED area lights with photocells", replaceCost: 250, tech: [[/sodium|metal halide|\bhid\b/i, 250, "HID"], [/\bled\b/i, 70, "LED"]] },
-  exit_sign: { efficientWatts: 2, efficientLabel: "an LED exit sign (~2 W)", replaceWith: "LED exit signs", replaceCost: 30, tech: [[/incandescent/i, 40, "incandescent"], [/\bled\b/i, 2, "LED"]] },
+  exterior_light: { efficientWatts: 70, efficientLabel: "an LED area light (~70 W)", replaceWith: "LED area lights with photocells", replaceCost: 250 },
+  exit_sign: { efficientWatts: 2, efficientLabel: "an LED exit sign (~2 W)", replaceWith: "LED exit signs", replaceCost: 30 },
   stage_light: { efficientWatts: 150, efficientLabel: "an LED PAR (~150 W)", replaceWith: "LED stage fixtures", replaceCost: 300 },
   monitor: {
     efficientWatts: 16,
     efficientLabel: "an ENERGY STAR 24-inch LED monitor (~16 W)",
     replaceWith: "ENERGY STAR LED monitors",
     replaceCost: 150,
-    tech: [[/\bcrt\b/i, 80, "CRT"], [/ccfl/i, 40, "CCFL-backlit LCD"], [/\bled\b/i, 18, "LED"]],
   },
   desktop: { efficientWatts: 35, efficientLabel: "an efficient desktop or mini PC (~35 W)", replaceWith: "a mini PC or laptop at the next refresh", replaceCost: 500 },
   laptop: { efficientWatts: 20, efficientLabel: "a typical laptop (~20 W)", replaceWith: "", replaceCost: 0, note: "Laptops are already the efficient way to compute." },
-  tv: { efficientWatts: 55, efficientLabel: "an ENERGY STAR 50-inch LED TV (~55 W)", replaceWith: "an ENERGY STAR LED TV", replaceCost: 400, tech: [[/plasma/i, 300, "plasma"], [/\bcrt\b/i, 120, "CRT"], [/\bled\b|oled/i, 60, "LED"]] },
-  projector: { efficientWatts: 160, efficientLabel: "a laser projector (~160 W)", replaceWith: "a laser projector when the lamp dies", replaceCost: 900, tech: [[/lamp/i, 280, "lamp-based"], [/laser/i, 160, "laser"]] },
+  tv: { efficientWatts: 55, efficientLabel: "an ENERGY STAR 50-inch LED TV (~55 W)", replaceWith: "an ENERGY STAR LED TV", replaceCost: 400 },
+  projector: { efficientWatts: 160, efficientLabel: "a laser projector (~160 W)", replaceWith: "a laser projector when the lamp dies", replaceCost: 900 },
   smartboard: { efficientWatts: 120, efficientLabel: "a current LED interactive panel (~120 W)", replaceWith: "", replaceCost: 0 },
   space_heater: { efficientWatts: 1500, efficientLabel: "any resistance heater", replaceWith: "", replaceCost: 0, note: "Every resistance heater turns a watt into the same heat; a heat pump gives about three times as much per watt." },
   vending_cold: { efficientWatts: 130, efficientLabel: "an ENERGY STAR machine with a controller (~130 W average)", replaceWith: "a vending-machine occupancy controller", replaceCost: 180 },
@@ -105,16 +101,21 @@ export function assessEfficiency(o: Offender, settings: Pick<AuditSettings, "rat
   let tech: string | null = null;
   let assumed = o.basis === "catalog" || o.basis === undefined;
 
-  // A technology the model named overrides a catalog-typical guess.
-  const said = [o.tech, o.evidence, o.label].filter(Boolean).join(" ");
-  for (const [re, w, name] of b?.tech ?? []) {
-    if (re.test(said)) {
-      tech = name;
-      if (assumed) {
-        active = w * (cat?.thermostatic ? cat.dutyCycle : 1);
-        assumed = false;
-      }
-      break;
+  // A technology the model named overrides a catalog-typical guess. The table it
+  // is read from is the same one the cost engine uses (lib/tech.ts), so the grade
+  // on this card and the dollars on it can never be based on different wattages -
+  // which they were, when this file had a technology table of its own and
+  // lib/energy.ts had none.
+  // The label is left out on purpose: it is the class's own name, so it says
+  // nothing about which member of the class this is, and two of them read as a
+  // technology if you let them ("Refrigerator / mini-fridge", "Copier / large
+  // MFP"). techLabel is the reading the cost engine already settled on.
+  const reading = readTech(o.categoryId, evidenceWords([o.techLabel, o.tech, o.evidence]));
+  if (reading) {
+    tech = reading.label;
+    if (assumed) {
+      active = reading.watts * (cat?.thermostatic ? cat.dutyCycle : 1);
+      assumed = false;
     }
   }
 

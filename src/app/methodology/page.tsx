@@ -20,6 +20,10 @@ export const metadata: Metadata = {
 const TOC = [
   { id: "split", label: "Two jobs, kept apart" },
   { id: "formula", label: "The formula" },
+  { id: "tech", label: "Which unit it is" },
+  { id: "hvac", label: "The watt you pay for twice" },
+  { id: "when", label: "The price of the empty hours" },
+  { id: "bill", label: "Answering to the meter" },
   { id: "defaults", label: "The defaults" },
   { id: "table", label: "The wattage table" },
   { id: "rooms", label: "Hours by room type" },
@@ -101,7 +105,120 @@ export default function MethodologyPage() {
                 Waste only counts during the hours the building is empty, so every figure scales with
                 one assumption you can see and change: <span className="text-fog">empty hours per year</span>.
               </li>
+              <li>
+                Four terms refine that figure when — and only when — something is known that supports
+                them: which unit it is, what its heat does to the building, what a kilowatt-hour costs
+                in the empty hours specifically, and whether the whole thing agrees with a meter
+                reading. Each is the identity until its input exists, so a scan with nothing but a
+                photo gets exactly the arithmetic above.
+              </li>
             </ul>
+          </Section>
+
+          {/* which unit it is */}
+          <Section id="tech" title="Which unit it is">
+            <p className="mt-3 text-[1rem] leading-relaxed text-mist">
+              The band for overhead lighting runs 40 W to 250 W. That is not imprecision — it is two
+              different objects. A four-lamp T12 troffer on a magnetic ballast draws about 180 W; the
+              LED panel that replaced it draws about 40 W. Same ceiling, same photograph, four and a
+              half times the money.
+            </p>
+            <p className="mt-4 text-[1rem] leading-relaxed text-mist">
+              A vision model answers that question well, because “is that a fluorescent tube or an LED
+              panel?” is about how a thing looks. It answers{" "}
+              <span className="text-fog">“how many watts is it?”</span> badly, because that is
+              arithmetic it has no way to do. So the two readings are weighted differently: a named
+              technology counts for more than a named wattage, and a stated screen diagonal goes
+              through the area law that display power actually follows — a 65-inch panel is four times
+              a 32-inch one, not twice.
+            </p>
+            <p className="mt-4 text-[0.9rem] leading-relaxed text-dim">
+              Every reading is blended with the published band rather than replacing it, so one
+              misread moves a figure part of the way and never all of it. A plug-in meter reading
+              replaces the lot. The same table grades the device and prices it, so the efficiency
+              verdict on a card and the dollars above it can never rest on different wattages.
+            </p>
+          </Section>
+
+          {/* hvac interaction */}
+          <Section id="hvac" title="The watt you pay for twice">
+            <p className="mt-3 text-[1rem] leading-relaxed text-mist">
+              A 30 W monitor left on overnight does not cost 30 W. Every watt a device draws comes out
+              of it as heat, and in a building that is being cooled that heat is a load the air
+              conditioner has to remove — about another third of a watt per watt, at the efficiency a
+              typical packaged unit actually achieves. In a building that is being heated, the same
+              heat is heat the system did not have to make, so part of it comes back.
+            </p>
+            <p className="mt-4 text-[1rem] leading-relaxed text-mist">
+              How much of each depends on the climate, which is why this needs the building&apos;s
+              state and how it is heated and cooled before it will do anything at all. Without both,
+              the factor is exactly 1: a correction nobody can check is worse than no correction.
+            </p>
+            <ul className="mt-6 space-y-2 text-[0.95rem] leading-relaxed text-mist">
+              <li>
+                Gas heat earns <span className="text-fog">no credit</span>. The saving there is therms,
+                which is real and is not something this app bills for.
+              </li>
+              <li>
+                The heating credit is <span className="text-fog">halved</span> on purpose. The cooling
+                penalty is unavoidable — the heat has to go somewhere — while a credit needs the heat
+                to arrive where somebody wanted it, and the device being costed is one nobody is using
+                in a room nobody is in, in a building that has dropped to a setback temperature.
+              </li>
+              <li>
+                Nothing is applied to the heating and cooling plant itself: an air conditioner&apos;s
+                consumption already <span className="text-fog">is</span> the conditioning. Nothing is
+                applied to a device whose heat goes outdoors either — a car-park light, an exhaust fan.
+              </li>
+            </ul>
+          </Section>
+
+          {/* time of use */}
+          <Section id="when" title="The price of the empty hours">
+            <p className="mt-3 text-[1rem] leading-relaxed text-mist">
+              Everything on this site is about the hours a building is empty, and on a time-of-use
+              tariff those hours are not billed at the average of the year. Published commercial
+              on-peak to off-peak ratios run from about 1.3:1 to 3:1, so the gap is worth tens of
+              percent on the one figure the app asks anyone to act on.
+            </p>
+            <p className="mt-4 text-[1rem] leading-relaxed text-mist">
+              Which way it goes is not something you can assume, and that is the reason it is
+              computed. A school that shuts at four o&apos;clock is{" "}
+              <span className="text-fog">closed through an evening peak</span> — so its overnight waste
+              costs about a tenth <em>more</em> than the average said — and{" "}
+              <span className="text-fog">open through a midday one</span>, where the same waste costs
+              about a fifth less. A tariff sheet carries a price for every hour of every month; the
+              schedule says which of those hours the building is open; crossing the two is the whole
+              calculation.
+            </p>
+            <p className="mt-4 text-[0.9rem] leading-relaxed text-dim">
+              Only available when a tariff was looked up from the building&apos;s location. A price
+              typed in, or taken off a bill, is one blended figure for the whole year and is not split
+              — inventing a peak and off-peak share for it would be making a number up.
+            </p>
+          </Section>
+
+          {/* bill reconciliation */}
+          <Section id="bill" title="Answering to the meter">
+            <p className="mt-3 text-[1rem] leading-relaxed text-mist">
+              Everything above is a bottom-up estimate. Count the devices, look up what they draw,
+              multiply by hours and a price — every step defensible, every step an assumption, and the
+              assumptions multiply. A utility bill is the only hard measurement in the chain: the
+              building stating, with no modelling in between, how much electricity it actually used.
+            </p>
+            <p className="mt-4 text-[1rem] leading-relaxed text-mist">
+              So when a bill is entered, the audit answers to it. If the lines add up to more plug and
+              lighting energy than the meter leaves room for, the estimate is wrong and{" "}
+              <span className="text-fog">comes down</span>. If it fits, nothing moves — and the fit is
+              reported, because it is the only independent check the model could have failed.
+            </p>
+            <p className="mt-4 text-[1rem] leading-relaxed text-mist">
+              The correction is not spread evenly. Each line gives up ground in proportion to its own
+              size times its own uncertainty, so a wide catalog guess absorbs most of it and a line
+              somebody measured with a plug-in meter moves by about a thousandth as much. Squeezing
+              both equally would take the one honest number in the audit and make it wrong to make a
+              guess look better.
+            </p>
           </Section>
 
           {/* defaults */}

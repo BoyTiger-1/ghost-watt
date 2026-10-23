@@ -16,6 +16,7 @@
 import { motion } from "framer-motion";
 import { calibrate, euiVerdict, type UtilityBill } from "@/lib/calibration";
 import { BUILDING_TYPE_BY_ID, BUILDING_TYPES } from "@/lib/benchmark";
+import type { Reconciliation } from "@/lib/reconcile";
 
 export function BillCalibration({
   bill,
@@ -23,12 +24,21 @@ export function BillCalibration({
   assumedRate,
   floorAreaSqFt,
   typeId,
+  reconciliation,
 }: {
   bill?: UtilityBill;
   auditKwhPerYear: number;
   assumedRate: number;
   floorAreaSqFt: number;
   typeId: string;
+  /**
+   * What the meter did to the estimate, when it did anything.
+   *
+   * The panel above this line reports a verdict; this reports a consequence. The
+   * difference matters: a check that never changes a number is a disclaimer, and
+   * a check that does is a correction.
+   */
+  reconciliation?: Reconciliation | null;
 }) {
   // No bill entered: ask for it once, and say precisely what it buys.
   if (!bill) {
@@ -125,6 +135,40 @@ export function BillCalibration({
         >
           <p className="text-[0.86rem] leading-relaxed text-mist">{result.message}</p>
         </motion.div>
+
+        {reconciliation && (
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.08 }}
+            className="mt-4 border-l-2 px-4 py-3"
+            style={{
+              borderColor:
+                reconciliation.verdict === "corrected" ? "var(--color-amber)" : "var(--color-lime)",
+              background: "color-mix(in srgb, var(--color-surface2) 60%, transparent)",
+            }}
+          >
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <span className="mono-label">reconciled against the meter</span>
+              <span
+                className="font-mono text-[0.7rem] tabular-nums"
+                style={{
+                  color:
+                    reconciliation.verdict === "corrected"
+                      ? "var(--color-amber)"
+                      : "var(--color-lime)",
+                }}
+              >
+                {reconciliation.verdict === "corrected"
+                  ? `estimates cut ${Math.round((1 - reconciliation.factor) * 100)}%`
+                  : "nothing adjusted"}
+              </span>
+            </div>
+            <p className="mt-1.5 text-[0.86rem] leading-relaxed text-mist">
+              {reconciliation.message}
+            </p>
+          </motion.div>
+        )}
 
         {result.eui !== null && verdict && (
           <div className="mt-4">

@@ -258,7 +258,25 @@ function Details({ line, onAdjust }: { line: DeviceLine; onAdjust: (a: DeviceAdj
           <Num label="Cost range" value={o.costPerYear > 0 ? `${fmtMoney(o.costLowPerYear)} to ${fmtMoney(o.costHighPerYear)}` : "$0"} />
           <Num label="How we know the power" value={basisWords(o)} />
           <Num label="How clear it was" value={confidenceWords(o.confidence)} />
+          {/* The term nobody expects: its heat is a load on the building too. */}
+          {o.hvacFactor !== undefined && o.hvacFactor !== 1 && (
+            <Num
+              label="Heating and cooling"
+              value={`${o.hvacFactor > 1 ? "+" : ""}${Math.round((o.hvacFactor - 1) * 100)}% for its heat`}
+            />
+          )}
+          {o.reconciledBy !== undefined && o.reconciledBy !== 1 && (
+            <Num
+              label="After checking the bill"
+              value={`brought down ${Math.round((1 - o.reconciledBy) * 100)}%`}
+            />
+          )}
           {o.evidence && <Num label="What the AI saw" value={`“${o.evidence}”`} />}
+          {o.hvacBasis && o.hvacFactor !== undefined && o.hvacFactor !== 1 && (
+            <div className="col-span-2 sm:col-span-4 text-[0.76rem] leading-relaxed text-dim">
+              {o.hvacBasis}
+            </div>
+          )}
         </dl>
       )}
 
