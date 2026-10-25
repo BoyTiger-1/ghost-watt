@@ -20,6 +20,7 @@
 //
 // One hosted key is enough; more than one makes each a fallback for the last.
 
+import { keysFromEnv, poolFor } from "./keypool";
 import { describeImage as describeViaOllama, probeOllama, buildVisionPrompt, VISION_MODEL, VISION_SCHEMA } from "./ollama";
 import { FULL_FRAME, type Frame } from "./boxes";
 
@@ -373,9 +374,9 @@ export function thinImages<T>(images: T[], n: number): T[] {
   return out;
 }
 
+/** The provider's first key: enough to say it is configured. Calls take theirs from the pool. */
 function keyFor(p: HostedProvider): string | undefined {
-  const v = process.env[p.env];
-  return v && v.trim() ? v.trim() : undefined;
+  return keysFromEnv(p.env)[0];
 }
 
 function modelFor(p: HostedProvider): string {
@@ -549,7 +550,7 @@ function shortError(msg: string): string {
 async function callWithRetry(
   p: HostedProvider,
   img: DecodedImage[],
-  key: string,
+  fallbackKey: string,
   model: string,
   prompt: string,
   schema: object,
@@ -557,17 +558,32 @@ async function callWithRetry(
   opts: CallOptions = {},
 ): Promise<string> {
   const started = Date.now();
-  try {
-    return await withBudget(p.call(img, key, model, prompt, schema, opts), budgetMs, p.label);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "";
-    if (!/HTTP (429|5\d\d)/.test(msg)) throw err;
-    const wait = retryDelayMs(msg);
-    const left = budgetMs - (Date.now() - started) - wait;
-    // No time left in this provider's share for a retry: let the next provider have it.
-    if (left < 4000) throw err;
-    await new Promise((r) => setTimeout(r, wait));
-    return await withBudget(p.call(img, key, model, prompt, schema, opts), left, p.label);
+  // With several keys, a rate-limited one rests and the next key goes at once.
+  const pool = poolFor(p.env);
+  let key = pool.next() ?? fallbackKey;
+  for (let tries = 0; ; tries++) {
+    const left = budgetMs - (Date.now() - started);
+    try {
+      return await withBudget(p.call(img, key, model, prompt, schema, opts), left, p.label);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      const limited = /HTTP 429/.test(msg);
+      const refused = /HTTP (401|403)/.test(msg);
+      if (limited) pool.rest(key, retryDelayMs(msg));
+      if (refused) pool.refuse(key);
+      if ((limited || refused) && tries < pool.size - 1 && pool.hasFree(Date.now(), key)) {
+        key = pool.next(Date.now(), key) ?? key;
+        continue;
+      }
+      if (!/HTTP (429|5\d\d)/.test(msg)) throw err;
+      // Every key is resting (or the server hiccuped): one wait, as long as the provider asked.
+      const wait = retryDelayMs(msg);
+      const after = budgetMs - (Date.now() - started) - wait;
+      // No time left in this provider's share for a retry: let the next provider have it.
+      if (after < 4000) throw err;
+      await new Promise((r) => setTimeout(r, wait));
+      return await withBudget(p.call(img, pool.next() ?? key, model, prompt, schema, opts), after, p.label);
+    }
   }
 }
 

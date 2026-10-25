@@ -58,9 +58,19 @@ export function panelOf(cls: string, b: Box): Box {
     : [b[0] + w * 0.16, b[1] + h * 0.12, b[2] - w * 0.16, b[1] + h * 0.66];
 }
 
-/** Lit fixtures: a compact one is a downlight or pendant, a long one a tube or troffer bank. */
-const LIGHT_CATEGORY = { spot: "downlight", panel: "ceiling_light" } as const;
-const LIGHT_LABEL = { spot: "lamp", panel: "light panel" } as const;
+/**
+ * What a lit fixture is, from its shape and where it sits in the frame.
+ *
+ * Every compact light used to be called a lamp, so a ceiling of downlights read
+ * as a row of lamps. A phone held at eye level sees the ceiling in the upper half
+ * of the frame (a corridor's far fixtures converge toward the middle), and a desk
+ * or floor lamp below it. Long and bright is a tube or troffer, wherever it is.
+ */
+export function lightKind(kind: LightBlob["kind"], box: Box): { categoryId: string; label: string } {
+  if (kind === "panel") return { categoryId: "ceiling_light", label: "overhead light" };
+  const cy = (box[1] + box[3]) / 2;
+  return cy < 0.5 ? { categoryId: "downlight", label: "ceiling light" } : { categoryId: "x_desk_lamp", label: "lamp" };
+}
 
 /** A small copy of the frame: greyscale always, colour when the caller has it. */
 export interface FramePixels {
@@ -93,8 +103,10 @@ export function readItems(
   };
 
   for (const [i, d] of dets.entries()) {
-    const c = COCO_MAP[d.cls];
-    if (!c) continue;
+    const coco = COCO_MAP[d.cls];
+    if (!coco) continue;
+    // A trained detector's "lamp" is placed like any lit fixture: high in the frame it is on the ceiling.
+    const c = d.cls === "lamp" ? { ...coco, ...lightKind("spot", d.box) } : coco;
     let state: DeviceState | null = null;
     let why: string | undefined;
     let watts = 0;
@@ -134,13 +146,13 @@ export function readItems(
     const lx = (b.box[0] + b.box[2]) / 2;
     const ly = (b.box[1] + b.box[3]) / 2;
     if (glowing.some((g) => lx >= g[0] && lx <= g[2] && ly >= g[1] && ly <= g[3])) continue;
-    const categoryId = LIGHT_CATEGORY[b.kind];
+    const { categoryId, label } = lightKind(b.kind, b.box);
     const light = CATALOG_BY_ID[categoryId];
     const watts = light ? estimateUnitWatts(light, "on").mid : 0;
     items.push({
       key: `l${i}`,
       kind: "light",
-      label: LIGHT_LABEL[b.kind],
+      label,
       categoryId,
       box: b.box,
       score: b.confidence,

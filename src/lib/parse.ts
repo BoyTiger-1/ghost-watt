@@ -41,6 +41,31 @@ export function matchCategory(label: string): string | null {
   return bestId;
 }
 
+// "Lamp" is the word vision models reach for when they see a light, and it is
+// wrong both ways. Fixtures on the ceiling get called lamps, and the bare word
+// matched the overhead-lighting entry, so a real 10 W desk lamp was priced as a
+// 120 W bank of troffers. So a lamp is placed by what the model said about it.
+const CEILING = /\b(ceiling|overhead|recessed|mounted|hanging|suspended|pendants?|troffers?|tubes?|fluorescent|panels?|track|high bay|chandeliers?)\b/;
+const COMPACT = /\b(recessed|pendants?|hanging|can|pot|bulbs?|globes?|track|spots?|downlights?|chandeliers?)\b/;
+const FREESTANDING = /\b(desk|table|floor|reading|bedside|nightstand|gooseneck|standing|shelf)\b/;
+
+/**
+ * Where a "lamp" really belongs. Only touches a label that landed on the
+ * overhead-lighting entry through the bare word "lamp"; a named lamp the
+ * catalog knows (desk lamp, lava lamp, heat lamp) keeps its own match.
+ */
+export function resolveLight(label: string, context: string, categoryId: string): { categoryId: string; device: string } {
+  const l = label.toLowerCase();
+  if (categoryId !== "ceiling_light" || !/\blamps?\b/.test(l)) return { categoryId, device: label };
+  const ctx = `${l} ${context.toLowerCase()}`;
+  if (CEILING.test(ctx) && !FREESTANDING.test(l)) {
+    return COMPACT.test(ctx) ? { categoryId: "downlight", device: "ceiling downlights" } : { categoryId: "ceiling_light", device: "overhead lights" };
+  }
+  if (/\bfloor\b/.test(ctx)) return { categoryId: "x_floor_lamp", device: label };
+  // Nothing says ceiling: a lamp is a lamp, on a desk, a table or a shelf.
+  return { categoryId: "x_desk_lamp", device: label };
+}
+
 /** Labels a model sometimes lists that draw no power: furniture, people, paper. */
 const NOT_ELECTRIC =
   /(?:^|\s)(?:chairs?|desks?|tables?|people|persons?|students?|books?|papers?|plants?|windows?|doors?|walls?|bags?|backpacks?|boxes?|shelves?|cabinets?|whiteboards?|chalkboards?|posters?|cups?|bottles?|pens?|pencils?|curtains?|rugs?|carpets?|sofas?|couch(?:es)?|beds?|pillows?|mirrors?|clothes|shoes?|trash cans?|bins?|crowd)$/i;
@@ -130,7 +155,9 @@ function fromJson(arr: unknown[], frame: Frame): CategorizedObservation[] {
     // electrical at all are left out.
     const matched = matchCategory(label);
     if (!matched && NOT_ELECTRIC.test(label)) continue;
-    const categoryId = matched ?? OTHER_DEVICE.id;
+    const contextText = [rec.where, rec.evidence, rec.technology].filter((v) => typeof v === "string").join(" ");
+    const placed = resolveLight(label, contextText, matched ?? OTHER_DEVICE.id);
+    const categoryId = placed.categoryId;
     const count =
       typeof rec.count === "number"
         ? Math.max(1, Math.round(rec.count))
@@ -146,7 +173,7 @@ function fromJson(arr: unknown[], frame: Frame): CategorizedObservation[] {
     const confRaw = Number(rec.confidence);
     const confidence = Number.isFinite(confRaw) ? Math.max(0, Math.min(1, confRaw > 1 ? confRaw / 100 : confRaw)) : undefined;
     out.push({
-      device: label,
+      device: placed.device,
       // A model that boxed more units than it counted has told us its count was low.
       count: Math.max(count, boxes.length),
       state: normalizeState(rec.state),
@@ -171,10 +198,11 @@ function fromFreeText(text: string): CategorizedObservation[] {
 
   const out: CategorizedObservation[] = [];
   for (const frag of fragments) {
-    const categoryId = matchCategory(frag);
-    if (!categoryId) continue;
+    const matched = matchCategory(frag);
+    if (!matched) continue;
+    const { categoryId, device } = resolveLight(frag, frag, matched);
     out.push({
-      device: frag.slice(0, 60),
+      device: device.slice(0, 60),
       count: extractCount(frag),
       state: normalizeState(frag),
       categoryId,

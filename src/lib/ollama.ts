@@ -132,6 +132,7 @@ List every electrical device or appliance you can see in the picture - lights in
 
 Identity rules - these are the mistakes models make most:
 - A phone, tablet, laptop, TV or monitor with a bright screen is that device, NEVER a lamp or a light. Only call something a lamp or light if it is a light fixture or bulb.
+- A fixture on, in or hanging from the ceiling is NEVER a "lamp": call it overhead lights (troffers, panels, tube fixtures), recessed downlights, pendant lights or track lights. "Lamp" only means a freestanding desk, table or floor lamp, and then say which ("desk lamp", "floor lamp").
 - A screen's reflection, a lit doorway and a bright window are not devices.
 - An object you cannot identify confidently still gets your best specific guess with a low confidence, so a person can correct it. Never invent objects that are not there.
 

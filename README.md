@@ -256,7 +256,9 @@ two keys are better than one:
 | `OPENAI_API_KEY` | Paid | `gpt-4o-mini` |
 | `OPENROUTER_API_KEY` | Some free models | `google/gemini-2.5-flash` |
 
-Set `<KEY NAME>_MODEL` to use a different model with any of them.
+Set `<KEY NAME>_MODEL` to use a different model with any of them. Each variable can also
+hold several keys, comma-separated or as `GROQ_API_KEY_2` through `GROQ_API_KEY_9`:
+requests take turns, and a key that hits its rate limit rests while the next one answers.
 
 If you'd rather keep everything on your own machine, run a local
 [Ollama](https://ollama.com) vision model and the app will use it in development:
