@@ -183,7 +183,7 @@ export default function MethodologyPage() {
             </p>
             <p className="mt-4 text-[1rem] leading-relaxed text-mist">
               Which way it goes is not something you can assume, and that is the reason it is
-              computed. A school that shuts at four o&apos;clock is{" "}
+              computed. A building that shuts at four o&apos;clock (an office or a school, say) is{" "}
               <span className="text-fog">closed through an evening peak</span> — so its overnight waste
               costs about a tenth <em>more</em> than the average said — and{" "}
               <span className="text-fog">open through a midday one</span>, where the same waste costs
@@ -231,7 +231,7 @@ export default function MethodologyPage() {
             <p className="mt-4 text-[0.9rem] leading-relaxed text-dim">
               These are the last-resort figures, used only when nothing better is known: a US-average
               electricity price and grid factor, and a building used about 1,900 hours a year
-              (≈ 10 hours × 190 school days), which leaves about 6,800 dark. In practice a scan
+              (≈ 10 hours × 190 days, a school-year pattern), which leaves about 6,800 dark. In practice a scan
               starts from the building&apos;s state (Washington: $0.119 residential, $0.100 commercial per
               kWh and about 0.10 kg CO₂/kWh from its mostly-hydro grid), then its utility&apos;s published
               tariff if located, then a line off its own bill, which beats everything. The schedule drawn in{" "}
@@ -345,7 +345,7 @@ export default function MethodologyPage() {
             <p className="mt-3 text-[0.95rem] leading-relaxed text-dim">
               Two caveats. The feed lags by several hours, so the app stamps the latest published hour
               instead of calling it &ldquo;now&rdquo;. And where a state is split across operators,
-              Ghost Watt uses the one carrying most of its load: right for a school-scale estimate,
+              Ghost Watt uses the one carrying most of its load: right for a building-scale estimate,
               not a substitute for a meter.
             </p>
           </Section>

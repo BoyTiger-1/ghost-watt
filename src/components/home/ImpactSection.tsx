@@ -50,7 +50,7 @@ export function ImpactSection() {
           <div className="mt-8 grid gap-12 lg:grid-cols-[1.25fr_1fr] lg:items-end">
             <div>
               <h2 className="font-editorial text-[clamp(2.4rem,5vw,4.4rem)] leading-[0.98] text-[#f5f2eb]">
-                <SplitLines inView lines={["Since you opened this page,", <span key="b" className="italic text-[#ffc777]">America’s offices, stores and schools have wasted</span>]} />
+                <SplitLines inView lines={["Since you opened this page,", <span key="b" className="italic text-[#ffc777]">America’s homes, offices, stores and schools have wasted</span>]} />
               </h2>
               <LiveCounter />
               <p className="mt-3 max-w-[34rem] text-[0.95rem] leading-relaxed text-[#f5f2eb]/60">
@@ -60,10 +60,10 @@ export function ImpactSection() {
             </div>
 
             <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-white/10">
-              <Stat value={<CountTo to={2.4} prefix="$" suffix="B" decimals={1} duration={1.2} />} label="a year, up to, wasted by U.S. K-12 schools" />
-              <Stat value={<CountTo to={6800} />} label="hours a year a typical school stands empty" />
-              <Stat value={<CountTo to={98800} />} label="public schools in the U.S. that could run this scan" />
-              <Stat value={<>10<span className="text-[#ffc777]">min</span></>} label="for thirty students scanning three or four rooms each" />
+              <Stat value={<CountTo to={2.4} prefix="$" suffix="B" decimals={1} duration={1.2} />} label="a year, up to, wasted by U.S. K-12 schools alone" />
+              <Stat value={<CountTo to={6800} />} label="hours a year a typical building stands empty" />
+              <Stat value={<CountTo to={5900000} />} label="commercial buildings in the U.S. that could run this scan" />
+              <Stat value={<>10<span className="text-[#ffc777]">min</span></>} label="for a team of thirty scanning three or four rooms each" />
             </dl>
           </div>
         </div>

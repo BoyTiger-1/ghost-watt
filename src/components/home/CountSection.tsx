@@ -76,7 +76,7 @@ export function CountSection() {
           <Scrub value={hours} min={500} max={8760} step={100} onChange={(v) => { setHours(v); setTouched(true); }} format={(v) => int(v)} label="Empty hours per year" />{" "}
           empty hours a year, at{" "}
           <Scrub value={rate} min={0.05} max={0.45} step={0.01} onChange={(v) => { setRate(v); setTouched(true); }} format={(v) => `$${v.toFixed(2)}`} label="Electricity price per kilowatt-hour" />{" "}
-          a kilowatt-hour, costs your school{" "}
+          a kilowatt-hour, costs your building{" "}
           <Figure value={dollars} prefix="$" className="text-sodium-deep" />{" "}
           a year and puts <Figure value={kg} suffix=" kg" className="text-moss" /> of CO₂ into the air.
         </p>

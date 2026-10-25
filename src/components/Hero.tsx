@@ -34,7 +34,7 @@ export function Hero() {
           </div>
 
           <h1 className="mt-6 text-4xl font-bold leading-[1.05] tracking-tight text-fog sm:text-6xl">
-            Map what your school burns
+            Map what your building burns
             <br />
             <span className="grad-energy text-glow">while it sleeps.</span>
           </h1>
@@ -42,7 +42,7 @@ export function Hero() {
           <p className="mt-5 max-w-xl text-base leading-relaxed text-mist sm:text-lg">
             Everyone measures the daytime footprint. Almost no one measures the labs left on
             overnight, the projectors in standby, the vending machine chilling soda at 2am.
-            Ghost Watt turns a student photo-walk into a ranked map of what&apos;s bleeding money
+            Ghost Watt turns a photo-walk into a ranked map of what&apos;s bleeding money
             in the dark - with a costed, one-tap fix for each.
           </p>
 

@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/PageHeader";
 export const metadata: Metadata = {
   title: "About - Ghost Watt",
   description:
-    "Why Ghost Watt exists and how it works: the after-hours energy map nobody has, built so students can hand facilities a prioritized fix list they can act on Monday.",
+    "Why Ghost Watt exists and how it works: the after-hours energy map nobody has, built so anyone can hand a household, an office or a facilities team a prioritized fix list they can act on Monday.",
 };
 
 // The page reads as a story: why it exists, how it works, what it stands for,
@@ -81,14 +81,14 @@ const TEAM = [
 const NOTES: { q: string; a: ReactNode }[] = [
   {
     q: "Why hasn't someone done this already?",
-    a: "Honestly, we're not sure. Professional audits are expensive, so most schools rarely get one, and online carbon calculators make you type in your own guesses. Nobody had put a vision model, a wattage table and a to-do list on the phones of the people who actually walk the halls.",
+    a: "Honestly, we're not sure. Professional audits are expensive, so most homes, offices and schools rarely get one, and online carbon calculators make you type in your own guesses. Nobody had put a vision model, a wattage table and a to-do list on the phones of the people who actually walk the halls.",
   },
   {
     q: "What does it look like in practice?",
     a: "Point it at an empty computer lab with thirty monitors still on and it'll tell you something like: about $800 a year here. Smart power strips fix most of it for $60, and they pay for themselves in about a month.",
   },
   {
-    q: "What does a school get at the end?",
+    q: "What do you get at the end?",
     a: "A ranked list facilities can start on Monday (timers, motion sensors, power strips, a shutdown routine), a one-page report for whoever approves spending, and stickers for the doors.",
   },
   {
@@ -150,7 +150,7 @@ export default function AboutPage() {
       <div className="mx-auto max-w-6xl px-5 pb-12 pt-24 sm:px-6 sm:pt-32">
         <Reveal>
           <PageHeader eyebrow="About" title="We kept walking past empty rooms" accent="with the lights on.">
-            Ghost Watt started with a simple question: how much does our school pay to keep things running after everyone goes home? Nobody we asked
+            Ghost Watt started with a simple question: how much does our building pay to keep things running after everyone goes home? Nobody we asked
             knew. There&apos;s no meter for &quot;the projector in 214 that&apos;s been on since Tuesday.&quot; So we built a way to count it with a phone.
           </PageHeader>
         </Reveal>
@@ -161,19 +161,19 @@ export default function AboutPage() {
           <Reveal delay={0.06}>
             <div className="space-y-4 text-[1.05rem] leading-relaxed text-mist">
               <p>
-                Stay at school late and you see it. A computer lab glowing with nobody in it, hallway lights on over empty floors, a vending machine
+                Stay late and you see it. A computer lab or office glowing with nobody in it, hallway lights on over empty floors, a vending machine
                 humming to itself. All of that costs money, and most of it could just be switched off.
               </p>
               <p>
-                A real energy audit is expensive, so most schools rarely get one. The calculators online assume you already know what a kilowatt-hour
+                A real energy audit is expensive, so most buildings rarely get one. The calculators online assume you already know what a kilowatt-hour
                 is and want you to type in your own guesses. We wanted something you could just point at a room.
               </p>
             </div>
             <div className="mt-8 grid grid-cols-3 gap-px overflow-hidden rounded-2xl border border-line bg-line">
               {[
                 ["$221", "one projector left on after hours, for a year"],
-                ["6,800", "hours a year a school stands empty"],
-                ["10 min", "for thirty students scanning three or four rooms each"],
+                ["6,800", "hours a year a typical building stands empty"],
+                ["10 min", "for a team of thirty scanning three or four rooms each"],
               ].map(([v, l]) => (
                 <div key={v} className="bg-surface px-4 py-4 sm:px-5">
                   <div className="font-editorial text-[1.9rem] leading-none text-fog">{v}</div>
@@ -218,7 +218,7 @@ export default function AboutPage() {
 
         {/* 4. the team */}
         <section className="mt-20 border-t border-line pt-14 sm:mt-24">
-          <SectionHead eyebrow="The team" title="Four students," accent="one very lit school." />
+          <SectionHead eyebrow="The team" title="Four students," accent="one very lit building." />
           <ul className="mt-10 grid gap-4 sm:grid-cols-2">
             {TEAM.map((m, i) => (
               <Reveal key={m.name} delay={i * 0.06} className="h-full">

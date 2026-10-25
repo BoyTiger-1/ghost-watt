@@ -198,7 +198,7 @@ function Place({ buildingId, initialTab, renameNow }: { buildingId: string; init
           </div>
           <div className="flex flex-wrap gap-2">
             <Link href="/campus" className="rounded-full border border-line px-4 py-2 text-[0.85rem] text-fog transition-colors hover:border-fog/40">
-              3D school
+              3D building
             </Link>
             {rollup.rooms.length > 0 && (
               <Link
@@ -747,7 +747,7 @@ function Empty() {
       <div className="max-w-md">
         <h2 className="text-xl font-semibold text-fog">Nothing saved yet</h2>
         <p className="mt-2 text-[0.92rem] leading-relaxed text-mist">
-          Every room you scan is saved here, grouped by place: your home, a school, an office. You&apos;ll see which room wastes the most, get one to-do list
+          Every room you scan is saved here, grouped by place: your home, an office, a school. You&apos;ll see which room wastes the most, get one to-do list
           for all of them, and check your fixes worked.
         </p>
         <Link href="/scan" className="mt-5 inline-block rounded-full bg-fog px-5 py-2.5 text-[0.9rem] font-medium text-ink hover:bg-fog/85">

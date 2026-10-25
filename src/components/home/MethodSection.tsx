@@ -9,7 +9,7 @@ import { Arrow } from "./HomeNav";
 const DEFAULTS = [
   { value: "$0.13", label: "per kWh, the US commercial average (EIA, 2024)" },
   { value: "0.35", label: "kg of CO₂ per kWh on the US grid (eGRID 2023)" },
-  { value: "6,800", label: "empty hours a year, after 190 school days" },
+  { value: "6,800", label: "empty hours a year in a typical building" },
 ];
 
 export function MethodSection() {

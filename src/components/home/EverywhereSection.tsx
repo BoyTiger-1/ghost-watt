@@ -30,7 +30,7 @@ export function EverywhereSection() {
           <h2 className="font-editorial mt-6 text-[clamp(2.5rem,5.2vw,4.6rem)] leading-[0.98] text-graphite">
             Scan on a phone. Plan on a tablet.
             <br className="hidden sm:block" />{" "}
-            <span className="italic text-dusk">Show the school board.</span>
+            <span className="italic text-dusk">Show the decision-maker.</span>
           </h2>
           <p className="mx-auto mt-6 max-w-[36rem] text-[1.05rem] leading-[1.65] text-stone">
             Every scan becomes one ranked list: what to fix first, what it costs, and how fast it

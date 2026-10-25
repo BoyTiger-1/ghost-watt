@@ -238,7 +238,7 @@ export function RebatesShop({
           )
         ) : (
           <p className="mt-1.5 text-[0.86rem] leading-relaxed text-mist">
-            Schools and businesses get the biggest rebates from their utility, usually for lighting, occupancy sensors and controls. These open the right
+            Offices, schools and other businesses get the biggest rebates from their utility, usually for lighting, occupancy sensors and controls. These open the right
             search for this place:
           </p>
         )}

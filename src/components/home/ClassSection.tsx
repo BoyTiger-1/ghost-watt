@@ -110,7 +110,7 @@ export function ClassSection() {
               </span>
             </div>
 
-            <svg viewBox="0 0 600 340" className="w-full" role="img" aria-label="Floor plan of a school filling in as rooms are scanned">
+            <svg viewBox="0 0 600 340" className="w-full" role="img" aria-label="Floor plan of a building filling in as rooms are scanned">
               <rect x="20" y="150" width="560" height="40" style={{ fill: "var(--color-surface2)" }} />
               <text x="300" y="175" textAnchor="middle" fontSize="10" style={{ fill: "var(--color-pebble)" }} letterSpacing="3">CORRIDOR</text>
               {ROOMS.map((r, i) => {

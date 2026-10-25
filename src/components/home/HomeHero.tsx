@@ -75,7 +75,7 @@ export function HomeHero() {
             <SplitLines
               delay={0.25}
               lines={[
-                "Your school has",
+                "Your building has",
                 "a night shift.",
                 <span key="c" className="whitespace-nowrap italic text-dusk">
                   Nobody clocked in.
@@ -132,7 +132,7 @@ export function HomeHero() {
       >
         <div className="flex items-end justify-between border-t border-graphite/10 pt-5 text-[0.85rem] text-stone">
           <p>
-            <span className="text-graphite">Tonight, one middle school:</span> 4 rooms left on,{" "}
+            <span className="text-graphite">Tonight, one building:</span> 4 rooms left on,{" "}
             <span className="tabular-nums text-sodium-deep">$2,060</span> a year, ranked worst first.
           </p>
           <p className="text-pebble">Free and open source · Works in any browser</p>
@@ -192,7 +192,7 @@ function TonightCard() {
       </ul>
       <div className="mt-4 flex items-end justify-between border-t border-white/10 pt-4">
         <span className="text-[0.8rem] leading-snug text-moon/60">
-          a year, for one school,
+          a year, for one building,
           <br />
           ranked worst first
         </span>

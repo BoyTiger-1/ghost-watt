@@ -4,7 +4,7 @@ Point a phone at a room, or upload a photo, and Ghost Watt finds the powered thi
 (screens, computers, lights, appliances), prices each one at your real electricity rate,
 separates what it costs in normal use from what it wastes after hours or in standby, and
 ranks the fixes by dollars saved per dollar spent. Rooms roll up into a building, the
-building into a one-page brief a principal or facilities manager can act on.
+building into a one-page brief a facilities manager, landlord or owner can act on.
 
 Two reading paths, and the pill in the header always says which one is about to run:
 **On-device** (a small detector in the browser; no picture ever leaves the device) or
@@ -13,15 +13,15 @@ math is plain, deterministic code you can read top to bottom, every figure is a 
 with a cited source, and nothing is ever filled in from a preset: a scan that could not
 be read says so.
 
-> My School's Hidden Footprint: take a building's invisible energy waste and make it
+> Take any building's invisible energy waste (a home, an office, a school) and make it
 > visible, countable, and actually fixable.
 
 ## Why it matters
 
-Schools genuinely want to cut waste and carbon. The problem is you can't fix what you can't
+Households, offices and schools all want to cut waste and carbon. The problem is you can't fix what you can't
 see, and after-hours energy waste is exactly the kind of thing nobody notices. One projector
-left running overnight is about 250 W of pure loss. Add a corridor of lights, a row of idle
-monitors, a vending machine, and it quietly adds up to thousands of dollars and hundreds of
+left running overnight is about 250 W of pure loss. Add a hallway of lights, a row of idle
+monitors, a vending machine or a forgotten TV, and it quietly adds up to thousands of dollars and hundreds of
 kilos of CO2 a year. A proper energy audit normally means meters, spreadsheets, or paying a
 consultant. This needs a phone and about ten minutes.
 
@@ -75,13 +75,13 @@ against Lite2 and YOLOv8n (ONNX Runtime Web) on 40 Open Images photos.
 
 - **Left on vs. typical use.** Each device shows what it costs if it is left on
   whenever the space is empty (the phantom-load figure), and what it costs at typical
-  use: hours actually in use for that kind of room (classroom, office, bedroom,
+  use: hours actually in use for that kind of room (office, classroom, bedroom,
   kitchen and others), standby the rest ([`src/lib/rooms.ts`](src/lib/rooms.ts),
   [`src/lib/usage.ts`](src/lib/usage.ts)). Home lamp hours come from the PNNL
   residential lighting study, monitor duty from ENERGY STAR, TV hours from Nielsen;
   the rest are marked as the app's own estimates. Pick **Home / School / Office** on
   the scanner and the room type on each capture.
-- **Prices.** A home pays the residential rate and a school or office the
+- **Prices.** A home pays the residential rate and an office or school the
   commercial one, often 2x apart in the same state. When a capture has a location,
   the serving utility's current published tariff comes from OpenEI's Utility Rate
   Database, at the marginal rate a typical customer's month reaches, hour-weighted for
@@ -120,7 +120,7 @@ the plain `watts x hours x rate` and nothing invented on top of it.
 - **The price of the empty hours** ([`src/lib/tariff.ts`](src/lib/tariff.ts)).
   Everything here is about the hours a building is empty, and on a time-of-use tariff
   those are not billed at the average of the year. Which way it goes is not something
-  you can assume: a school that shuts at four is closed through an evening peak (so
+  you can assume: a building that shuts at four (an office or a school, say) is closed through an evening peak (so
   its overnight waste costs about a tenth *more* than the average said) and open
   through a midday one (about a fifth less). The tariff sheet has a price per hour and
   the schedule says which hours are empty; crossing the two is the whole calculation.
@@ -246,7 +246,7 @@ Every figure the app multiplies by is listed, with its source, on the Method pag
 
 **A human decides what to fix, not the AI.** Ghost Watt surfaces and ranks opportunities,
 full stop. It never approves a purchase, sets a policy, or points a finger at anyone. A
-facilities manager or teacher reads each card and decides whether it's worth doing. One photo
+homeowner, facilities manager or teacher reads each card and decides whether it's worth doing. One photo
 is too thin a basis, and the trade-offs (budget, timetable, safety) too local, to hand that
 decision to a model.
 
