@@ -15,6 +15,7 @@
 import { useEffect, useRef } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Chapter } from "./Chapter";
+import { Cite } from "@/components/Cite";
 import { CountTo, Flashlight, SplitLines } from "@/components/motion/Motion";
 
 const PER_YEAR = 119e9 * 0.3;
@@ -54,7 +55,7 @@ export function ImpactSection() {
               </h2>
               <LiveCounter />
               <p className="mt-3 max-w-[34rem] text-[0.95rem] leading-relaxed text-[#f5f2eb]/60">
-                on electricity nobody used. {`That is a steady ${Math.round(GIGAWATTS)} gigawatts, about`} thirty nuclear reactors&apos; worth. Commercial
+                on electricity nobody used. {`That is a steady ${Math.round(GIGAWATTS)} gigawatts, about thirty nuclear reactors’ worth.`} Commercial
                 buildings spend $119 billion a year on electricity (EIA), and the EPA estimates about 30% of their energy is wasted.
               </p>
             </div>
@@ -65,6 +66,15 @@ export function ImpactSection() {
               <Stat value={<CountTo to={5900000} />} label="commercial buildings in the U.S. that could run this scan" />
               <Stat value={<>10<span className="text-[#ffc777]">min</span></>} label="for a team of thirty scanning three or four rooms each" />
             </dl>
+            <Cite
+              className="text-[#f5f2eb] lg:col-span-2"
+              items={[
+                { id: "cbecs-2018", name: "EIA CBECS 2018" },
+                { id: "epa-30pct", name: "EPA (30% wasted)" },
+                { id: "energystar-k12", name: "ENERGY STAR K-12" },
+                { id: "empty-hours", name: "how 6,800 hours is derived" },
+              ]}
+            />
           </div>
         </div>
 

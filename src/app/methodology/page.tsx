@@ -4,7 +4,7 @@ import { Reveal } from "@/components/Reveal";
 import { CatalogTable } from "@/components/CatalogTable";
 import { CalibrationTable } from "@/components/CalibrationTable";
 import { ROOM_TYPES } from "@/lib/rooms";
-import { SOURCES } from "@/lib/sources";
+import { SOURCES, SOURCE_GROUPS } from "@/lib/sources";
 import { GROUP_LABELS, type DeviceGroup } from "@/lib/types";
 import { CATALOG_BY_ID } from "@/lib/devices";
 import { CodeWindow, DEVICES_TS, ENERGY_TS, ENERGY_TS_SHORT } from "@/components/CodeWindow";
@@ -374,32 +374,46 @@ export default function MethodologyPage() {
           {/* sources */}
           <Section id="sources" title="Sources">
             <p className="mt-3 text-[1rem] leading-relaxed text-mist">
-              Every figure the app multiplies by traces to one of these. Where a figure could not be
-              checked against the primary document, the entry says so.
+              Every figure the app multiplies by, every statistic quoted on this site, and every
+              outside service and model it relies on, with what is taken from each. Where a figure
+              could not be checked against the primary document, the entry says so.
             </p>
-            <ol className="mt-6 space-y-5">
-              {SOURCES.map((src, i) => (
-                <li key={src.id} id={`src-${src.id}`} className="flex gap-4 scroll-mt-28">
-                  <span className="font-mono text-[0.8rem] text-dim tabular-nums">{String(i + 1).padStart(2, "0")}</span>
-                  <div className="min-w-0">
-                    <h3 className="text-[0.98rem] font-semibold text-fog">
-                      {src.url.startsWith("http") ? (
-                        <a href={src.url} target="_blank" rel="noreferrer" className="underline-offset-4 hover:text-cyan hover:underline">
-                          {src.label}
-                        </a>
-                      ) : (
-                        <Link href={src.url} className="underline-offset-4 hover:text-cyan hover:underline">{src.label}</Link>
-                      )}
-                    </h3>
-                    <p className="text-[0.8rem] text-dim">
-                      {src.publisher} · {src.year}
-                    </p>
-                    <p className="mt-1.5 text-[0.9rem] leading-relaxed text-mist">{src.used}</p>
-                    {src.caveat && <p className="mt-1 text-[0.84rem] leading-relaxed text-dim">{src.caveat}</p>}
-                  </div>
-                </li>
-              ))}
-            </ol>
+            {SOURCE_GROUPS.map((g) => {
+              const items = SOURCES.filter((src) => (src.group ?? "figures") === g.id);
+              if (!items.length) return null;
+              return (
+                <div key={g.id} id={`sources-${g.id}`} className="mt-10 scroll-mt-28">
+                  <h3 className="text-[1.05rem] font-semibold text-fog">{g.title}</h3>
+                  <p className="mt-1 text-[0.88rem] text-dim">{g.blurb}</p>
+                  <ol className="mt-5 space-y-5">
+                    {items.map((src) => {
+                      const n = SOURCES.indexOf(src) + 1;
+                      return (
+                        <li key={src.id} id={`src-${src.id}`} className="flex gap-4 scroll-mt-28">
+                          <span className="font-mono text-[0.8rem] text-dim tabular-nums">{String(n).padStart(2, "0")}</span>
+                          <div className="min-w-0">
+                            <h4 className="text-[0.98rem] font-semibold text-fog">
+                              {src.url.startsWith("http") ? (
+                                <a href={src.url} target="_blank" rel="noreferrer" className="underline-offset-4 hover:text-cyan hover:underline">
+                                  {src.label}
+                                </a>
+                              ) : (
+                                <Link href={src.url} className="underline-offset-4 hover:text-cyan hover:underline">{src.label}</Link>
+                              )}
+                            </h4>
+                            <p className="text-[0.8rem] text-dim">
+                              {src.publisher} · {src.year}
+                            </p>
+                            <p className="mt-1.5 text-[0.9rem] leading-relaxed text-mist">{src.used}</p>
+                            {src.caveat && <p className="mt-1 text-[0.84rem] leading-relaxed text-dim">{src.caveat}</p>}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                </div>
+              );
+            })}
           </Section>
 
           <p className="font-editorial border-t border-line pt-10 text-[1.7rem] leading-[1.25] text-fog sm:text-[2rem]">

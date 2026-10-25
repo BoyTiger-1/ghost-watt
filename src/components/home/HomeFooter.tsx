@@ -17,6 +17,7 @@ const COLUMNS = [
     title: "Understand it",
     links: [
       { href: "/methodology", label: "Methodology" },
+      { href: "/methodology#sources", label: "Sources" },
       { href: "/about", label: "About" },
       { href: "/settings", label: "Rates & regions" },
       { href: "/privacy", label: "Privacy" },

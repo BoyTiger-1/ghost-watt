@@ -11,6 +11,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { motion, useSpring, useTransform } from "framer-motion";
 import { Chapter } from "./Chapter";
+import { Cite } from "@/components/Cite";
 import { Arrow } from "./HomeNav";
 
 const THINGS = [
@@ -91,6 +92,15 @@ export function CountSection() {
             <br />
             {int(kwh)} kWh × {KG_PER_KWH} kg/kWh = <span className="text-moss">{int(kg)} kg CO₂</span>
             <span className="text-pebble/70">, about a {int(kg / KG_PER_MILE)}-mile drive</span>
+            <Cite
+              className="mt-3 font-sans text-pebble"
+              items={[
+                { id: "catalog", name: "wattage table" },
+                { id: "eia-table4-2024", name: "EIA prices" },
+                { id: "egrid", name: "EPA eGRID" },
+                { id: "epa-ghg-equivalencies", name: "EPA per-mile CO₂" },
+              ]}
+            />
           </p>
           <div>
             <p className="text-[1rem] leading-[1.65] text-stone">

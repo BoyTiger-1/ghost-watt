@@ -4,7 +4,7 @@
 // conversions turn it into things people can - and they are the figures that end
 // up in the school newsletter, which is where behaviour change actually starts.
 //
-// Factors follow the EPA Greenhouse Gas Equivalencies Calculator methodology.
+// Every factor is EPA's current Greenhouse Gas Equivalencies Calculator figure.
 
 export interface Equivalence {
   id: string;
@@ -14,20 +14,21 @@ export interface Equivalence {
   icon: string;
 }
 
-/** kg CO2e per unit. */
+/**
+ * kg CO2e per unit, from EPA's Greenhouse Gas Equivalencies Calculator,
+ * "Calculations and References" (sources.ts: epa-ghg-equivalencies).
+ */
 const FACTORS = {
-  /** Average US passenger vehicle, annual emissions. */
-  carYear: 4600,
-  /** Per mile driven, average petrol car. */
-  carMile: 0.4,
-  /** One mature tree's annual sequestration. */
-  treeYear: 21.8,
-  /** Average US home's annual electricity emissions. */
-  homeYear: 5500,
-  /** Round-trip New York to Los Angeles, economy, per passenger. */
-  flightNyLa: 620,
-  /** One gallon of petrol burned. */
-  gallonPetrol: 8.89,
+  /** Gasoline passenger vehicle driven for a year: 4.29 t CO2e. */
+  carYear: 4290,
+  /** One mile in an average gasoline passenger vehicle: 3.93 × 10⁻⁴ t CO2e. */
+  carMile: 0.393,
+  /** One tree seedling grown for 10 years: 0.060 t CO2. */
+  treeSeedling: 60,
+  /** One home's electricity use for a year: 4.798 t CO2. */
+  homeYear: 4798,
+  /** One gallon of gasoline burned: 8.887 kg CO2. */
+  gallonPetrol: 8.887,
 };
 
 export function equivalences(co2Kg: number): Equivalence[] {
@@ -36,21 +37,21 @@ export function equivalences(co2Kg: number): Equivalence[] {
       id: "cars",
       value: co2Kg / FACTORS.carYear,
       unit: "cars",
-      label: "petrol cars taken off the road for a year",
+      label: "cars taken off the road for a year",
       icon: "car",
     },
     {
       id: "trees",
-      value: co2Kg / FACTORS.treeYear,
+      value: co2Kg / FACTORS.treeSeedling,
       unit: "trees",
-      label: "mature trees absorbing carbon for a year",
+      label: "tree seedlings grown for 10 years to absorb it",
       icon: "tree",
     },
     {
       id: "homes",
       value: co2Kg / FACTORS.homeYear,
       unit: "homes",
-      label: "homes powered for a year",
+      label: "homes' electricity for a year",
       icon: "home",
     },
     {
@@ -61,17 +62,10 @@ export function equivalences(co2Kg: number): Equivalence[] {
       icon: "road",
     },
     {
-      id: "flights",
-      value: co2Kg / FACTORS.flightNyLa,
-      unit: "flights",
-      label: "round-trip flights, New York to Los Angeles",
-      icon: "plane",
-    },
-    {
       id: "petrol",
       value: co2Kg / FACTORS.gallonPetrol,
       unit: "gallons",
-      label: "gallons of petrol burned",
+      label: "gallons of gasoline burned",
       icon: "fuel",
     },
   ];
@@ -89,7 +83,10 @@ export function bestEquivalences(co2Kg: number, count = 3): Equivalence[] {
     .slice(0, count);
 }
 
-/** Dollars framed as things a school buys, because budgets are compared to budgets. */
+/**
+ * Dollars framed as things a school buys, because budgets are compared to budgets.
+ * Round illustrative prices, not quotes (sources.ts: illustrative-spend).
+ */
 export interface SpendEquivalence {
   value: number;
   label: string;

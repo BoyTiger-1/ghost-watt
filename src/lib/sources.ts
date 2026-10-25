@@ -18,7 +18,18 @@ export interface Source {
   used: string;
   /** Anything a careful reader should know about how it is used. */
   caveat?: string;
+  /** Which list it appears in on the Method page. Defaults to "figures". */
+  group?: SourceGroup;
 }
+
+export type SourceGroup = "figures" | "claims" | "data" | "models";
+
+export const SOURCE_GROUPS: { id: SourceGroup; title: string; blurb: string }[] = [
+  { id: "figures", title: "Figures the math uses", blurb: "Every wattage, hours figure, price and grid factor the app multiplies by." },
+  { id: "claims", title: "Statements on this site", blurb: "The national figures and comparisons quoted on the home page and in results." },
+  { id: "data", title: "Live data services", blurb: "Looked up at runtime when a key is set or a location is known. Each answer is labelled with where it came from." },
+  { id: "models", title: "Models and datasets", blurb: "What reads the pictures, and what it was trained and tested on." },
+];
 
 export const SOURCES: Source[] = [
   {
@@ -139,6 +150,187 @@ export const SOURCES: Source[] = [
       "Which member of a device class this one is. A four-lamp T12 troffer with a magnetic ballast draws about 180 W and the LED panel that replaced it about 40 W; both are \"overhead lighting\", and the catalog band spans them both. When the photo shows which it is, that reading is worth more than the class average and more than the model's own guess at a wattage - naming a lamp type is a perceptual judgement a vision model makes well, estimating a wattage is arithmetic it cannot do. Display power is taken as proportional to panel area, fitted to the catalog's own sized rows: a monitor at 0.098 W per square inch, a television at 0.045, an interactive panel at 0.083.",
     caveat:
       "A technology the model names, not one anybody confirmed. It is blended with the published band rather than replacing it, so a misread moves the figure part of the way and never all of it; a plug-in meter reading replaces both.",
+  },
+  // ---- statements on this site --------------------------------------------------
+  {
+    id: "cbecs-2018",
+    group: "claims",
+    label: "Commercial Buildings Energy Consumption Survey (CBECS) 2018: consumption and expenditures",
+    publisher: "U.S. Energy Information Administration",
+    year: "2018 survey (final data 2022)",
+    url: "https://www.eia.gov/consumption/commercial/data/2018/",
+    used: "Commercial buildings (offices, stores, schools and the rest) spent about $119 billion on electricity in 2018, out of about $141 billion on all energy. The home page's live counter starts from this. The same survey counts about 5.9 million commercial buildings in the U.S.",
+    caveat: "The electricity figure is from the survey's expenditure tables (Table C2); preliminary releases gave slightly different totals.",
+  },
+  {
+    id: "epa-30pct",
+    group: "claims",
+    label: "\"On average, 30 percent of the energy used in commercial buildings is wasted\"",
+    publisher: "U.S. EPA (ENERGY STAR press releases)",
+    year: "2010–2012",
+    url: "https://www.epa.gov/archive/epapages/newsroom_archive/newsreleases/6723b7f2facee90c85257712005a3969.html",
+    used: "The share of commercial-building energy the home page's counter treats as waste: 30% of $119 billion is about $35.7 billion a year, or about $1,130 a second, and at $0.13/kWh about 275 billion kWh, a steady 31 GW: about thirty large nuclear reactors, taking one as roughly a gigawatt.",
+    caveat: "A long-standing EPA estimate from its ENERGY STAR building campaigns, not a measured national figure, and EPA's current pages describe the waste without the number. The counter is an order of magnitude, not an audit.",
+  },
+  {
+    id: "energystar-k12",
+    group: "claims",
+    label: "ENERGY STAR for K-12 school districts",
+    publisher: "U.S. EPA ENERGY STAR",
+    year: "current",
+    url: "https://www.energystar.gov/buildings/resources-audience/k-12-schools",
+    used: "K-12 school districts spend over $8 billion a year on energy, and more than 30% of school energy use goes to waste. 30% of $8 billion is the home page's \"up to $2.4 billion a year\" for schools.",
+  },
+  {
+    id: "epa-ghg-equivalencies",
+    group: "claims",
+    label: "Greenhouse Gas Equivalencies Calculator: calculations and references",
+    publisher: "U.S. Environmental Protection Agency",
+    year: "current edition",
+    url: "https://www.epa.gov/energy/greenhouse-gas-equivalencies-calculator-calculations-and-references",
+    used: "The comparisons under each result: 4.29 t CO₂e per gasoline passenger vehicle per year, 393 g per mile driven, 4.798 t CO₂ per home's electricity per year, 8.887 kg per gallon of gasoline, and 0.060 t per tree seedling grown for 10 years. The home page's \"kg per mile\" uses the same figure, rounded to 0.4.",
+  },
+  {
+    id: "empty-hours",
+    group: "claims",
+    label: "Default empty hours a year (6,800)",
+    publisher: "This app (src/lib/schedule.ts)",
+    year: "maintained",
+    url: "/methodology#defaults",
+    used: "A year has 8,760 hours. A building open about 9 hours a day, 5 days a week for 43–44 weeks is occupied about 1,960 of them, which leaves about 6,800 empty. Describe your own building's hours and the app works out its figure instead.",
+    caveat: "A starting assumption, not a measurement, and every dollar figure scales with it, which is why it is the first thing the settings ask about.",
+  },
+  {
+    id: "illustrative-spend",
+    group: "claims",
+    label: "What the money would buy instead",
+    publisher: "This app (src/lib/equivalence.ts)",
+    year: "maintained",
+    url: "/methodology#sources",
+    used: "The spending comparisons beside a result (school lunches, Chromebooks, field trips, a streaming subscription) use round prices: $12 a lunch, $45 an hour of teaching-assistant time, $300 a Chromebook, $750 a classroom set of textbooks, $1,200 a field trip, $16 a month of streaming, $40 a pizza night.",
+    caveat: "Illustrative round numbers chosen to make a dollar figure concrete, not quoted prices. Nothing is computed from them.",
+  },
+
+  // ---- live data services --------------------------------------------------------
+  {
+    id: "openstreetmap",
+    group: "data",
+    label: "OpenStreetMap, through Nominatim and the Overpass API",
+    publisher: "© OpenStreetMap contributors, Open Database License (ODbL)",
+    year: "live",
+    url: "https://www.openstreetmap.org/copyright",
+    used: "Finding a school by name, the building outlines and floor counts for the 3D school, and turning a photo's location into a town and state. Nominatim's usage policy (one request a second, an identifying User-Agent) is followed, and answers are cached.",
+  },
+  {
+    id: "openei-urdb",
+    group: "data",
+    label: "Utility Rate Database",
+    publisher: "OpenEI (National Renewable Energy Laboratory)",
+    year: "live",
+    url: "https://openei.org/wiki/Utility_Rate_Database",
+    used: "The serving utility's own published tariff for a location: its energy charges, tiers and time-of-use periods.",
+  },
+  {
+    id: "eia-api",
+    group: "data",
+    label: "EIA Open Data API: retail sales and hourly generation by fuel",
+    publisher: "U.S. Energy Information Administration",
+    year: "live",
+    url: "https://www.eia.gov/opendata/",
+    used: "The latest state average retail price, and the grid's current fuel mix, when an EIA key is set.",
+  },
+  {
+    id: "electricity-maps",
+    group: "data",
+    label: "Electricity Maps carbon intensity API",
+    publisher: "Electricity Maps",
+    year: "live",
+    url: "https://www.electricitymaps.com/",
+    used: "The grid's carbon intensity right now, in place of the annual eGRID average, when a key is set.",
+  },
+  {
+    id: "nrel-pvwatts",
+    group: "data",
+    label: "PVWatts V8 API",
+    publisher: "National Renewable Energy Laboratory",
+    year: "live",
+    url: "https://developer.nrel.gov/docs/solar/pvwatts/v8/",
+    used: "How much a given solar array would produce at a location, for the solar offset estimate.",
+  },
+  {
+    id: "open-meteo",
+    group: "data",
+    label: "Open-Meteo historical weather API",
+    publisher: "Open-Meteo",
+    year: "live",
+    url: "https://open-meteo.com/",
+    used: "Sunshine history for the solar estimate when no NREL key is set.",
+  },
+  {
+    id: "openweather",
+    group: "data",
+    label: "OpenWeather current weather API",
+    publisher: "OpenWeather",
+    year: "live",
+    url: "https://openweathermap.org/api",
+    used: "Current local weather, shown as context beside a scan.",
+  },
+  {
+    id: "rewiring-america",
+    group: "data",
+    label: "Rewiring America incentives API",
+    publisher: "Rewiring America",
+    year: "live",
+    url: "https://www.rewiringamerica.org/api",
+    used: "The federal, state and utility rebates and tax credits a household or building qualifies for, by ZIP code, beside each suggested upgrade.",
+    caveat: "Eligibility depends on details the app does not collect (income, ownership); each programme's own page has the final word.",
+  },
+
+  // ---- models and datasets -------------------------------------------------------
+  {
+    id: "mediapipe",
+    group: "models",
+    label: "MediaPipe Object Detector (EfficientDet-Lite) and Image Classifier (EfficientNet-Lite0)",
+    publisher: "Google",
+    year: "current",
+    url: "https://ai.google.dev/edge/mediapipe/solutions/vision/object_detector",
+    used: "The on-device reader: the detector that finds screens, laptops and appliances in the camera feed, and the classifier that double-checks a candidate lamp or screen. Both run in the browser.",
+  },
+  {
+    id: "coco",
+    group: "models",
+    label: "COCO: Common Objects in Context",
+    publisher: "Lin et al., Microsoft COCO",
+    year: "2014",
+    url: "https://cocodataset.org/",
+    used: "The 80 object classes the on-device detector was trained on, which is why it can see a TV, laptop or microwave but not a projector or ceiling light (lib/live.ts).",
+  },
+  {
+    id: "imagenet",
+    group: "models",
+    label: "ImageNet",
+    publisher: "Deng et al.",
+    year: "2009",
+    url: "https://www.image-net.org/",
+    used: "The 1,000 classes the second-look classifier was trained on (it knows \"table lamp\" and \"monitor\", among others).",
+  },
+  {
+    id: "open-images",
+    group: "models",
+    label: "Open Images Dataset",
+    publisher: "Google",
+    year: "V7",
+    url: "https://storage.googleapis.com/openimages/web/index.html",
+    used: "The 40 photos the live detectors were benchmarked on before EfficientDet-Lite0 was chosen (docs/live-detector-benchmark.md).",
+  },
+  {
+    id: "vision-models",
+    group: "models",
+    label: "Hosted vision-language models",
+    publisher: "Anthropic, Google (Gemini), Groq, Mistral, OpenAI, OpenRouter",
+    year: "current",
+    url: "/methodology#engines",
+    used: "Enhanced mode: whichever configured provider answers first reads the photo and lists the devices it sees. It is asked for nothing about energy; the figures above do the math.",
   },
 ];
 

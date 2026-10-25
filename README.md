@@ -325,25 +325,78 @@ Information Administration, and grid carbon from EPA eGRID. The full list is bel
 
 ## Data and sources
 
-Every number the app multiplies by is listed with its source on the Method page
-(`/methodology#sources`) and in [`src/lib/sources.ts`](src/lib/sources.ts).
+Every number the app multiplies by, every statistic quoted on the site, and every outside
+service and model it relies on is listed on the Method page (`/methodology#sources`),
+grouped the same way as below, with what is taken from each and any caveat. The list lives
+in [`src/lib/sources.ts`](src/lib/sources.ts). Claims on the home page and under each
+result carry a "Sources:" line that links straight to the entry, and a test checks that
+every one of those links lands on a real source.
+
+### Figures the math uses
 
 - Wattages: [`src/lib/devices.ts`](src/lib/devices.ts) and
   [`src/lib/appliances.ts`](src/lib/appliances.ts), a typical draw and a published
-  low-to-high range for each kind of device, with a source note on every row.
-- Standby power: LBNL's standby power summary table and the DOE's microwave standby
-  analysis.
-- Hours in use: the PNNL-22182 residential lighting study, ENERGY STAR display duty (35%
-  on, 65% asleep) and Nielsen TV hours. Room types with no published figure are marked as
-  estimates.
-- Prices: the EIA's 2024 average retail price by state and sector, OpenEI tariffs when we
-  know the location, and your bill over both.
-- Carbon: EPA eGRID rates by state. Washington's grid is mostly hydro and runs about
-  0.10 kg CO₂/kWh, around a quarter of the US average, and the app uses each state's own
-  number.
-- Building outlines: OpenStreetMap, © OpenStreetMap contributors.
-- Photos: yours, at runtime. On-device, they never leave the browser. In Enhanced mode,
-  each one goes to the model once and isn't kept.
+  low-to-high range for each kind of device, with a source note on every row. Which unit it
+  is ([`src/lib/tech.ts`](src/lib/tech.ts)) comes from lamp and ballast ratings, ENERGY STAR
+  specifications and manufacturer figures.
+- Standby power: [LBNL standby power summary table](https://standby.lbl.gov/data/summary-table/)
+  and the [DOE microwave standby analysis](https://www.federalregister.gov/documents/2013/06/17/2013-13535/energy-conservation-program-energy-conservation-standards-for-standby-mode-and-off-mode-for).
+- Hours in use: the [PNNL residential lighting study](https://www.energy.gov/eere/ssl/residential-lighting-end-use-consumption)
+  (PNNL-22182), [ENERGY STAR display duty](https://www.energystar.gov/products/displays)
+  (35% on, 65% asleep) and Nielsen TV hours. Room types with no published figure are marked
+  as estimates.
+- Prices: the [EIA's 2024 average retail price by state and sector](https://www.eia.gov/electricity/sales_revenue_price/),
+  [OpenEI tariffs](https://openei.org/wiki/Utility_Rate_Database) when we know the location,
+  and your bill over both.
+- Carbon: [EPA eGRID](https://www.epa.gov/egrid/summary-data) rates by state. Washington's
+  grid is mostly hydro and runs about 0.10 kg CO₂/kWh, around a quarter of the US average,
+  and the app uses each state's own number.
+- Heating and cooling: [NOAA 1991–2020 climate normals](https://www.ncei.noaa.gov/products/land-based-station/us-climate-normals)
+  for degree days, and the retrofit-practice
+  [cooling adjustment for internal loads](https://www.csemag.com/articles/factoring-lighting-into-cooling-loads/).
+
+### Statements on the site
+
+- "Commercial buildings spend $119 billion a year on electricity" and "5.9 million
+  commercial buildings": [EIA CBECS 2018](https://www.eia.gov/consumption/commercial/data/2018/).
+- "About 30% of their energy is wasted": a long-standing
+  [EPA ENERGY STAR estimate](https://www.epa.gov/archive/epapages/newsroom_archive/newsreleases/6723b7f2facee90c85257712005a3969.html).
+  The home page's live counter is $119 billion × 30%, about $35.7 billion a year; at $0.13/kWh
+  that is a steady 31 GW, about thirty large reactors at roughly a gigawatt each. It is an
+  order of magnitude, not an audit.
+- "Up to $2.4 billion a year wasted by K-12 schools": [ENERGY STAR for K-12](https://www.energystar.gov/buildings/resources-audience/k-12-schools)
+  says districts spend over $8 billion a year on energy and more than 30% of it is wasted.
+- The CO₂ comparisons under each result (cars, homes, miles, gallons, tree seedlings):
+  EPA's current [Greenhouse Gas Equivalencies Calculator figures](https://www.epa.gov/energy/greenhouse-gas-equivalencies-calculator-calculations-and-references).
+- "6,800 empty hours a year": the app's default. 8,760 hours in a year, minus about 1,960
+  for a building open 9 hours a day, 5 days a week, 43–44 weeks. You can set your own.
+- The "what the money would buy" comparisons (school lunches, Chromebooks and so on) use
+  round illustrative prices, and say so.
+
+### Live data services
+
+[OpenStreetMap](https://www.openstreetmap.org/copyright) through Nominatim and Overpass
+(school search, building outlines, place names; © OpenStreetMap contributors, ODbL),
+[OpenEI Utility Rate Database](https://openei.org/wiki/Utility_Rate_Database) (tariffs),
+[EIA Open Data](https://www.eia.gov/opendata/) (live prices and fuel mix),
+[Electricity Maps](https://www.electricitymaps.com/) (live grid carbon),
+[NREL PVWatts](https://developer.nrel.gov/docs/solar/pvwatts/v8/) and
+[Open-Meteo](https://open-meteo.com/) (solar estimates),
+[OpenWeather](https://openweathermap.org/api) (local weather), and
+[Rewiring America](https://www.rewiringamerica.org/api) (rebates and tax credits).
+
+### Models and datasets
+
+The on-device reader is Google's [MediaPipe](https://ai.google.dev/edge/mediapipe/solutions/vision/object_detector)
+EfficientDet-Lite detector, trained on [COCO](https://cocodataset.org/), with an
+EfficientNet-Lite0 classifier trained on [ImageNet](https://www.image-net.org/) for a
+second look. The detectors were benchmarked on photos from
+[Open Images](https://storage.googleapis.com/openimages/web/index.html). In Enhanced mode a
+hosted vision-language model reads the photo (Anthropic, Gemini, Groq, Mistral, OpenAI or
+OpenRouter).
+
+Photos are yours, at runtime. On-device, they never leave the browser. In Enhanced mode,
+each one goes to the model once and isn't kept.
 
 ## Responsible AI
 
