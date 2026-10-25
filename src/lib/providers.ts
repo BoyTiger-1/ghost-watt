@@ -16,6 +16,7 @@
 // See .env.example for the full list and what each one buys you.
 
 import { regionOrDefault } from "./grid";
+import { firstKey } from "./keypool";
 import {
   BA_BY_CODE,
   BA_BY_STATE,
@@ -81,7 +82,7 @@ async function getJson(
  */
 export async function lookupRate(stateCode: string): Promise<RateLookup> {
   const fallback = regionOrDefault(stateCode);
-  const key = process.env.EIA_API_KEY;
+  const key = firstKey("EIA_API_KEY");
 
   if (!key) {
     return {
@@ -131,7 +132,7 @@ export async function lookupRate(stateCode: string): Promise<RateLookup> {
  * So an unkeyed install still gets the feature, just slowly.
  */
 export async function lookupUtility(lat: number, lon: number): Promise<RateLookup> {
-  const key = process.env.NREL_API_KEY?.trim() || "DEMO_KEY";
+  const key = firstKey("NREL_API_KEY") || "DEMO_KEY";
   const demo = key === "DEMO_KEY";
 
   try {
@@ -196,14 +197,14 @@ export async function lookupCarbon(zone: string): Promise<CarbonLookup> {
   const stateCode = zone.startsWith("US-") ? zone.slice(3) : zone;
   const fallback = regionOrDefault(stateCode);
 
-  const emKey = process.env.ELECTRICITY_MAPS_KEY?.trim();
+  const emKey = firstKey("ELECTRICITY_MAPS_KEY");
   if (emKey) {
     const live = await viaElectricityMaps(zone, emKey);
     if (live) return live;
     // Fall through to EIA rather than erroring out.
   }
 
-  const eiaKey = process.env.EIA_API_KEY?.trim();
+  const eiaKey = firstKey("EIA_API_KEY");
   const ba = BA_BY_STATE[stateCode.toUpperCase()];
 
   if (!eiaKey || !ba) {
@@ -306,7 +307,7 @@ export interface WeatherLookup {
  * Outdoor conditions, used to sanity-check HVAC and space-heater findings.
  */
 export async function lookupWeather(lat: number, lon: number): Promise<WeatherLookup> {
-  const key = process.env.OPENWEATHER_API_KEY?.trim();
+  const key = firstKey("OPENWEATHER_API_KEY");
   if (!key) {
     return {
       status: "static",
@@ -376,7 +377,7 @@ export function keyInventory(): KeyInfo[] {
     {
       env: "EIA_API_KEY",
       label: "EIA open data",
-      configured: Boolean(process.env.EIA_API_KEY?.trim()),
+      configured: Boolean(firstKey("EIA_API_KEY")),
       buys:
         "Current published electricity prices per state, and the hourly grid fuel mix " +
         "that live carbon intensity is computed from. One key, both features.",
@@ -386,7 +387,7 @@ export function keyInventory(): KeyInfo[] {
     {
       env: "NREL_API_KEY",
       label: "NREL utility rates",
-      configured: Boolean(process.env.NREL_API_KEY?.trim()),
+      configured: Boolean(firstKey("NREL_API_KEY")),
       buys: "The actual utility serving an address and its commercial rate.",
       signup: "https://api.data.gov/signup/",
       required: false,
@@ -395,7 +396,7 @@ export function keyInventory(): KeyInfo[] {
     {
       env: "OPENWEATHER_API_KEY",
       label: "OpenWeather",
-      configured: Boolean(process.env.OPENWEATHER_API_KEY?.trim()),
+      configured: Boolean(firstKey("OPENWEATHER_API_KEY")),
       buys: "Outdoor conditions and degree days to weight HVAC and heater findings.",
       signup: "https://openweathermap.org/api",
       required: false,
@@ -420,7 +421,7 @@ export function keyInventory(): KeyInfo[] {
     {
       env: "ELECTRICITY_MAPS_KEY",
       label: "Electricity Maps",
-      configured: Boolean(process.env.ELECTRICITY_MAPS_KEY?.trim()),
+      configured: Boolean(firstKey("ELECTRICITY_MAPS_KEY")),
       buys:
         "Optional override for grid carbon intensity. Not needed - the EIA key above " +
         "already covers every US grid region. Electricity Maps' free tier is one zone, non-commercial use only.",

@@ -22,6 +22,15 @@ export function keysFromEnv(envName: string, env: Record<string, string | undefi
   return [...new Set(keys)];
 }
 
+/**
+ * For services that take one key: the first of whatever is set, so a variable
+ * someone filled with a comma-separated list still works instead of sending
+ * the whole list as the key.
+ */
+export function firstKey(envName: string, env: Record<string, string | undefined> = process.env): string | undefined {
+  return keysFromEnv(envName, env)[0];
+}
+
 export class KeyPool {
   private turn = 0;
   private readonly restUntil = new Map<string, number>();

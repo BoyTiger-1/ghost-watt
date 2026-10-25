@@ -104,6 +104,17 @@ function onDeviceResult(c: Pick<Capture, "name" | "onDevice">): AnalysisResult {
   };
 }
 
+/** Why a photo was read on the device after asking for the cloud model, in a sentence a judge will not mistake for a bug. */
+export function cloudFallbackNote(code: AnalyzeError["code"] | undefined, retryAfterSeconds?: number): string {
+  if (code === "rate-limited") {
+    const min = Math.max(1, Math.round((retryAfterSeconds ?? 600) / 60));
+    return `Cloud model limit reached for now, so this photo was read on your device instead. Try Enhanced again in about ${min} min.`;
+  }
+  if (code === "no-engine") return "No cloud model is set up here, so this photo was read on your device.";
+  if (code === "too-large") return "The photo was too large to send, so it was read on your device instead.";
+  return "The cloud model didn't answer in time, so this photo was read on your device instead.";
+}
+
 /** Shown for the single frame before the first building is written to storage. */
 const PLACEHOLDER_BUILDING: Building = {
   id: "placeholder",
@@ -599,6 +610,8 @@ export function Scanner() {
       let c = get();
       if (!c) return;
       patch(id, { status: "working", stage: "Reading on device", progress: 0.4, error: undefined });
+      // What the on-device read found, kept so a failed cloud call can fall back to it.
+      let localRead: Capture["onDevice"] = c.onDevice;
       try {
         const s = settingsRef.current;
         const cloud = engineRef.current.mode === "enhanced";
@@ -639,6 +652,7 @@ export function Scanner() {
             people: Math.max(0, ...reads.map((r) => peopleIn(r.items))),
           };
         }
+        localRead = onDevice;
         patch(id, { onDevice, meta, keyframes, progress: 0.5 });
 
         // 2. Where it is: the local tariff and grid.
@@ -682,16 +696,32 @@ export function Scanner() {
         }
         if (!res.ok) {
           const errBody = (await res.json().catch(() => null)) as AnalyzeError | null;
-          throw Object.assign(new Error(describeAnalyzeError(res.status, errBody)), { code: errBody?.code ?? "engine-failed" });
+          throw Object.assign(new Error(describeAnalyzeError(res.status, errBody)), { code: errBody?.code ?? "engine-failed", retryAfterSeconds: errBody?.retryAfterSeconds });
         }
         const result = (await res.json()) as AnalysisResult;
         // Two readers of one picture: what the detector cannot back is shown, not counted.
         result.observations = crossCheck(result.observations ?? [], onDevice);
         patch(id, { status: "done", result, errorCode: undefined, stage: undefined, progress: undefined });
       } catch (err) {
-        // No invented answer. The card shows the error and, when the detector saw
-        // something, offers that reading as a choice the user makes.
-        const code = (err as { code?: AnalyzeError["code"] }).code;
+        const code = (err as { code?: AnalyzeError["code"]; retryAfterSeconds?: number }).code;
+        const retry = (err as { retryAfterSeconds?: number }).retryAfterSeconds;
+        // The cloud model being busy, missing or unreachable is not the scan
+        // failing: the on-device reader already looked at the picture, so its
+        // reading is the result, with a plain note saying why. Only a picture
+        // that could not be read at all stays an error.
+        const current = get();
+        if (current && localRead !== undefined && code !== "bad-request") {
+          const local = onDeviceResult({ name: current.name, onDevice: localRead });
+          patch(id, {
+            status: "done",
+            result: { ...local, notice: `${cloudFallbackNote(code, retry)} ${local.notice ?? ""}`.trim() },
+            error: undefined,
+            errorCode: undefined,
+            stage: undefined,
+            progress: undefined,
+          });
+          return;
+        }
         patch(id, {
           status: "error",
           stage: undefined,

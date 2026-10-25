@@ -1,3 +1,4 @@
+import { firstKey } from "@/lib/keypool";
 import { NextResponse } from "next/server";
 import { normaliseIncentive, type Incentive } from "@/lib/rebates";
 import { RULES, checkLimits, clientIp } from "@/lib/ratelimit";
@@ -25,7 +26,7 @@ const CACHE_MS = 6 * 3600 * 1000;
 async function get(path: string): Promise<unknown> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  const key = process.env.REWIRING_AMERICA_API_KEY?.trim();
+  const key = firstKey("REWIRING_AMERICA_API_KEY");
   try {
     const res = await fetch(`${API}${path}`, {
       headers: key ? { Authorization: `Bearer ${key}` } : {},

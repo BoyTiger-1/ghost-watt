@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { KeyPool, keysFromEnv } from "./keypool";
+import { KeyPool, firstKey, keysFromEnv } from "./keypool";
 
 describe("keysFromEnv", () => {
   it("reads a comma list and numbered extras, without duplicates", () => {
@@ -46,5 +46,13 @@ describe("KeyPool", () => {
     p.refuse("bad", 0);
     expect(p.next(5 * 60_000)).toBe("good");
     expect(p.next(5 * 60_000)).toBe("good");
+  });
+});
+
+describe("firstKey", () => {
+  it("gives a one-key service the first key of a list, not the whole list", () => {
+    expect(firstKey("EIA_API_KEY", { EIA_API_KEY: "abc, def" })).toBe("abc");
+    expect(firstKey("EIA_API_KEY", { EIA_API_KEY: "abc" })).toBe("abc");
+    expect(firstKey("EIA_API_KEY", {})).toBeUndefined();
   });
 });
