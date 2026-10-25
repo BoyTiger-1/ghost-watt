@@ -8,6 +8,7 @@ import { Arrow } from "./HomeNav";
 import { useMediaQuery } from "./useMediaQuery";
 import { usePrefs } from "@/lib/prefs";
 import { Flashlight, Magnetic, SplitLines } from "@/components/motion/Motion";
+import { GITHUB_URL } from "@/lib/site";
 
 const SchoolScene = dynamic(() => import("./SchoolScene").then((m) => m.SchoolScene), {
   ssr: false,
@@ -135,7 +136,13 @@ export function HomeHero() {
             <span className="text-graphite">Tonight, one building:</span> 4 rooms left on,{" "}
             <span className="tabular-nums text-sodium-deep">$2,060</span> a year, ranked worst first.
           </p>
-          <p className="text-pebble">Free and open source · Works in any browser</p>
+          <p className="text-pebble">
+            Free and{" "}
+            <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="underline decoration-pebble/40 underline-offset-4 transition-colors hover:text-graphite">
+              open source
+            </a>{" "}
+            · Works in any browser
+          </p>
         </div>
       </motion.div>
     </section>

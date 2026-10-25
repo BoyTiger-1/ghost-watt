@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   description: "What Ghost Watt collects, what stays on your device, what is sent to third-party services and why, and the choices you have.",
 };
 
-const EFFECTIVE = "October 19, 2026";
+const EFFECTIVE = "October 25, 2026";
 const ISSUES = "https://github.com/BoyTiger-1/ghost-watt/issues";
 
 const sections: LegalSection[] = [
@@ -39,6 +39,8 @@ const sections: LegalSection[] = [
             ["Photos, video frames and live camera frames", "When you scan", "Processed in your browser. In Enhanced (cloud) mode only, also sent to a vision model provider (Section 4)."],
             ["A photo of an electricity bill", "Only if you choose to read one, in Enhanced mode", "Sent to a vision model provider to read the printed figures; you confirm the figures before they are kept."],
             ["Scan results, rooms, buildings, fixes, bill figures, meter readings and settings", "As you use the Service", "Stored only in your browser's local storage on your device."],
+            ["The name of a school you search for", "Only when you use the 3D school", "Sent through our server to OpenStreetMap's Nominatim to find it; its location is then used to look up building outlines (Overpass). Not stored by us."],
+            ["Floor plan photos and the rooms you draw on them", "Only when you add them to the 3D school", "Stored only in your browser. A plan is sent to a vision model provider only if you choose \"Suggest rooms with AI\"."],
             ["Approximate location", "Only if you allow it, or a photo you add contains it", "Rounded to about 1 km on our server, then used to look up your utility rate, place name, weather and solar resource."],
             ["Room names, device rows and the display name you type", "Only if you send a scan to a team", "Shared with everyone who has that team's code, so their phones can add up one building. Kept up to 14 days (Upstash) or, on a site without it, about 12 hours on an encrypted public relay (Section 4)."],
             ["Scan figures (device types, counts, costs and fixes) and any question you type", "Only when Ghosty Insights runs on a scan", "Sent to one AI model provider to write the insights. No picture is sent."],
@@ -65,9 +67,10 @@ const sections: LegalSection[] = [
         </p>
         <p>
           <span className="font-medium text-fog">Enhanced (cloud) mode.</span> Each picture you scan is downscaled and sent over an encrypted connection to
-          our server, which forwards it to one vision model provider to identify the devices in it. Our server does not store the picture or write it to
-          any log; it holds it in memory only for the duration of the request. The provider&apos;s own policies govern how it handles the request while
-          processing it (Section 4).
+          our server, which forwards it to a vision model provider to identify the devices in it. If that provider is busy or does not answer, the same
+          picture is sent to the next one; if none can answer, the picture is read in your browser instead. Our server does not store the picture or write
+          it to any log; it holds it in memory only for the duration of the request. The provider&apos;s own policies govern how it handles the request
+          while processing it (Section 4).
         </p>
       </>
     ),
@@ -84,10 +87,14 @@ const sections: LegalSection[] = [
         <LegalTable
           head={["Provider", "Purpose", "What it receives"]}
           rows={[
-            ["Google (Gemini API), Groq, Mistral AI, Anthropic, OpenAI, OpenRouter", "Reading photos in Enhanced mode, and writing Ghosty Insights; only one provider is used per request, in a fixed order of preference", "For a photo: the picture, a text prompt, and context you supplied (time taken, place name, any note you typed). For Ghosty: the scan's figures and your question, never a picture"],
+            ["Google (Gemini API), Groq, Mistral AI, Anthropic, OpenAI, OpenRouter", "Reading photos and floor plans in Enhanced mode, and writing Ghosty Insights. Providers are tried in a fixed order of preference: if one is busy or does not answer, the same request goes to the next, and to keep the live camera quick a held-still frame may go to two at once", "For a photo: the picture, a text prompt, and context you supplied (time taken, place name, any note you typed). For a floor plan: the plan image. For Ghosty: the scan's figures and your question, never a picture"],
+            ["Ollama (only if you run the Service yourself with it)", "Reading photos with a model on your own machine", "The picture, which stays on that machine"],
+            ["Google (model download)", "Downloading the on-device detector's model files the first time it runs", "A standard file request, including your IP address. No picture or result is sent; the files are then cached by your browser"],
             ["U.S. Energy Information Administration (EIA)", "Current electricity prices and grid carbon intensity", "A state code"],
             ["National Laboratory of the Rockies (NREL) / OpenEI", "Your utility's published rate", "Rounded coordinates"],
-            ["OpenStreetMap Nominatim", "Place name for a location", "Rounded coordinates"],
+            ["OpenStreetMap (Nominatim and Overpass)", "Place name for a location, finding a school by name, and building outlines for the 3D school", "Rounded coordinates, or the school name you typed; requests go through our server, not from your browser"],
+            ["NREL PVWatts and Open-Meteo", "Solar estimates", "Rounded coordinates"],
+            ["Electricity Maps (only when configured)", "Live grid carbon intensity", "A grid zone"],
             ["OpenWeather", "Outdoor conditions for heating and cooling findings", "Rounded coordinates"],
             ["Upstash", "Team scan storage, when configured", "Team code, room names, display names and device rows"],
             ["Rewiring America", "Household rebate lookups", "ZIP code, the kinds of upgrade, and an income range and household size if you chose them"],
@@ -154,6 +161,7 @@ const sections: LegalSection[] = [
       <ul className="list-disc space-y-1.5 pl-5">
         <li>Use On-device mode so no picture leaves your device.</li>
         <li>Decline location access; the Service then uses state-average prices instead.</li>
+        <li>Skip &ldquo;Suggest rooms with AI&rdquo; on a floor plan; drawing rooms yourself keeps the plan in your browser.</li>
         <li>Do not send scans to a team if you do not want room names shared with the people who have its code.</li>
         <li>Erase everything stored in your browser at any time from Settings.</li>
       </ul>
@@ -207,7 +215,7 @@ export default function PrivacyPage() {
       summary={
         <>
           <span className="font-medium text-fog">In short:</span> no accounts, no tracking, no advertising. Your results stay in your browser. In On-device
-          mode no picture leaves your device. In Enhanced (cloud) mode each picture you scan is sent to one vision model provider to be read and is not stored
+          mode no picture leaves your device. In Enhanced (cloud) mode each picture you scan is sent to a vision model provider to be read, and is not stored
           by us.
         </>
       }

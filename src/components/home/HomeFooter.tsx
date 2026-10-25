@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { Mark } from "./HomeNav";
+import { GITHUB_URL } from "@/lib/site";
+import { GitHubMark } from "@/components/GitHubMark";
 
 const COLUMNS = [
   {
@@ -22,6 +24,7 @@ const COLUMNS = [
       { href: "/settings", label: "Rates & regions" },
       { href: "/privacy", label: "Privacy" },
       { href: "/terms", label: "Terms" },
+      { href: GITHUB_URL, label: "GitHub" },
     ],
   },
 ];
@@ -48,9 +51,16 @@ export function HomeFooter() {
                 <ul className="mt-4 space-y-2.5">
                   {c.links.map((l) => (
                     <li key={l.href}>
-                      <Link href={l.href} className="text-[0.92rem] text-graphite transition-colors hover:text-sodium-deep">
-                        {l.label}
-                      </Link>
+                      {/* The source code is the one link that leaves the site, so it opens in a new tab. */}
+                      {l.href.startsWith("http") ? (
+                        <a href={l.href} target="_blank" rel="noreferrer" className="text-[0.92rem] text-graphite transition-colors hover:text-sodium-deep">
+                          {l.label}
+                        </a>
+                      ) : (
+                        <Link href={l.href} className="text-[0.92rem] text-graphite transition-colors hover:text-sodium-deep">
+                          {l.label}
+                        </Link>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -60,7 +70,13 @@ export function HomeFooter() {
         </div>
         <div className="mt-16 flex flex-col justify-between gap-3 border-t border-hair pt-6 text-[0.8rem] text-pebble sm:flex-row">
           <p>Estimates, not meter readings. The ranking is the deliverable.</p>
-          <p>Open source, MIT licensed.</p>
+          <p>
+            <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 underline decoration-pebble/40 underline-offset-4 transition-colors hover:text-graphite">
+              <GitHubMark className="h-[0.95rem] w-[0.95rem]" />
+              Open source on GitHub
+            </a>
+            , MIT licensed.
+          </p>
         </div>
       </div>
     </footer>

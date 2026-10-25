@@ -16,6 +16,8 @@ import { EngineIndicator } from "./EngineIndicator";
 import { Arrow, Mark } from "./home/HomeNav";
 import { useT, type Key } from "@/lib/i18n";
 import { ThemeToggle } from "./ThemeToggle";
+import { GitHubMark } from "./GitHubMark";
+import { GITHUB_URL } from "@/lib/site";
 
 const TABS = [
   { href: "/scan", key: "nav.scanner", icon: "scan" },
@@ -124,6 +126,17 @@ export function Nav() {
               </>
             )}
             <ThemeToggle />
+            {/* The source code, one tap away. Desktop only: the phone's header is left as it is. */}
+            <a
+              href={GITHUB_URL}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Ghost Watt on GitHub"
+              title="Ghost Watt on GitHub"
+              className="hidden h-9 w-9 place-items-center rounded-full text-mist transition-colors hover:bg-fog/[0.06] hover:text-fog md:grid"
+            >
+              <GitHubMark />
+            </a>
             <Link
               href="/settings"
               aria-label={t("nav.settings")}

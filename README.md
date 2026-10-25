@@ -273,12 +273,11 @@ production build.
 
 ## Running a vision model locally
 
-Enhanced reading does not have to go to anybody's cloud. [Ollama](https://ollama.com) is a
-small runtime that serves open vision models on your own machine, and the app treats it as
-one more provider: the server route posts the photo to `OLLAMA_HOST` (by default
-`http://127.0.0.1:11434`), the model reports the devices it sees, and the energy math happens
-in TypeScript exactly as it does for every other path. No keys, no usage costs, and the image
-never leaves your computer.
+You don't have to send photos to anyone's cloud. [Ollama](https://ollama.com) runs open
+vision models on your own machine, and the app uses it like any other provider: it sends the
+photo to `OLLAMA_HOST` (`http://127.0.0.1:11434` unless you change it), the model lists what
+it sees, and the math runs the same way it always does. There are no keys or usage costs, and
+the photo stays on your computer.
 
 ```bash
 # 1. Install Ollama: https://ollama.com/download
@@ -289,24 +288,21 @@ ollama pull moondream
 ollama serve
 ```
 
-Open http://localhost:3000. The pill in the header confirms the model is reachable, and each
-result is labelled with the engine that produced it.
+Then open http://localhost:3000. The pill in the header shows whether the app can reach the
+model, and every result says which engine read it.
 
-**The catch is that you have to run the app on the same machine as Ollama.** A deployed copy
-cannot reach it: `localhost` on a hosting provider's server is that server, not your laptop.
-So a deployment either gets a hosted vision key, or an Ollama endpoint it can actually reach
-over the network, or it runs in On-device mode (see
-[Hosting and deployment](#hosting-and-deployment)). On-device is a real mode rather than a
-degraded one, so nothing breaks without a key, but a hosted model recognises considerably
-more of a room.
+The catch: the app has to run on the same machine as Ollama. A deployed copy can't reach it,
+because `localhost` on a hosting server means that server, not your laptop. So a deployment
+needs a hosted vision key or an Ollama server it can reach over the network (see
+[Hosting and deployment](#hosting-and-deployment)). Without either, it runs on-device. That
+still works, nothing breaks, but a hosted model recognises a lot more of a room.
 
 ## Configuration
 
-**Every variable is optional.** With none of them the app still scans, costs, plans and
-reports; each key turns an assumption into a lookup. Put them in `.env.local`, or on Vercel
-under Settings → Environment Variables, then redeploy. [`.env.example`](.env.example)
-documents all of them and [`DEPLOY.md`](DEPLOY.md) explains what each one buys and where to
-get it.
+None of these are required. Without any of them the app still scans, prices, plans and
+reports; each key swaps an assumption for a real lookup. Put them in `.env.local`, or on
+Vercel under Settings → Environment Variables and redeploy. [`.env.example`](.env.example)
+lists every one, and [`DEPLOY.md`](DEPLOY.md) says what each gets you and where to sign up.
 
 | Variable | What it turns on |
 | --- | --- |
@@ -326,17 +322,14 @@ turned on.
 
 ### Where a photo goes
 
-There is no telemetry and there are no accounts. What happens to a photo depends on which
-mode read it, and the pill in the header always says which is about to run:
+No accounts, no tracking. What happens to a photo depends on which mode reads it, and the
+pill in the header always tells you which one is about to run:
 
 | | Where the photo goes | Needs a key |
 | --- | --- | --- |
-| **On-device** | Nowhere. The detector runs in your browser. | No |
-| **Enhanced (cloud)** | Sent once to the vision model, which discards it. | Yes, one vision key |
-| **Local Ollama** | Nowhere off your own machine. | No, but you host the model |
-
-With no keys configured at all, the app runs fully in On-device mode: scanner, costs, plan,
-rooms, buildings and brief all work.
+| On-device | Nowhere. The detector runs in your browser. | No |
+| Enhanced (cloud) | Sent once to the vision model, which doesn't keep it. | Yes, one vision key |
+| Local Ollama | Nowhere off your own machine. | No, but you run the model |
 
 ## Open source
 
@@ -359,20 +352,19 @@ Issues and pull requests are welcome.
 
 ### What it's built on
 
-TypeScript throughout. Next.js (App Router) and React for the app, Tailwind CSS v4 for
-styling, Framer Motion for animation, three.js with React Three Fiber and drei for the 3D
-school, MediaPipe Tasks running EfficientDet-Lite0 for the in-browser detector,
-qrcode-generator for the room stickers, Vitest for the tests, and Python for the script that
-fine-tunes the detector on light fixtures
+It's TypeScript almost all the way down. Next.js (App Router) and React for the app,
+Tailwind CSS v4 for styling, Framer Motion for animation, three.js with React Three Fiber and
+drei for the 3D school, MediaPipe Tasks running EfficientDet-Lite0 for the in-browser
+detector, qrcode-generator for the room stickers and Vitest for the tests. The one bit of
+Python is the script that fine-tunes the detector on light fixtures
 ([`scripts/train-detector.py`](scripts/train-detector.py)). Each library is used under its
 own license.
 
-The seeing step is a vision model, either a hosted one (Anthropic, Google, Groq, Mistral,
-OpenAI or OpenRouter) or a local [Ollama](https://ollama.com) model. **The AI only ever does
-the seeing.** It is asked what is in the frame and whether each thing is on, and that is the
-end of its involvement: every watt, dollar, kilogram of CO₂ and payback figure is ordinary
-TypeScript you can follow line by line, which is why the Method page can publish the formulas
-and you can check any number by hand.
+The seeing is done by a vision model, either a hosted one (Anthropic, Google, Groq, Mistral,
+OpenAI or OpenRouter) or a local [Ollama](https://ollama.com) model, and that's all the AI
+does. It's asked what's in the frame and whether each thing is on. Every watt, dollar,
+kilogram of CO₂ and payback date after that is plain TypeScript you can follow line by line,
+which is why the Method page can publish every formula and you can check any number by hand.
 
 Building outlines are © OpenStreetMap contributors (ODbL), found through Nominatim and
 Overpass. Tariffs come from OpenEI's Utility Rate Database, prices from the U.S. Energy
@@ -380,12 +372,12 @@ Information Administration, and grid carbon from EPA eGRID. The full list is bel
 
 ## Data and sources
 
-Every number the app multiplies by, every statistic quoted on the site, and every outside
-service and model it relies on is listed on the Method page (`/methodology#sources`),
-grouped the same way as below, with what is taken from each and any caveat. The list lives
-in [`src/lib/sources.ts`](src/lib/sources.ts). Claims on the home page and under each
-result carry a "Sources:" line that links straight to the entry, and a test checks that
-every one of those links lands on a real source.
+The Method page (`/methodology#sources`) lists every number the app multiplies by, every
+statistic quoted on the site, and every outside service and model it uses, grouped the same
+way as below, with what we took from each and any caveat. The list itself lives in
+[`src/lib/sources.ts`](src/lib/sources.ts). Claims on the home page and under each result
+have a "Sources:" line linking straight to their entry, and a test fails the build if any of
+those links points nowhere.
 
 ### Figures the math uses
 
@@ -417,8 +409,8 @@ every one of those links lands on a real source.
 - "About 30% of their energy is wasted": a long-standing
   [EPA ENERGY STAR estimate](https://www.epa.gov/archive/epapages/newsroom_archive/newsreleases/6723b7f2facee90c85257712005a3969.html).
   The home page's live counter is $119 billion × 30%, about $35.7 billion a year; at $0.13/kWh
-  that is a steady 31 GW, about thirty large reactors at roughly a gigawatt each. It is an
-  order of magnitude, not an audit.
+  that's a steady 31 GW, about thirty large reactors at roughly a gigawatt each. Treat it as a
+  ballpark, not an audit.
 - "Up to $2.4 billion a year wasted by K-12 schools": [ENERGY STAR for K-12](https://www.energystar.gov/buildings/resources-audience/k-12-schools)
   says districts spend over $8 billion a year on energy and more than 30% of it is wasted.
 - The CO₂ comparisons under each result (cars, homes, miles, gallons, tree seedlings):
@@ -450,13 +442,9 @@ second look. The detectors were benchmarked on photos from
 hosted vision-language model reads the photo (Anthropic, Gemini, Groq, Mistral, OpenAI or
 OpenRouter).
 
-Photos are yours, at runtime. On-device, they never leave the browser. In Enhanced mode,
-each one goes to the model once and isn't kept.
-
-Where a figure could not be checked against its primary document from this build
-environment, the entry in [`src/lib/sources.ts`](src/lib/sources.ts) says so rather than
-implying a precision it does not have. The state price, carbon and degree-day tables are all
-marked that way.
+A few figures we couldn't check against the original document, and their entries in
+[`src/lib/sources.ts`](src/lib/sources.ts) say so instead of pretending to be exact. The
+state price, carbon and degree-day tables are all marked that way.
 
 ## Responsible AI
 
@@ -562,37 +550,36 @@ scripts/            Detector training and build helpers
 
 ## Hosting and deployment
 
-Ghost Watt is a standard Next.js (App Router) application and deploys to any platform that
-runs Node, such as Vercel, Render, or your own server. On Vercel, sign in with GitHub, import
-the repository, and deploy with the default settings. Everything works immediately in
-**On-device** mode, which is a real mode and not a crippled one: the scanner, the costs, the
-plan, rooms, buildings and the brief all run with no keys at all.
+It's a standard Next.js app, so it runs anywhere that runs Node: Vercel, Render, or your own
+server. On Vercel, sign in with GitHub, import the repo and deploy with the default settings.
+It works straight away in on-device mode, which handles the scanner, costs, plan, rooms,
+buildings and the brief with no keys at all.
 
-To give a deployment **Enhanced (cloud)** reading, pick whichever of these suits you:
+For cloud reading on a deployment, you have a few options:
 
-1. **Add a vision key (easiest, and what a shared link should do).** Put one or more of
-   `GEMINI_API_KEY`, `GROQ_API_KEY`, `MISTRAL_API_KEY` or `OPENROUTER_API_KEY` into Settings →
-   Environment Variables and redeploy. All four have free tiers. `ANTHROPIC_API_KEY` and
-   `OPENAI_API_KEY` recognise the most but are billable. Two keys is better than one, because
-   each is a fallback for the one before it, and any variable can hold several keys,
-   comma-separated, that take turns.
-2. **Host Ollama yourself.** Run Ollama on a cloud machine, ideally with a GPU, behind a
-   secured endpoint, and point `OLLAMA_HOST` at it. No per-request cost and no third party
-   sees a photo, but you are now running a model server.
-3. **Tunnel to a local Ollama.** Expose your own machine with something like
-   `cloudflared tunnel --url http://localhost:11434` and set `OLLAMA_HOST` to the public URL.
-   Your laptop has to stay awake, and serverless time limits can cut off slow inference, so
-   this is for testing rather than for anything shared.
-4. **Just run it locally.** Next to Ollama on one machine, as in
-   [Running a vision model locally](#running-a-vision-model-locally). The most reliable way to
-   demonstrate the whole pipeline on real photos.
+1. Add a vision key. This is the easy one, and what a shared link should use. Put one or more
+   of `GEMINI_API_KEY`, `GROQ_API_KEY`, `MISTRAL_API_KEY` or `OPENROUTER_API_KEY` under
+   Settings → Environment Variables and redeploy. All four have free tiers. `ANTHROPIC_API_KEY`
+   and `OPENAI_API_KEY` recognise the most but cost money. Two providers beat one, since each
+   backs up the one before it, and any variable can hold several comma-separated keys that
+   take turns.
+2. Host Ollama yourself on a cloud machine, ideally with a GPU, behind a secured endpoint, and
+   point `OLLAMA_HOST` at it. No per-request cost and no third party sees a photo, but now
+   you're running a model server.
+3. Tunnel to Ollama on your own machine with something like
+   `cloudflared tunnel --url http://localhost:11434`, and set `OLLAMA_HOST` to the public URL.
+   Your laptop has to stay awake, and serverless time limits can cut off a slow answer, so
+   it's for testing, not for a link you share.
+4. Skip hosting and run everything on one machine next to Ollama, as in
+   [Running a vision model locally](#running-a-vision-model-locally). For showing the whole
+   pipeline on real photos, it's the most reliable.
 
-A practical recommendation: deploy to Vercel with a free Gemini or Groq key for a shareable
-link that does everything, and keep a local Ollama setup for when you want to show that the
-seeing step can run with nothing leaving the machine.
+What we'd do: deploy to Vercel with a free Gemini or Groq key for a link that does
+everything, and keep a local Ollama setup for when you want to show the seeing step running
+with nothing leaving the machine.
 
-[`DEPLOY.md`](DEPLOY.md) has the full guide, including why GitHub Pages won't work: it serves
-static files only, and the API routes that hold the keys need a server.
+[`DEPLOY.md`](DEPLOY.md) has the full guide, including why GitHub Pages won't work: it only
+serves static files, and the API routes that hold the keys need a server.
 
 ## AI assistance
 
