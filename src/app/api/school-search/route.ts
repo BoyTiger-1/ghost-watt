@@ -3,7 +3,7 @@ import { RULES, checkLimits, clientIp } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
 
-const UA = "GhostWatt/1.0 (school energy audit; github.com/BoyTiger-1/ghost-watt)";
+const UA = "GhostWatt/1.0 (building energy audit; github.com/BoyTiger-1/ghost-watt)";
 const cache = new Map<string, { at: number; body: unknown }>();
 const CACHE_MS = 7 * 24 * 3600 * 1000;
 

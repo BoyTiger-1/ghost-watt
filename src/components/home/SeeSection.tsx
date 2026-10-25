@@ -40,7 +40,7 @@ export function SeeSection() {
             of what this room costs to leave on.
           </p>
           <p className="mt-4 text-[1.05rem] leading-[1.65] text-stone">
-            No meters, no clipboard, no consultant. A whole school takes about ten minutes.
+            No meters, no clipboard, no consultant. A whole building takes about ten minutes.
           </p>
 
           {/* on narrow screens the callouts become a short list */}

@@ -12,6 +12,7 @@
 // weighted hour by hour across the year when the tariff varies by time of day.
 //
 // The parsing below is pure, so it is tested without the network.
+import { firstKey } from "./keypool";
 
 export type Sector = "residential" | "commercial";
 
@@ -263,7 +264,7 @@ export async function lookupTariff(
   sector: Sector,
   occupied?: OccupancyTest,
 ): Promise<Tariff | null> {
-  const key = process.env.OPENEI_API_KEY?.trim() || process.env.NREL_API_KEY?.trim() || "DEMO_KEY";
+  const key = firstKey("OPENEI_API_KEY") || firstKey("NREL_API_KEY") || "DEMO_KEY";
   const url =
     `https://api.openei.org/utility_rates?version=latest&format=json&detail=full&approved=true` +
     `&orderby=startdate&direction=desc&limit=60&sector=${sector === "residential" ? "Residential" : "Commercial"}` +

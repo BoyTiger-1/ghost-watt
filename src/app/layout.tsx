@@ -13,9 +13,9 @@ import { Splash, SPLASH_SCRIPT } from "@/components/Splash";
 export const metadata: Metadata = {
   title: "Ghost Watt - the after-hours energy map nobody has",
   description:
-    "Crowdsource a photo-audit of your school after hours. A vision model, in your browser or in the cloud, spots what's left running; Ghost Watt ranks the biggest phantom-load offenders by dollars and CO₂, with a costed fix for each.",
+    "Photo-audit your home, office or school after hours. A vision model, in your browser or in the cloud, spots what's left running; Ghost Watt ranks the biggest phantom-load offenders by dollars and CO₂, with a costed fix for each.",
   applicationName: "Ghost Watt",
-  keywords: ["energy audit", "phantom load", "schools", "sustainability", "CO2", "vision model"],
+  keywords: ["energy audit", "phantom load", "home energy", "office energy", "schools", "sustainability", "CO2", "vision model"],
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,

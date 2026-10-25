@@ -85,6 +85,8 @@ export interface Track {
   seen: boolean[];
   /** Score-weighted votes per class; `cls` is the leader. */
   votes?: Record<string, number>;
+  /** Once on screen, a track stays there until it is dropped, so a box never blinks. */
+  shown?: boolean;
 }
 
 function iouPx(a: PxBox, b: PxBox): number {
@@ -116,7 +118,7 @@ export class Tracker {
    * a frame or two stays.
    */
   constructor(
-    private readonly opts = { minIou: 0.25, smoothing: 0.55, maxMissed: 8, window: 5, needed: 3 },
+    private readonly opts = { minIou: 0.25, smoothing: 0.55, maxMissed: 12, window: 5, needed: 3 },
   ) {}
 
   update(dets: Detection[]): Track[] {
@@ -195,13 +197,20 @@ export class Tracker {
     if (t.seen.length > this.opts.window) t.seen.shift();
   }
 
-  /** Tracks seen in enough of the last few frames to be real, rather than a flicker. */
+  /**
+   * Tracks seen in enough of the last few frames to be real, rather than a flicker.
+   *
+   * Earning a place on screen takes `needed` of the last `window` frames; keeping
+   * it only takes not being dropped. Without that difference a track hovering at
+   * the threshold blinks on and off every frame, and so does its wattage.
+   */
   visible(): Track[] {
     const { needed } = this.opts;
     return this.tracks.filter((t) => {
       const recent = t.seen.filter(Boolean).length;
       // Appliances the detector invents from doors and cupboards need the full window.
-      return recent >= (NEEDS_CONFIRM.has(t.cls) ? Math.max(needed, 4) : needed);
+      if (recent >= (NEEDS_CONFIRM.has(t.cls) ? Math.max(needed, 4) : needed)) t.shown = true;
+      return !!t.shown;
     });
   }
 

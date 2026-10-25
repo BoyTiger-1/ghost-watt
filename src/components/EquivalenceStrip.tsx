@@ -8,6 +8,7 @@
 // only one of them travels.
 
 import { bestEquivalences, spendEquivalences, fmtEquiv } from "@/lib/equivalence";
+import { Cite } from "./Cite";
 
 const GLYPH: Record<string, string> = {
   car: "M3 13l1.6-4.2A2 2 0 016.5 7.5h11a2 2 0 011.9 1.3L21 13v5h-2.5v-1.5h-13V18H3v-5zm3 1.5a1.2 1.2 0 100-2.4 1.2 1.2 0 000 2.4zm12 0a1.2 1.2 0 100-2.4 1.2 1.2 0 000 2.4z",
@@ -79,6 +80,14 @@ export function EquivalenceStrip({
           </p>
         </div>
       )}
+
+      <Cite
+        className="mt-4 text-dim"
+        items={[
+          { id: "epa-ghg-equivalencies", name: "EPA Greenhouse Gas Equivalencies" },
+          { id: "illustrative-spend", name: "spending comparisons are round illustrative prices" },
+        ]}
+      />
     </section>
   );
 }

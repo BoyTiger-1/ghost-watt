@@ -5,7 +5,7 @@ import { Reveal } from "@/components/Reveal";
 const POINTS = [
   {
     lead: "It never decides for you.",
-    body: "Ghost Watt ranks what it found and prices the fixes. Whether to buy anything is a call for a teacher or a facilities manager, who knows the budget and the building.",
+    body: "Ghost Watt ranks what it found and prices the fixes. Whether to buy anything is a call for the owner or facilities manager, who knows the budget and the building.",
   },
   {
     lead: "It says where every number came from.",

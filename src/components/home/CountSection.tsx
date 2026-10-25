@@ -11,6 +11,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { motion, useSpring, useTransform } from "framer-motion";
 import { Chapter } from "./Chapter";
+import { Cite } from "@/components/Cite";
 import { Arrow } from "./HomeNav";
 
 const THINGS = [
@@ -76,7 +77,7 @@ export function CountSection() {
           <Scrub value={hours} min={500} max={8760} step={100} onChange={(v) => { setHours(v); setTouched(true); }} format={(v) => int(v)} label="Empty hours per year" />{" "}
           empty hours a year, at{" "}
           <Scrub value={rate} min={0.05} max={0.45} step={0.01} onChange={(v) => { setRate(v); setTouched(true); }} format={(v) => `$${v.toFixed(2)}`} label="Electricity price per kilowatt-hour" />{" "}
-          a kilowatt-hour, costs your school{" "}
+          a kilowatt-hour, costs your building{" "}
           <Figure value={dollars} prefix="$" className="text-sodium-deep" />{" "}
           a year and puts <Figure value={kg} suffix=" kg" className="text-moss" /> of CO₂ into the air.
         </p>
@@ -91,6 +92,15 @@ export function CountSection() {
             <br />
             {int(kwh)} kWh × {KG_PER_KWH} kg/kWh = <span className="text-moss">{int(kg)} kg CO₂</span>
             <span className="text-pebble/70">, about a {int(kg / KG_PER_MILE)}-mile drive</span>
+            <Cite
+              className="mt-3 font-sans text-pebble"
+              items={[
+                { id: "catalog", name: "wattage table" },
+                { id: "eia-table4-2024", name: "EIA prices" },
+                { id: "egrid", name: "EPA eGRID" },
+                { id: "epa-ghg-equivalencies", name: "EPA per-mile CO₂" },
+              ]}
+            />
           </p>
           <div>
             <p className="text-[1rem] leading-[1.65] text-stone">

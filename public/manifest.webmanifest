@@ -9,7 +9,7 @@
   "orientation": "portrait",
   "background_color": "#f5f2eb",
   "theme_color": "#f5f2eb",
-  "categories": ["education", "utilities", "productivity"],
+  "categories": ["utilities", "productivity", "lifestyle"],
   "icons": [
     {
       "src": "/icon.svg",

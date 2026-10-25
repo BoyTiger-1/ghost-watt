@@ -4,12 +4,13 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { CodeWindow, DEVICES_TS, ENERGY_TS, ENERGY_TS_SHORT } from "@/components/CodeWindow";
 import { Chapter } from "./Chapter";
+import { Cite } from "@/components/Cite";
 import { Arrow } from "./HomeNav";
 
 const DEFAULTS = [
   { value: "$0.13", label: "per kWh, the US commercial average (EIA, 2024)" },
   { value: "0.35", label: "kg of CO₂ per kWh on the US grid (eGRID 2023)" },
-  { value: "6,800", label: "empty hours a year, after 190 school days" },
+  { value: "6,800", label: "empty hours a year in a typical building" },
 ];
 
 export function MethodSection() {
@@ -38,6 +39,14 @@ export function MethodSection() {
             ))}
           </dl>
           <p className="mt-5 text-[0.88rem] text-pebble">The defaults. All three are yours to change.</p>
+          <Cite
+            className="mt-1.5 text-pebble"
+            items={[
+              { id: "eia-table4-2024", name: "EIA 2024 prices" },
+              { id: "egrid", name: "EPA eGRID" },
+              { id: "empty-hours", name: "empty hours" },
+            ]}
+          />
 
           <Link href="/methodology" className="group mt-8 inline-flex items-center gap-2 text-[0.95rem] text-graphite">
             <span className="underline decoration-graphite/25 underline-offset-[6px] group-hover:decoration-graphite">

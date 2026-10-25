@@ -47,7 +47,7 @@ const sections: LegalSection[] = [
             ["Technical data (IP address, browser type, request time)", "With every request, as with any website", "Processed by our hosting provider and used by our server for rate limiting (Section 6)."],
           ]}
         />
-        <p>We do not ask for your email address, phone number, age or school. The only name field is the optional display name shown to your team when you send it a scan; any nickname works.</p>
+        <p>We do not ask for your email address, phone number or age. The only name field is the optional display name shown to your team when you send it a scan; any nickname works.</p>
       </>
     ),
   },
@@ -133,16 +133,16 @@ const sections: LegalSection[] = [
   },
   {
     id: "children",
-    title: "Children and schools",
+    title: "Children and organisations",
     body: (
       <>
         <p>
-          The Service is intended for use by students under the supervision of a teacher or parent, and by adults. It does not knowingly collect personal
-          information from anyone, including children under 13, and it does not require or ask for any. Students should photograph only spaces they are
+          The Service is intended for use by adults, and by children under the supervision of a parent, teacher or other responsible adult. It does not knowingly collect personal
+          information from anyone, including children under 13, and it does not require or ask for any. Everyone should photograph only spaces they are
           permitted to photograph and should avoid capturing people. The live camera does not track or identify people.
         </p>
         <p>
-          Schools using the Service with students should choose On-device mode if their policies do not allow images to be processed by third-party services.
+          Households, offices, schools and any other organisation should choose On-device mode if their policies do not allow images to be processed by third-party services.
         </p>
       </>
     ),

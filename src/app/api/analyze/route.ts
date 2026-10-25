@@ -1,3 +1,4 @@
+import { quotaHit, quotaWaitSeconds } from "@/lib/quota";
 import { NextResponse } from "next/server";
 import { describeImagesAny } from "@/lib/vision";
 import { buildVisionPrompt, type PromptContext } from "@/lib/ollama";
@@ -123,6 +124,19 @@ export async function POST(req: Request) {
 
   if (!vision.ok) {
     const configured = Boolean(vision.configured);
+    // Every provider out of quota is not a fault, and should not read like one.
+    if (configured && quotaHit(vision.error)) {
+      const wait = quotaWaitSeconds(vision.error);
+      return fail(
+        429,
+        {
+          error: `The cloud models have reached their limit for now. Try again in about ${Math.max(1, Math.round(wait / 60))} min.`,
+          code: "rate-limited",
+          retryAfterSeconds: wait,
+        },
+        { "Retry-After": String(wait) },
+      );
+    }
     return fail(503, {
       error: configured
         ? `The vision model did not answer (${vision.error}).`

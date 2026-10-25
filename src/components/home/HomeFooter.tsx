@@ -17,6 +17,7 @@ const COLUMNS = [
     title: "Understand it",
     links: [
       { href: "/methodology", label: "Methodology" },
+      { href: "/methodology#sources", label: "Sources" },
       { href: "/about", label: "About" },
       { href: "/settings", label: "Rates & regions" },
       { href: "/privacy", label: "Privacy" },
@@ -36,7 +37,7 @@ export function HomeFooter() {
               <span className="text-[1.02rem] font-semibold tracking-[-0.02em] text-graphite">Ghost Watt</span>
             </div>
             <p className="mt-4 text-[0.92rem] leading-relaxed text-stone">
-              The after-hours energy audit for schools. Find what was left on, price it, and fix
+              The after-hours energy audit for any building: homes, offices and schools. Find what was left on, price it, and fix
               the worst of it first.
             </p>
           </div>

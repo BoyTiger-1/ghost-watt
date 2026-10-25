@@ -15,6 +15,7 @@
 import { useEffect, useRef } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Chapter } from "./Chapter";
+import { Cite } from "@/components/Cite";
 import { CountTo, Flashlight, SplitLines } from "@/components/motion/Motion";
 
 const PER_YEAR = 119e9 * 0.3;
@@ -50,21 +51,30 @@ export function ImpactSection() {
           <div className="mt-8 grid gap-12 lg:grid-cols-[1.25fr_1fr] lg:items-end">
             <div>
               <h2 className="font-editorial text-[clamp(2.4rem,5vw,4.4rem)] leading-[0.98] text-[#f5f2eb]">
-                <SplitLines inView lines={["Since you opened this page,", <span key="b" className="italic text-[#ffc777]">America’s offices, stores and schools have wasted</span>]} />
+                <SplitLines inView lines={["Since you opened this page,", <span key="b" className="italic text-[#ffc777]">America’s homes, offices, stores and schools have wasted</span>]} />
               </h2>
               <LiveCounter />
               <p className="mt-3 max-w-[34rem] text-[0.95rem] leading-relaxed text-[#f5f2eb]/60">
-                on electricity nobody used. {`That is a steady ${Math.round(GIGAWATTS)} gigawatts, about`} thirty nuclear reactors&apos; worth. Commercial
+                on electricity nobody used. {`That is a steady ${Math.round(GIGAWATTS)} gigawatts, about thirty nuclear reactors’ worth.`} Commercial
                 buildings spend $119 billion a year on electricity (EIA), and the EPA estimates about 30% of their energy is wasted.
               </p>
             </div>
 
             <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-white/10">
-              <Stat value={<CountTo to={2.4} prefix="$" suffix="B" decimals={1} duration={1.2} />} label="a year, up to, wasted by U.S. K-12 schools" />
-              <Stat value={<CountTo to={6800} />} label="hours a year a typical school stands empty" />
-              <Stat value={<CountTo to={98800} />} label="public schools in the U.S. that could run this scan" />
-              <Stat value={<>10<span className="text-[#ffc777]">min</span></>} label="for thirty students scanning three or four rooms each" />
+              <Stat value={<CountTo to={2.4} prefix="$" suffix="B" decimals={1} duration={1.2} />} label="a year, up to, wasted by U.S. K-12 schools alone" />
+              <Stat value={<CountTo to={6800} />} label="hours a year a typical building stands empty" />
+              <Stat value={<CountTo to={5900000} />} label="commercial buildings in the U.S. that could run this scan" />
+              <Stat value={<>10<span className="text-[#ffc777]">min</span></>} label="for a team of thirty scanning three or four rooms each" />
             </dl>
+            <Cite
+              className="text-[#f5f2eb] lg:col-span-2"
+              items={[
+                { id: "cbecs-2018", name: "EIA CBECS 2018" },
+                { id: "epa-30pct", name: "EPA (30% wasted)" },
+                { id: "energystar-k12", name: "ENERGY STAR K-12" },
+                { id: "empty-hours", name: "how 6,800 hours is derived" },
+              ]}
+            />
           </div>
         </div>
 

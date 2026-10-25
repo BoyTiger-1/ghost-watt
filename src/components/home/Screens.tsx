@@ -12,7 +12,7 @@ export const RANKED = [
   { icon: "vending", name: "Vending machine", room: "Lobby", cost: 194, fix: "Vending controller · $180", pay: "22 mo" },
 ];
 
-/* ---- laptop: the brief for the school board ------------------------------ */
+/* ---- laptop: the brief for the decision-maker ------------------------------ */
 
 export function ReportScreen() {
   return (
@@ -42,12 +42,12 @@ export function ReportScreen() {
             </span>
           ))}
           <div className="mt-auto rounded-[0.7em] bg-[#f1ede5] p-[0.8em] text-[0.75em] leading-snug text-[#6f6a60]">
-            22 rooms scanned by 27 students
+            22 rooms scanned by 27 people
           </div>
         </aside>
 
         <main className="min-w-0 flex-1 p-[1.8em]">
-          <p className="text-[0.8em] text-[#8b867c]">After-hours brief · Lincoln Middle School · October</p>
+          <p className="text-[0.8em] text-[#8b867c]">After-hours brief · Riverside Building · October</p>
           <h3 className="font-editorial mt-[0.3em] text-[2.9em] leading-[1] tracking-[-0.02em]">
             $4,820 a year, <span className="italic text-[#3a4566]">recoverable.</span>
           </h3>

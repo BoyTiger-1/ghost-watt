@@ -24,6 +24,7 @@
 // Tier 2 is the interesting one: it means every user gets a location-specific solar
 // estimate built from measured irradiance with no signup, and the NREL key is an
 // upgrade rather than a prerequisite.
+import { firstKey } from "./keypool";
 
 export type SolarStatus = "live" | "modeled" | "static";
 
@@ -165,7 +166,7 @@ async function getJson(url: string, timeoutMs = TIMEOUT_MS): Promise<unknown> {
 
 /** Tier 1. Returns null on any failure so the caller falls through quietly. */
 async function viaPvWatts(lat: number, lon: number): Promise<SolarEstimate | null> {
-  const key = process.env.NREL_API_KEY?.trim() || "DEMO_KEY";
+  const key = firstKey("NREL_API_KEY") || "DEMO_KEY";
   // system_capacity=1 makes the response read directly as kWh per kW per year.
   const url =
     `https://developer.nrel.gov/api/pvwatts/v8.json?api_key=${key}` +

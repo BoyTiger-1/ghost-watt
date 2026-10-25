@@ -145,7 +145,7 @@ export const EXTRA_DEVICES: DeviceCategory[] = [
     // Single-lamp fixtures. Costing these as "overhead lighting" (a bank of
     // troffers at 120 W) priced a ceiling of 10 W downlights at ten times the truth.
     id: "downlight",
-    label: "Downlights / pendant lamps",
+    label: "Ceiling downlights / pendants",
     keywords: [
       "recessed downlight",
       "recessed light",

@@ -123,8 +123,8 @@ function SchoolSearch({ onPick, autoFocus = false }: { onPick: (r: SchoolResult)
             setQ(e.target.value);
             if (e.target.value.trim().length < 3) setResults(null);
           }}
-          placeholder="Your school's name, e.g. Lincoln High School Portland"
-          aria-label="Search for your school"
+          placeholder="Your building's name, e.g. Lincoln High School Portland"
+          aria-label="Search for your building"
           className="min-w-0 flex-1 bg-transparent text-[1.02rem] text-moon outline-none placeholder:text-moon/40"
         />
         {busy && <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-[#ffc777] border-t-transparent" />}
@@ -132,7 +132,7 @@ function SchoolSearch({ onPick, autoFocus = false }: { onPick: (r: SchoolResult)
       {error && <p className="mt-2 text-[0.82rem] text-[#ff9a7a]">{error}</p>}
       {results && q.trim().length >= 3 && (
         <ul className="mt-2 max-h-[22rem] overflow-y-auto rounded-2xl border border-white/10 bg-[#1b1f33]/95 p-1.5">
-          {results.length === 0 && !busy && <li className="px-3 py-3 text-[0.88rem] text-moon/60">No schools found. Try adding the city.</li>}
+          {results.length === 0 && !busy && <li className="px-3 py-3 text-[0.88rem] text-moon/60">No buildings found. Try adding the city.</li>}
           {results.map((r) => (
             <li key={r.osmId}>
               <button type="button" onClick={() => onPick(r)} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/[0.07]">
@@ -203,7 +203,7 @@ export function CampusView() {
       const all = [...near.filter((c) => c.inside || c.school), ...own, ...near.filter((c) => !c.inside && !c.school)].slice(0, 8);
       setPicking({ school: r, candidates: all });
     } catch {
-      setPicking({ school: r, candidates: own, error: own.length ? undefined : "Couldn't load this school's buildings. Try again." });
+      setPicking({ school: r, candidates: own, error: own.length ? undefined : "Couldn't load this site's buildings. Try again." });
     }
   };
 
@@ -234,7 +234,7 @@ export function CampusView() {
     return (
       <div className="panel p-10 text-center">
         <h2 className="font-editorial text-[1.8rem] text-fog">Scan a room first</h2>
-        <p className="mx-auto mt-2 max-w-md text-[0.95rem] text-mist">The 3D school colours each room by what its scan found, so it starts with a scan.</p>
+        <p className="mx-auto mt-2 max-w-md text-[0.95rem] text-mist">The 3D building colours each room by what its scan found, so it starts with a scan.</p>
         <Link href="/scan" className="mt-5 inline-block rounded-full bg-fog px-5 py-2.5 text-[0.9rem] font-medium text-ink">
           Open the scanner
         </Link>
@@ -271,9 +271,9 @@ export function CampusView() {
                       className={`group flex h-full w-full flex-col items-center gap-2 rounded-2xl border p-4 text-center transition-colors hover:border-[#ffc777]/70 hover:bg-white/[0.06] ${i === 0 ? "border-[#ffc777]/40 bg-white/[0.05]" : "border-white/10"}`}
                     >
                       <OutlineThumb outline={c.outline} className="h-20 w-20 transition-transform group-hover:scale-105" tone="night" />
-                      <span className="line-clamp-2 text-[0.86rem] font-medium">{c.name ?? (c.school ? "School building" : "Building")}</span>
+                      <span className="line-clamp-2 text-[0.86rem] font-medium">{c.name ?? (c.school ? "Building" : "Building")}</span>
                       <span className="text-[0.74rem] text-moon/50">
-                        {c.area ? `${Math.round(c.area * 10.764).toLocaleString("en-US")} sq ft` : "school grounds"}
+                        {c.area ? `${Math.round(c.area * 10.764).toLocaleString("en-US")} sq ft` : "site grounds"}
                         {c.levels ? ` · ${c.levels} floors` : ""}
                       </span>
                       {i === 0 && <span className="rounded-full bg-[#ffc777]/15 px-2 py-0.5 text-[0.68rem] text-[#ffc777]">best match</span>}
@@ -282,14 +282,14 @@ export function CampusView() {
                 ))}
               </ul>
             ) : (
-              <p className="mt-6 text-[0.92rem] text-[#ff9a7a]">{picking.error ?? "No building outlines are mapped for this school yet. You can still use floor plans on their own."}</p>
+              <p className="mt-6 text-[0.92rem] text-[#ff9a7a]">{picking.error ?? "No building outlines are mapped here yet. You can still use floor plans on their own."}</p>
             )}
           </div>
         ) : (
           <div className="relative mx-auto max-w-2xl text-center">
             <p className="text-[0.78rem] uppercase tracking-[0.16em] text-[#ffc777]/80">Step 1 of 3</p>
             <h2 className="font-editorial mt-3 text-[clamp(2.2rem,5vw,3.6rem)] leading-[1.02]">
-              Find your <span className="italic text-[#ffc777]">school.</span>
+              Find your <span className="italic text-[#ffc777]">building.</span>
             </h2>
             <p className="mx-auto mt-3 max-w-md text-[1rem] leading-relaxed text-moon/65">
               Its real outline and floor count come from OpenStreetMap. Then add your floor plans and every scanned room lights up.
@@ -336,7 +336,7 @@ export function CampusView() {
             <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[0.8rem] text-moon/55">
               {campus.school?.place && <span>{campus.school.place}</span>}
               <button onClick={() => setChanging(true)} className="text-[#ffc777]/90 hover:text-[#ffc777]">
-                Change school
+                Change building
               </button>
               {store.buildings.length > 1 && (
                 <select
@@ -507,12 +507,12 @@ export function CampusView() {
             <li className="flex gap-3">
               <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-lime text-[0.72rem] font-semibold text-ink">✓</span>
               <div className="min-w-0 flex-1">
-                <p className="text-[0.9rem] font-medium text-fog">School</p>
+                <p className="text-[0.9rem] font-medium text-fog">Building</p>
                 <p className="truncate text-[0.8rem] text-dim">
                   {campus.footprint ? `${campus.footprint.name ?? "Mapped building"}${campus.footprint.levels ? ` · ${campus.footprint.levels} floors mapped` : ""}` : "Using floor plans only"}
                 </p>
                 <button onClick={() => setChanging(true)} className="mt-0.5 text-[0.78rem] text-cyan hover:underline">
-                  {campus.footprint ? "Change" : "Find the school on the map"}
+                  {campus.footprint ? "Change" : "Find the building on the map"}
                 </button>
               </div>
             </li>

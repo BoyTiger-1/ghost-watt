@@ -120,7 +120,7 @@ async function reverseGeocode(lat: number, lon: number): Promise<{ place: string
       `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=16&addressdetails=1&lat=${lat}&lon=${lon}`,
       {
         // Nominatim's usage policy requires an identifying user agent.
-        headers: { "User-Agent": "GhostWatt/1.0 (school energy audit)", "Accept-Language": "en" },
+        headers: { "User-Agent": "GhostWatt/1.0 (building energy audit)", "Accept-Language": "en" },
         signal: controller.signal,
       },
     );
