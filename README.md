@@ -4,7 +4,8 @@ Point a phone at a room, or upload a photo, and Ghost Watt finds the powered thi
 (screens, computers, lights, appliances), prices each one at your real electricity rate,
 separates what it costs in normal use from what it wastes after hours or in standby, and
 ranks the fixes by dollars saved per dollar spent. Rooms roll up into a building, the
-building into a one-page brief a facilities manager, landlord or owner can act on.
+building into a 3D model lit up by its waste and a one-page brief a facilities manager,
+landlord or owner can act on.
 
 Two reading paths, and the pill in the header always says which one is about to run:
 **On-device** (a small detector in the browser; no picture ever leaves the device) or
@@ -16,17 +17,87 @@ be read says so.
 > Take any building's invisible energy waste (a home, an office, a school) and make it
 > visible, countable, and actually fixable.
 
+Ghost Watt is free and open source under the [MIT License](LICENSE).
+
+## Contents
+
+- [Why it matters](#why-it-matters)
+- [What it does](#what-it-does)
+- [How it works](#how-it-works)
+- [Quick start](#quick-start)
+- [Configuration](#configuration)
+- [Open source](#open-source)
+- [Data and sources](#data-and-sources)
+- [Responsible AI](#responsible-ai)
+- [Accessibility](#accessibility)
+- [Project layout](#project-layout)
+- [Hosting and deployment](#hosting-and-deployment)
+- [AI assistance](#ai-assistance)
+- [License](#license)
+
 ## Why it matters
 
-Households, offices and schools all want to cut waste and carbon. The problem is you can't fix what you can't
-see, and after-hours energy waste is exactly the kind of thing nobody notices. One projector
-left running overnight is about 250 W of pure loss. Add a hallway of lights, a row of idle
-monitors, a vending machine or a forgotten TV, and it quietly adds up to thousands of dollars and hundreds of
-kilos of CO2 a year. A proper energy audit normally means meters, spreadsheets, or paying a
-consultant. This needs a phone and about ten minutes.
+Households, offices and schools all want to cut waste and carbon. The problem is you can't
+fix what you can't see, and after-hours energy waste is exactly the kind of thing nobody
+notices. One projector left running overnight is about 250 W of pure loss. Add a hallway of
+lights, a row of idle monitors, a vending machine or a forgotten TV, and it quietly adds up
+to thousands of dollars and hundreds of kilos of CO2 a year. A proper energy audit normally
+means meters, spreadsheets, or paying a consultant. This needs a phone and about ten minutes.
 
 And the output isn't another dashboard to nod at. It's a to-do list in priority order: fix
 this first, here's the price, here's the payback.
+
+## What it does
+
+**Scanning**
+
+- **Live camera with wattage tags.** Point the camera and every powered thing in view gets a
+  tag with its draw in watts, largest first, plus what it is and what it costs a year. A meter
+  in the corner adds up the watts drawing in view right now. Tap a tag to see the published
+  range for that kind of device, what it costs left on versus at typical use, and to correct
+  it: set it on, standby or off, or say what it really is from the catalog. Corrections flow
+  into the totals and the saved photo.
+- **Photo and video.** Take a photo, record a walkthrough, or upload pictures and clips (drag,
+  paste or pick). A photo's EXIF sets where and when it was taken, which sets the rate and
+  whether the room should have been empty.
+- **Type it in.** No camera, or the model got something wrong: search a catalog of over
+  1,000 device types and add them by hand, with your own wattage, count and hours if you
+  know them.
+- **Bill reading.** Photograph a line of a utility bill; once you confirm it, its rate beats
+  every estimate.
+
+**Acting on it**
+
+- **A ranked plan.** Every device gets up to two moves (the after-hours fix and an efficient
+  swap) ranked by dollars saved per dollar spent, with payback and carbon re-totalled live as
+  you tick them.
+- **Rebates and replacements.** For each swap, the rebates and tax credits available where you
+  are (via Rewiring America when a key is set), and links to the replacement at well-known
+  retailers.
+- **Ghosty Insights.** A plain-language read of your results: what stands out, what to do
+  first, and why, grounded in the numbers on the page.
+
+**Whole buildings**
+
+- **Places, rooms and buildings.** Every scan saves to a room; rooms roll up into buildings,
+  buildings into a portfolio, and any of them into a printable one-page brief.
+- **3D school.** Search for your school by name. Its real outline and number of floors come
+  from OpenStreetMap; upload a photo of each floor plan, mark the rooms (or let the AI suggest
+  them), and every scanned room becomes a block on the model, coloured from cool blue to red
+  by what it wastes after hours. Filter by lighting, screens, computers and more, pull the
+  floors apart, and click any room for its breakdown.
+- **Team scan.** Share a class code and a group scans a building together; every room lands
+  in one place.
+- **Room stickers.** Print a QR sticker for each room so the next scan of that room is one tap
+  away.
+
+**Context**
+
+- Local electricity prices, grid carbon intensity, weather and solar potential, each from a
+  public source when a location is known, and the app's own fallback figures otherwise.
+- Nine languages: English, Spanish, Chinese (Simplified), Tagalog, Vietnamese, French,
+  Korean, Portuguese and Hindi.
+- Works offline as an installable web app once loaded; scans are stored on the device.
 
 ## How it works
 
@@ -35,11 +106,12 @@ model guesses what's in the room. The code does the money and carbon. That way t
 people actually act on are always something you can check by hand.
 
 1. **Seeing.** A picture is read by one of two engines. In **Enhanced (cloud)** mode a
-   hosted vision-language model (Anthropic, Groq, OpenAI or OpenRouter, or a local Ollama
-   model during development) answers through a strict JSON schema at temperature 0: for
-   each item, its type, count, state, a confidence and whether it is actually visible. In
-   **On-device** mode an EfficientDet-Lite0 detector plus a lit-fixture finder read the
-   picture in the browser. Both report only what is in the frame; neither touches energy.
+   hosted vision-language model (Anthropic, Gemini, Groq, Mistral, OpenAI or OpenRouter, or
+   a local Ollama model during development) answers through a strict JSON schema at
+   temperature 0: for each item, its type, count, state, a confidence and whether it is
+   actually visible. In **On-device** mode an EfficientDet-Lite0 detector plus a lit-fixture
+   finder read the picture in the browser. Both report only what is in the frame; neither
+   touches energy.
 2. **Cross-checking.** Every cloud reading is compared with the on-device detector. A class
    or count the detector cannot back, or a low-confidence item, is shown as *unverified*
    and left out of totals until you confirm it. Any detection can be confirmed, re-typed,
@@ -59,13 +131,13 @@ people actually act on are always something you can check by hand.
 - **Camera** runs the on-device detector on the live video as a *candidate finder*: a box is
   drawn only after it has been seen in three of the last five frames, tracked so it does not
   flicker, limited to the classes the small model is reliably good at, with bright windows,
-  huge rectangles and overlapping labels filtered out. Candidates are dashed and unpriced.
-  Hold the camera still and that frame goes through the same pipeline a photo gets (cloud in
-  Enhanced mode, a tiled on-device pass otherwise); only confirmed detections are priced.
-  **Photo** audits the current frame; **Video** records a walkthrough and audits its distinct
-  views once.
-- **Upload** takes photos or videos (drag, paste or pick). A photo's EXIF supplies where and
-  when it was taken, which sets the rate and whether the room should have been empty.
+  huge rectangles and overlapping labels filtered out. Each tag shows the device's watts,
+  easing toward a new reading instead of jumping
+  ([`src/lib/wattTags.ts`](src/lib/wattTags.ts)). Hold the camera still and that frame goes
+  through the same pipeline a photo gets (cloud in Enhanced mode, a tiled on-device pass
+  otherwise), and the confirmed reading replaces the candidates. **Photo** audits the current
+  frame; **Video** records a walkthrough and audits its distinct views once.
+- **Upload** takes photos or videos (drag, paste or pick).
 
 The detector choice is measured, not assumed: see
 [`docs/live-detector-benchmark.md`](docs/live-detector-benchmark.md) for EfficientDet-Lite0
@@ -120,10 +192,11 @@ the plain `watts x hours x rate` and nothing invented on top of it.
 - **The price of the empty hours** ([`src/lib/tariff.ts`](src/lib/tariff.ts)).
   Everything here is about the hours a building is empty, and on a time-of-use tariff
   those are not billed at the average of the year. Which way it goes is not something
-  you can assume: a building that shuts at four (an office or a school, say) is closed through an evening peak (so
-  its overnight waste costs about a tenth *more* than the average said) and open
-  through a midday one (about a fifth less). The tariff sheet has a price per hour and
-  the schedule says which hours are empty; crossing the two is the whole calculation.
+  you can assume: a building that shuts at four (an office or a school, say) is closed
+  through an evening peak (so its overnight waste costs about a tenth *more* than the
+  average said) and open through a midday one (about a fifth less). The tariff sheet has
+  a price per hour and the schedule says which hours are empty; crossing the two is the
+  whole calculation.
 - **Answering to the meter** ([`src/lib/reconcile.ts`](src/lib/reconcile.ts)). A bill
   is the only hard measurement in the chain. If the lines add up to more plug and
   lighting energy than the meter leaves room for, the estimate comes down - each line
@@ -137,6 +210,16 @@ error per device class - because if the table's monitor figure is 20% high it is
 high for all twenty-eight monitors at once, and sampling them independently reports a
 band several times narrower than the evidence supports
 ([`src/lib/estimate.ts`](src/lib/estimate.ts)).
+
+### The 3D school
+
+[`src/lib/campus.ts`](src/lib/campus.ts) lays three sources on one flat grid in metres: the
+building outline from OpenStreetMap (found by school name through Nominatim, with Overpass
+as a second source for nearby buildings), a photo of each floor plan with rooms drawn on it,
+and each room's latest scan, matched to a plan room by name ("Room 214", "rm 214" and "214"
+all match). A floor plan is fitted onto the outline by a rotation, scale and offset you can
+adjust until the two line up. No outline: the plan's own rectangle stands in. The scene is
+drawn with React Three Fiber and only re-renders when something changes.
 
 ### The pipeline at a glance
 
@@ -154,81 +237,95 @@ formulas and the wattage table are on the in-app Methodology page.
 
 ## Quick start
 
+Requires Node.js 20 or newer.
+
 ```bash
+git clone https://github.com/BoyTiger-1/ghost-watt.git
+cd ghost-watt
 npm install
 npm run dev
 ```
 
 Open http://localhost:3000. With no keys at all the app runs in **On-device** mode: the
-scanner, costs, plan, rooms, buildings and brief all work, and the pill in the header says
-so. To turn on **Enhanced (cloud)** reading, add one or more vision keys to `.env.local`, or
-run a local Ollama vision model (`ollama pull moondream`), and restart. Keys are tried in
-this order, each a fallback for the one before it, so two is better than one:
-`ANTHROPIC_API_KEY` (paid, best), `GEMINI_API_KEY` (free tier, best free),
-`GROQ_API_KEY` (free, fastest), `MISTRAL_API_KEY` (free tier), `OPENAI_API_KEY` (paid),
-`OPENROUTER_API_KEY` (some free models). On Vercel, add the same variables under
-Settings → Environment Variables and redeploy. Defaults per provider: `claude-haiku-5-5`,
-`gemini-2.5-flash`, `qwen/qwen3.6-27b`, `mistral-small-latest`, `gpt-4o-mini`,
-`google/gemini-2.5-flash`; override any with `<KEY NAME>_MODEL`.
+scanner, live wattage tags, costs, plan, rooms, buildings, 3D school and brief all work, and
+the pill in the header says so.
 
-## Running the live model
+To turn on **Enhanced (cloud)** reading, copy [`.env.example`](.env.example) to `.env.local`,
+add one or more vision keys, and restart. Keys are tried in this order, each a fallback for
+the one before it, so two is better than one: `ANTHROPIC_API_KEY` (paid, best),
+`GEMINI_API_KEY` (free tier, best free), `GROQ_API_KEY` (free, fastest), `MISTRAL_API_KEY`
+(free tier), `OPENAI_API_KEY` (paid), `OPENROUTER_API_KEY` (some free models). Defaults per
+provider: `claude-haiku-5-5`, `gemini-2.5-flash`, `qwen/qwen3.6-27b`,
+`mistral-small-latest`, `gpt-4o-mini`, `google/gemini-2.5-flash`; override any with
+`<KEY NAME>_MODEL`.
 
-Ghost Watt is local-first by design. The vision step runs on [Ollama](https://ollama.com), a
-small runtime that serves open models on your own machine. When you start an audit, the app's
-server route makes a request to Ollama at `OLLAMA_HOST` (by default `http://127.0.0.1:11434`),
-the model reads the photo and reports the devices it sees, and the rest of the work happens in
-plain TypeScript. Your images never leave your computer, and there are no API keys or usage
-costs involved.
+To keep everything on your own machine instead, run a local [Ollama](https://ollama.com)
+vision model and the app uses it during development:
 
-The practical consequence is worth stating plainly: **to use the live model, you run the app
-on the same machine that is running Ollama.** This is almost always your own computer.
-
-```powershell
-# 1. Install Ollama: https://ollama.com/download
-# 2. Download a vision model (moondream is small and CPU-friendly)
-ollama pull moondream
-# 3. Start the Ollama service (the desktop app does this, or run:)
+```bash
+ollama pull moondream   # small and CPU-friendly; qwen2.5vl:3b or llama3.2-vision with more RAM
 ollama serve
-# 4. In the project folder, in a separate terminal:
-npm install
-npm run dev
 ```
 
-Open http://localhost:3000. The status indicator in the top-right confirms the model is live,
-and every result card it produces is tagged `live model`.
-
-A deployed copy on a hosting provider is a different situation. The server running your site
-cannot reach the Ollama instance on your laptop, because `localhost` on that server is the
-server itself, not your machine. A hosted deployment therefore runs in estimate mode unless
-you give it an Ollama endpoint it can actually reach (see [Hosting and deployment](#hosting-and-deployment)).
-For demonstrating the model end to end, running locally is the most reliable approach.
+Other scripts: `npm test` runs the test suite, `npm run lint` runs ESLint, `npm run build`
+makes a production build.
 
 ## Configuration
 
-See [`.env.example`](.env.example). The vars that matter:
+Every variable is optional. Copy [`.env.example`](.env.example) to `.env.local`; on Vercel,
+add the same variables under Settings → Environment Variables and redeploy.
 
-| Variable | Default | Notes |
-| --- | --- | --- |
-| `OLLAMA_HOST` | `http://127.0.0.1:11434` | Local Ollama endpoint |
-| `OLLAMA_VISION_MODEL` | `moondream` | `qwen2.5vl:3b` or `llama3.2-vision` if you've got the RAM |
-| `OLLAMA_TIMEOUT_MS` | `120000` | CPU inference can be slow |
+| Variable | What it turns on |
+| --- | --- |
+| `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `MISTRAL_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY` | Enhanced (cloud) reading, bill reading, AI room suggestions on floor plans, Ghosty Insights |
+| `VISION_PROVIDER`, `VISION_TIMEOUT_MS` | Force one provider; how long to wait for it (default 45000 ms) |
+| `OLLAMA_HOST`, `OLLAMA_VISION_MODEL`, `OLLAMA_TIMEOUT_MS` | A local Ollama model (defaults `http://127.0.0.1:11434`, `moondream`, 120000 ms) |
+| `OPENEI_API_KEY` | The serving utility's own tariff for a location |
+| `EIA_API_KEY` | Live state average electricity prices |
+| `ELECTRICITY_MAPS_KEY` | Live grid carbon intensity |
+| `NREL_API_KEY` | Solar potential for a location |
+| `OPENWEATHER_API_KEY` | Local weather |
+| `REWIRING_AMERICA_API_KEY` | Rebates and tax credits for each upgrade |
+| `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | Rate limits shared across server instances (otherwise kept in memory per instance) |
+| `NEXT_PUBLIC_DETECTOR_MODEL_URL` | A custom on-device detector (for example one fine-tuned with `scripts/train-detector.py`) |
 
-## Built with
+The Settings page shows which vision engine and data providers are active on the running server.
 
-Next.js (App Router), TypeScript, Tailwind CSS v4, Framer Motion, React Three Fiber / three.js
-for the 3D hero, and [Ollama](https://ollama.com) for the local vision model.
+## Open source
 
-There are no third-party AI APIs, no API keys, and no telemetry. The only AI in the stack is
-that local vision model, and it only ever does the seeing. Every energy calculation is regular
-TypeScript you can follow line by line.
+Ghost Watt is MIT licensed: use it, change it, run it for your own school or business, or
+build on it. The code is meant to be read; the energy math in particular is plain
+TypeScript with the source of every figure next to it.
+
+**Contributing.** Issues and pull requests are welcome.
+
+1. Fork the repository and create a branch.
+2. Make your change. Keep the split between perception (the models) and accounting (the
+   code): a model may say what is in a picture, never what it costs.
+3. Run `npm test` and `npm run lint` and make sure both pass. There are over 400 tests
+   covering the energy math, parsing, the tracker, the 3D geometry and more.
+4. If you change a wattage, hours figure or price, cite its source in
+   [`src/lib/sources.ts`](src/lib/sources.ts) or on the row itself.
+5. Open a pull request describing what changed and why.
+
+**Built on open source.** Next.js and React, TypeScript, Tailwind CSS, Framer Motion,
+three.js with React Three Fiber and drei for the 3D views, MediaPipe Tasks Vision for the
+on-device detector, qrcode-generator for room stickers, and Vitest for tests. Each is used
+under its own license.
+
+**Open data.** Building outlines © OpenStreetMap contributors (ODbL), found through
+Nominatim and Overpass; utility tariffs from OpenEI's Utility Rate Database; prices from
+the U.S. Energy Information Administration; grid carbon from EPA eGRID. The full list is in
+[Data and sources](#data-and-sources).
 
 ## Data and sources
 
 Every figure the app multiplies by is listed, with its source, on the Method page
 (`/methodology#sources`) and in [`src/lib/sources.ts`](src/lib/sources.ts):
 
-- **Wattage table.** [`src/lib/devices.ts`](src/lib/devices.ts): a representative draw and a
-  published low–high band per device class, with a source note on each row.
+- **Wattage table.** [`src/lib/devices.ts`](src/lib/devices.ts) and
+  [`src/lib/appliances.ts`](src/lib/appliances.ts): a representative draw and a published
+  low–high band per device class, with a source note on each row.
 - **Standby draw.** LBNL's standby power summary table and the DOE microwave standby
   analysis.
 - **Hours in use.** PNNL-22182 residential lighting study, ENERGY STAR displays duty
@@ -239,6 +336,7 @@ Every figure the app multiplies by is listed, with its source, on the Method pag
 - **Carbon.** EPA eGRID state output rates. Washington's mostly-hydro grid is about
   0.10 kg CO₂/kWh, roughly a quarter of the US average, and the app uses the state's
   own figure.
+- **Building outlines.** OpenStreetMap, © OpenStreetMap contributors.
 - **Photos.** You supply them at runtime. In On-device mode they never leave the browser;
   in Enhanced mode each one is sent to the model once and discarded.
 
@@ -246,27 +344,29 @@ Every figure the app multiplies by is listed, with its source, on the Method pag
 
 **A human decides what to fix, not the AI.** Ghost Watt surfaces and ranks opportunities,
 full stop. It never approves a purchase, sets a policy, or points a finger at anyone. A
-homeowner, facilities manager or teacher reads each card and decides whether it's worth doing. One photo
-is too thin a basis, and the trade-offs (budget, timetable, safety) too local, to hand that
-decision to a model.
+homeowner, facilities manager or teacher reads each card and decides whether it's worth
+doing. One photo is too thin a basis, and the trade-offs (budget, timetable, safety) too
+local, to hand that decision to a model.
 
 **The risk we worried about, and what we did about it.** The obvious failure is the model
 misreading a device's state, say calling an off monitor "on", or inventing one that is not
 there, and producing a savings number that isn't real. So perception and the energy math
 are kept apart, the cloud model answers through a strict schema and is cross-checked by the
 on-device detector, anything that cannot be backed is marked unverified and not counted,
-every figure is a range with its assumptions shown, and the app never states an accuracy
-percentage it has not earned: the only one it shows is its own record against meter
-readings people entered.
+every figure is a range with its assumptions shown, and the person scanning can correct any
+tag on the spot. The app never states an accuracy percentage it has not earned: the only
+one it shows is its own record against meter readings people entered.
 
-## A note on the numbers
+**Privacy.** No accounts and no telemetry. Scans, rooms and buildings are stored in your
+browser. In On-device mode no picture leaves the device; in Enhanced mode a photo goes to
+the configured model once and is not kept. API keys stay on the server and are never sent
+to the browser.
 
-Reading wattage off a photo is an estimate, not a meter reading, and we don't pretend
-otherwise. The real deliverable is the priority list, the order facilities should tackle
-things in, and that order holds up even when an individual watt figure is rough. Every figure
-and formula is laid out on the Methodology page.
+**A note on the numbers.** Reading wattage off a photo is an estimate, not a meter reading,
+and we don't pretend otherwise. The real deliverable is the priority list, the order to
+tackle things in, and that order holds up even when an individual watt figure is rough.
 
-## Things that were tricky
+### Things that were tricky
 
 - **Guessing power from one photo without overselling it.** Splitting perception from the
   accounting, showing ranges, and leaning on ranking instead of false precision is what
@@ -286,76 +386,76 @@ and formula is laid out on the Methodology page.
 
 ## Accessibility
 
-Twenty-four settings under Settings → Display & accessibility, stored on the device and
-applied before first paint. Seeing: theme (system, light, dark), text size, high contrast,
-colour-blind-safe palette, greyscale, large pointer, always-visible focus ring, lite visuals
-(no 3D or decorative motion). Reading: English or Spanish for the core flow, plain font,
-bold text, wider letter spacing, taller lines, underlined links, a reading guide that follows
-the pointer, and results read aloud. Motion, sound and touch: reduce motion (also disables
-every animation), bigger touch targets, sound cues, vibration cues. Scanner: confirm only on
-request, minimal camera overlay, keyboard shortcuts (Space photo, V video, F flip, C confirm)
-and left-handed controls. Screen-reader labels, keyboard navigation with a skip link and live
-regions for results are always on.
+Settings → Display & accessibility, stored on the device and applied before first paint.
+Seeing: theme (system, light, dark), text size, high contrast, colour-blind-safe palette,
+greyscale, large pointer, always-visible focus ring, lite visuals (no 3D or decorative
+motion). Reading: nine languages, plain font, bold text, wider letter spacing, taller lines,
+underlined links, a reading guide that follows the pointer, and results read aloud. Motion,
+sound and touch: reduce motion (also skips the launch animation and disables every other
+animation), bigger touch targets, sound cues, vibration cues. Scanner: confirm only on
+request, minimal camera overlay, keyboard shortcuts (Space photo, V video, F flip, C
+confirm) and left-handed controls. Screen-reader labels, keyboard navigation with a skip
+link and live regions for results are always on.
 
 ## Project layout
 
 ```
 src/
-  app/            App Router pages (scanner, methodology, about) and API routes
-  components/     Scanner UI, offender cards, action plan, brief, engine indicator
+  app/              App Router pages and API routes
+    scan/           The scanner (camera, upload, type it in)
+    places/ room/ buildings/ portfolio/ report/   Saved scans, rolled up, and the brief
+    campus/         The 3D school
+    team/ stickers/ Team scan and room QR stickers
+    methodology/ about/ settings/ privacy/ terms/
+    api/            analyze, bill, class, footprint, ghosty, grid, keys, locate,
+                    plan-rooms, rates, rebates, school-search, solar, status, weather
+  components/
+    scan/           Camera with wattage tags, upload, manual entry, results, rebates
+    campus/         3D scene, floor-plan editor, setup flow
+    home/           The landing page
   lib/
-    vision.ts     Cloud vision providers behind one strict-schema call (seeing only)
-    ollama.ts     Local Ollama client and the prompt
-    parse.ts      Model output into categorized observations
-    devices.ts    Wattage lookup table (the deterministic backbone)
-    energy.ts     The energy, cost, and carbon math plus ranking
-    estimate.ts   Per-unit watts from every source of evidence, and the cost range
-    tech.ts       Technology and screen-size readings: which unit it is
-    thermal.ts    What a device's heat costs the building, or saves it
-    climate.ts    State degree days, which size that correction
-    tariff.ts     The utility's own tariff, split into open and empty hours
-    demand.ts     Peak-demand charges, with a coincidence factor per device class
-    reconcile.ts  Making the estimate answer to a real meter reading
-    types.ts      Shared types
+    vision.ts       Cloud vision providers behind one strict-schema call (seeing only)
+    ollama.ts       Local Ollama client and the prompt
+    detector.ts     The in-browser detector
+    live.ts         Tracking and auto-confirm for the live camera
+    wattTags.ts     Wattage tags: easing, the meter, tapping and corrections
+    parse.ts        Model output into categorized observations
+    devices.ts      Wattage table (the deterministic backbone), with appliances.ts
+    energy.ts       The energy, cost and carbon math plus ranking
+    estimate.ts     Per-unit watts from every source of evidence, and the cost range
+    tech.ts         Technology and screen-size readings: which unit it is
+    thermal.ts      What a device's heat costs the building, or saves it
+    climate.ts      State degree days, which size that correction
+    tariff.ts       The utility's own tariff, split into open and empty hours
+    reconcile.ts    Making the estimate answer to a real meter reading
+    actions.ts      Fixes and swaps, ranked by payback
+    rebates.ts shop.ts   Rebates and replacement links
+    campus.ts       Geometry and per-room waste for the 3D school
+    i18n.ts i18n-more.ts   Translations
+    storage.ts      Rooms, buildings and scans in the browser
+docs/               The live detector benchmark
+scripts/            Detector training and build helpers
 ```
 
 ## Hosting and deployment
 
 Ghost Watt is a standard Next.js (App Router) application and deploys to any platform that
-runs Node, such as Vercel, Render, or your own server. On Vercel, sign in with GitHub, import
-the repository, and deploy with the default settings. The interface and the estimate path
-work immediately.
+runs Node, such as Vercel or Render. On Vercel, import the repository and deploy with the
+default settings; add any keys under Settings → Environment Variables. The full guide,
+including why GitHub Pages cannot run it (the API routes hold the keys and need a server),
+is in [`DEPLOY.md`](DEPLOY.md).
 
-The live vision path needs more thought, because it depends on Ollama. As described in
-[Running the live model](#running-the-live-model), the app reaches Ollama through `OLLAMA_HOST`,
-and a hosted server cannot see the Ollama process on your personal machine. You have three
-realistic options:
-
-1. **Run locally (recommended for demos).** Run the app next to Ollama on the same machine, as
-   in [Quick start](#quick-start). This is the simplest way to show the model working on real
-   photos.
-2. **Deploy the site and tunnel to a local Ollama.** Expose your local Ollama with a tunnel
-   (for example `cloudflared tunnel --url http://localhost:11434`) and set `OLLAMA_HOST` on the
-   host to the resulting public URL. Your machine must stay online, and serverless function
-   time limits can cut off slower inference, so this is better for testing than production.
-3. **Host Ollama yourself.** Run Ollama on a cloud machine (ideally with a GPU) behind a
-   secured, authenticated endpoint, and point `OLLAMA_HOST` at it. This is the only setup where
-   the deployed site performs live inference without your own machine being involved.
-
-A practical recommendation: deploy to Vercel for a shareable link that runs in the fully
-functional estimate mode, and run the app locally when you want to demonstrate the live model
-on real photos.
-
-> Note: GitHub Pages serves static files only and cannot run the API routes this app relies
-> on, so use Vercel, Render, or another Node host for the complete application.
+A deployed server cannot reach an Ollama model on your own laptop, so on a host use one of
+the cloud vision keys, or point `OLLAMA_HOST` at an Ollama instance the host can reach.
 
 ## AI assistance
 
 The design, architecture, energy model, and the product itself were built by us. We used
 Claude Code along the way mainly as a debugging aid, for tracking down bugs and tidying up
-rough edges, rather than for designing or generating the project. The thinking and the
-decisions are ours.
+rough edges, and for the styling of the home page, rather than for designing or generating
+the project. The thinking and the decisions are ours.
 
 ## License
 
-MIT.
+[MIT](LICENSE). Building outlines © OpenStreetMap contributors, available under the Open
+Database License.
