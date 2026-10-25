@@ -23,6 +23,7 @@ It works for homes, offices and schools. It's free, and it's open source under t
 - [What it does](#what-it-does)
 - [How it works](#how-it-works)
 - [Quick start](#quick-start)
+- [Running a vision model locally](#running-a-vision-model-locally)
 - [Configuration](#configuration)
 - [Open source](#open-source)
 - [Data and sources](#data-and-sources)
@@ -123,6 +124,11 @@ act on can be checked by hand.
    Monte Carlo run over wattage, hours and price.
 4. **Deciding.** Each line gets an after-hours fix and an efficient swap, ranked by savings
    per dollar ([`src/lib/actions.ts`](src/lib/actions.ts)).
+
+If the cloud model can't answer (every key out of quota, the provider down, or too slow),
+the scan doesn't fail. The on-device reading of the same picture becomes the result, and
+the photo says why and when to try the cloud again
+([`src/lib/quota.ts`](src/lib/quota.ts)).
 
 ### The camera
 
@@ -243,7 +249,28 @@ Open http://localhost:3000. Without any keys the app runs on-device, and almost 
 works: the scanner, the wattage tags, costs, the plan, rooms, buildings, the 3D school and
 the brief.
 
-<<<<<<< HEAD
+For the cloud reader, copy [`.env.example`](.env.example) to `.env.local`, add at least one
+vision key, and restart. They're tried in this order, each one a backup for the last, so
+two keys are better than one:
+
+| Key | Notes | Default model |
+| --- | --- | --- |
+| `ANTHROPIC_API_KEY` | Paid, most accurate | `claude-haiku-5-5` |
+| `GEMINI_API_KEY` | Best of the free tiers | `gemini-3.5-flash` |
+| `GROQ_API_KEY` | Free, fastest; 3 images per request | `qwen/qwen3.8-27b` |
+| `MISTRAL_API_KEY` | Free tier | `mistral-small-latest` |
+| `OPENAI_API_KEY` | Paid | `gpt-4o-mini` |
+| `OPENROUTER_API_KEY` | Paid models, with free ones behind them | `google/gemini-2.5-flash` |
+
+Set `<KEY NAME>_MODEL` to use a different model with any of them, or `VISION_PROVIDER` to
+pin one provider. Each variable can also hold several keys, comma-separated or as
+`GROQ_API_KEY_2` through `GROQ_API_KEY_9`: requests take turns, and a key that hits its rate
+limit rests while the next one answers. The data keys in [Configuration](#configuration)
+take one key each; if you put a list in one, only the first is used.
+
+`npm test` runs the tests, `npm run lint` runs ESLint, and `npm run build` makes a
+production build.
+
 ## Running a vision model locally
 
 Enhanced reading does not have to go to anybody's cloud. [Ollama](https://ollama.com) is a
@@ -253,39 +280,15 @@ one more provider: the server route posts the photo to `OLLAMA_HOST` (by default
 in TypeScript exactly as it does for every other path. No keys, no usage costs, and the image
 never leaves your computer.
 
-```powershell
-# 1. Install Ollama: https://ollama.com/download
-# 2. Pull a vision model (moondream is small and CPU-friendly)
-ollama pull moondream
-# 3. Start the service (the desktop app does this, or run:)
-=======
-For the cloud reader, copy [`.env.example`](.env.example) to `.env.local`, add at least one
-vision key, and restart. They're tried in this order, each one a backup for the last, so
-two keys are better than one:
-
-| Key | Notes | Default model |
-| --- | --- | --- |
-| `ANTHROPIC_API_KEY` | Paid, most accurate | `claude-haiku-5-5` |
-| `GEMINI_API_KEY` | Best of the free tiers | `gemini-2.5-flash` |
-| `GROQ_API_KEY` | Free, fastest | `qwen/qwen3.6-27b` |
-| `MISTRAL_API_KEY` | Free tier | `mistral-small-latest` |
-| `OPENAI_API_KEY` | Paid | `gpt-4o-mini` |
-| `OPENROUTER_API_KEY` | Some free models | `google/gemini-2.5-flash` |
-
-Set `<KEY NAME>_MODEL` to use a different model with any of them. Each variable can also
-hold several keys, comma-separated or as `GROQ_API_KEY_2` through `GROQ_API_KEY_9`:
-requests take turns, and a key that hits its rate limit rests while the next one answers.
-
-If you'd rather keep everything on your own machine, run a local
-[Ollama](https://ollama.com) vision model and the app will use it in development:
-
 ```bash
-ollama pull moondream   # small, runs on a CPU; qwen2.5vl:3b or llama3.2-vision if you have the RAM
->>>>>>> 2431f7f23703012fe868e0f47b3bfd5aaea92d3d
+# 1. Install Ollama: https://ollama.com/download
+# 2. Pull a vision model (moondream is small and runs on a CPU;
+#    qwen2.5vl:3b or llama3.2-vision if you have the RAM)
+ollama pull moondream
+# 3. Start the service (the desktop app does this for you)
 ollama serve
 ```
 
-<<<<<<< HEAD
 Open http://localhost:3000. The pill in the header confirms the model is reachable, and each
 result is labelled with the engine that produced it.
 
@@ -300,69 +303,28 @@ more of a room.
 ## Configuration
 
 **Every variable is optional.** With none of them the app still scans, costs, plans and
-reports; each key turns an assumption into a lookup. [`.env.example`](.env.example) documents
-all of them and [DEPLOY.md](DEPLOY.md) explains what each one buys and where to get it.
-
-The ones that change what the app can do:
-
-| Variable | Buys |
-| --- | --- |
-| `ANTHROPIC_API_KEY` | Enhanced reading, best recognition. **Billable.** Tried first. |
-| `GEMINI_API_KEY` | Enhanced reading, best of the free tiers. Tried second. |
-| `GROQ_API_KEY` | Enhanced reading, fastest to answer; 3 images per request. |
-| `MISTRAL_API_KEY` / `OPENAI_API_KEY` / `OPENROUTER_API_KEY` | Further fallbacks, in that order |
-| `OLLAMA_HOST` | A vision model on your own machine instead (default `http://127.0.0.1:11434`) |
-| `OPENEI_API_KEY` / `NREL_API_KEY` | The serving utility's own published tariff, split into open-hours and empty-hours prices |
-| `EIA_API_KEY` | State electricity prices, and the hourly fuel mix behind live grid carbon |
-| `OPENWEATHER_API_KEY` | Outdoor conditions, to sanity-check a heater running in July |
-| `REWIRING_AMERICA_API_KEY` | Household rebates on the fix list |
-| `ELECTRICITY_MAPS_KEY` | Live grid carbon intensity for one zone |
-| `UPSTASH_REDIS_REST_URL` + `_TOKEN` | Team scans that last two weeks (without it they still work, end-to-end encrypted over a public relay, for about 12 hours) |
-| `NEXT_PUBLIC_DETECTOR_MODEL_URL` | A fine-tuned on-device detector that can box light fixtures ([`scripts/train-detector.py`](scripts/train-detector.py)) |
-
-Vision keys are tried in the order above, each a fallback for the one before, so two is
-better than one. Override any provider's model with `<KEY NAME>_MODEL`, or pin one provider
-with `VISION_PROVIDER`.
-=======
-`npm test` runs the tests, `npm run lint` runs ESLint, and `npm run build` makes a
-production build.
-
-## Configuration
-
-Every variable is optional. Put them in `.env.local`, or on Vercel under Settings →
-Environment Variables, then redeploy.
+reports; each key turns an assumption into a lookup. Put them in `.env.local`, or on Vercel
+under Settings → Environment Variables, then redeploy. [`.env.example`](.env.example)
+documents all of them and [`DEPLOY.md`](DEPLOY.md) explains what each one buys and where to
+get it.
 
 | Variable | What it turns on |
 | --- | --- |
-| `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `MISTRAL_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY` | The cloud reader, bill reading, AI room suggestions on floor plans, and Ghosty Insights |
+| `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `MISTRAL_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY` | The cloud reader, bill reading, AI room suggestions on floor plans, and Ghosty Insights. Tried in that order. |
 | `VISION_PROVIDER`, `VISION_TIMEOUT_MS` | Force one provider, and how long to wait for it (default 45000 ms) |
-| `OLLAMA_HOST`, `OLLAMA_VISION_MODEL`, `OLLAMA_TIMEOUT_MS` | A local Ollama model (defaults: `http://127.0.0.1:11434`, `moondream`, 120000 ms) |
-| `OPENEI_API_KEY` | The local utility's own tariff |
-| `EIA_API_KEY` | Live state average electricity prices |
-| `ELECTRICITY_MAPS_KEY` | Live grid carbon intensity |
-| `NREL_API_KEY` | Solar potential |
-| `OPENWEATHER_API_KEY` | Local weather |
+| `OLLAMA_HOST`, `OLLAMA_VISION_MODEL`, `OLLAMA_TIMEOUT_MS` | A vision model on your own machine instead (defaults: `http://127.0.0.1:11434`, `moondream`, 120000 ms) |
+| `OPENEI_API_KEY` / `NREL_API_KEY` | The serving utility's own published tariff, split into open-hours and empty-hours prices; NREL also gives solar potential |
+| `EIA_API_KEY` | Live state electricity prices, and the hourly fuel mix behind live grid carbon |
+| `OPENWEATHER_API_KEY` | Outdoor conditions, to sanity-check a heater running in July |
 | `REWIRING_AMERICA_API_KEY` | Rebates and tax credits for upgrades |
-| `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | Rate limits shared across server instances (without them, each instance keeps its own in memory) |
-| `NEXT_PUBLIC_DETECTOR_MODEL_URL` | Your own on-device detector, for example one trained with `scripts/train-detector.py` |
->>>>>>> 2431f7f23703012fe868e0f47b3bfd5aaea92d3d
+| `ELECTRICITY_MAPS_KEY` | Live grid carbon intensity for one zone |
+| `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | Team scans that last two weeks, and rate limits shared across server instances. Without them, team scans still work, end-to-end encrypted over a public relay, for about 12 hours. |
+| `NEXT_PUBLIC_DETECTOR_MODEL_URL` | A fine-tuned on-device detector that can box light fixtures ([`scripts/train-detector.py`](scripts/train-detector.py)) |
 
 The Settings page shows which vision engine and data providers the running server has
 turned on.
 
-<<<<<<< HEAD
-TypeScript throughout. Next.js (App Router) and React for the app, Tailwind CSS v4 for
-styling, Framer Motion for animation, React Three Fiber / three.js for the 3D school,
-MediaPipe Tasks running EfficientDet-Lite0 for the in-browser detector, Vitest for the
-tests, and Python for the script that fine-tunes the detector on light fixtures
-([`scripts/train-detector.py`](scripts/train-detector.py)).
-
-The seeing step is a vision model, either a hosted one (Anthropic, Google, Groq, Mistral,
-OpenAI or OpenRouter) or a local [Ollama](https://ollama.com) model. **The AI only ever does
-the seeing.** It is asked what is in the frame and whether each thing is on, and that is the
-end of its involvement: every watt, dollar, kilogram of CO₂ and payback figure is ordinary
-TypeScript you can follow line by line, which is why the Method page can publish the formulas
-and you can check any number by hand.
+### Where a photo goes
 
 There is no telemetry and there are no accounts. What happens to a photo depends on which
 mode read it, and the pill in the header always says which is about to run:
@@ -375,7 +337,7 @@ mode read it, and the pill in the header always says which is about to run:
 
 With no keys configured at all, the app runs fully in On-device mode: scanner, costs, plan,
 rooms, buildings and brief all work.
-=======
+
 ## Open source
 
 Ghost Watt is MIT licensed. Use it for your own school, office or home, change it, or build
@@ -397,15 +359,24 @@ Issues and pull requests are welcome.
 
 ### What it's built on
 
-Next.js and React, TypeScript, Tailwind CSS and Framer Motion for the app; three.js with
-React Three Fiber and drei for the 3D views; MediaPipe Tasks Vision for the on-device
-detector; qrcode-generator for the room stickers; and Vitest for testing. Each is used
-under its own license.
+TypeScript throughout. Next.js (App Router) and React for the app, Tailwind CSS v4 for
+styling, Framer Motion for animation, three.js with React Three Fiber and drei for the 3D
+school, MediaPipe Tasks running EfficientDet-Lite0 for the in-browser detector,
+qrcode-generator for the room stickers, Vitest for the tests, and Python for the script that
+fine-tunes the detector on light fixtures
+([`scripts/train-detector.py`](scripts/train-detector.py)). Each library is used under its
+own license.
+
+The seeing step is a vision model, either a hosted one (Anthropic, Google, Groq, Mistral,
+OpenAI or OpenRouter) or a local [Ollama](https://ollama.com) model. **The AI only ever does
+the seeing.** It is asked what is in the frame and whether each thing is on, and that is the
+end of its involvement: every watt, dollar, kilogram of CO₂ and payback figure is ordinary
+TypeScript you can follow line by line, which is why the Method page can publish the formulas
+and you can check any number by hand.
 
 Building outlines are © OpenStreetMap contributors (ODbL), found through Nominatim and
 Overpass. Tariffs come from OpenEI's Utility Rate Database, prices from the U.S. Energy
 Information Administration, and grid carbon from EPA eGRID. The full list is below.
->>>>>>> 2431f7f23703012fe868e0f47b3bfd5aaea92d3d
 
 ## Data and sources
 
@@ -416,34 +387,6 @@ in [`src/lib/sources.ts`](src/lib/sources.ts). Claims on the home page and under
 result carry a "Sources:" line that links straight to the entry, and a test checks that
 every one of those links lands on a real source.
 
-<<<<<<< HEAD
-- **Wattage table.** [`src/lib/devices.ts`](src/lib/devices.ts): a representative draw and a
-  published low–high band per device class, with a source note on each row.
-- **Standby draw.** LBNL's standby power summary table and the DOE microwave standby
-  analysis.
-- **Hours in use.** PNNL-22182 residential lighting study, ENERGY STAR displays duty
-  (35% on / 65% sleep), Nielsen TV hours; room-type hours without a published figure are
-  marked as estimates.
-- **Prices.** EIA 2024 average retail price by state and sector; OpenEI tariffs when a
-  location is known, split into the price charged while the building is open and the price
-  charged while it is empty; a bill beats both.
-- **Which unit it is.** Lamp and ballast ratings, ENERGY STAR specifications and
-  manufacturer figures, in [`src/lib/tech.ts`](src/lib/tech.ts). A four-lamp T12 troffer and
-  the LED panel that replaced it are both "overhead lighting" and about 4x apart; display
-  power is fitted to panel area against the catalog's own sized rows.
-- **Climate.** Annual heating and cooling degree days per state, base 65 °F, in the pattern
-  of NOAA's 1991–2020 normals and EIA's State Energy Data System. A compiled table, flagged
-  approximate, used only to weight a correction of order ±20%.
-- **Heat as a load.** The cooling side is 1/COP at a seasonal COP of 3.2, which is 0.31,
-  within rounding of the 0.33 cooling adjustment factor long used in retrofit practice. The
-  heating credit is deliberately halved, and nothing is applied until the building says how
-  it is heated and cooled.
-- **Carbon.** EPA eGRID state output rates. Washington's mostly-hydro grid is about
-  0.10 kg CO₂/kWh, roughly a quarter of the US average, and the app uses the state's
-  own figure.
-- **Photos.** You supply them at runtime. In On-device mode they never leave the browser;
-  in Enhanced mode each one is sent to the model once and discarded.
-=======
 ### Figures the math uses
 
 - Wattages: [`src/lib/devices.ts`](src/lib/devices.ts) and
@@ -509,7 +452,6 @@ OpenRouter).
 
 Photos are yours, at runtime. On-device, they never leave the browser. In Enhanced mode,
 each one goes to the model once and isn't kept.
->>>>>>> 2431f7f23703012fe868e0f47b3bfd5aaea92d3d
 
 Where a figure could not be checked against its primary document from this build
 environment, the entry in [`src/lib/sources.ts`](src/lib/sources.ts) says so rather than
@@ -620,7 +562,6 @@ scripts/            Detector training and build helpers
 
 ## Hosting and deployment
 
-<<<<<<< HEAD
 Ghost Watt is a standard Next.js (App Router) application and deploys to any platform that
 runs Node, such as Vercel, Render, or your own server. On Vercel, sign in with GitHub, import
 the repository, and deploy with the default settings. Everything works immediately in
@@ -633,7 +574,8 @@ To give a deployment **Enhanced (cloud)** reading, pick whichever of these suits
    `GEMINI_API_KEY`, `GROQ_API_KEY`, `MISTRAL_API_KEY` or `OPENROUTER_API_KEY` into Settings →
    Environment Variables and redeploy. All four have free tiers. `ANTHROPIC_API_KEY` and
    `OPENAI_API_KEY` recognise the most but are billable. Two keys is better than one, because
-   each is a fallback for the one before it.
+   each is a fallback for the one before it, and any variable can hold several keys,
+   comma-separated, that take turns.
 2. **Host Ollama yourself.** Run Ollama on a cloud machine, ideally with a GPU, behind a
    secured endpoint, and point `OLLAMA_HOST` at it. No per-request cost and no third party
    sees a photo, but you are now running a model server.
@@ -649,17 +591,8 @@ A practical recommendation: deploy to Vercel with a free Gemini or Groq key for 
 link that does everything, and keep a local Ollama setup for when you want to show that the
 seeing step can run with nothing leaving the machine.
 
-> Note: GitHub Pages serves static files only and cannot run the API routes this app relies
-> on, so use Vercel, Render, or another Node host for the complete application.
-=======
-It's a standard Next.js app and runs anywhere that runs Node, like Vercel or Render. On
-Vercel, import the repo, deploy with the default settings, and add any keys under Settings
-→ Environment Variables. [`DEPLOY.md`](DEPLOY.md) has the full guide, including why GitHub
-Pages won't work: the API routes hold the keys and need a server.
-
-A hosted server can't reach an Ollama model running on your laptop. On a host, use one of
-the cloud keys, or point `OLLAMA_HOST` at an Ollama server it can reach.
->>>>>>> 2431f7f23703012fe868e0f47b3bfd5aaea92d3d
+[`DEPLOY.md`](DEPLOY.md) has the full guide, including why GitHub Pages won't work: it serves
+static files only, and the API routes that hold the keys need a server.
 
 ## AI assistance
 

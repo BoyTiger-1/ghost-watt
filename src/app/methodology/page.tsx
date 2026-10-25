@@ -295,8 +295,10 @@ export default function MethodologyPage() {
               <Engine tone="bg-lime" title="The detector in your browser" badge="on-device">
                 With no cloud model, or when you choose to keep pictures on the device, a small
                 object detector reads the picture in the browser. It recognises screens, laptops,
-                common appliances and lit fixtures and nothing else, so it undercounts. There is no
-                third path: a scan that could not be read says so instead of guessing.
+                common appliances and lit fixtures and nothing else, so it undercounts. If a cloud
+                model was asked and could not answer (out of quota, down, or too slow), this reading
+                is used instead and the result says why. There is no further path: a scan that could
+                not be read says so instead of guessing.
               </Engine>
             </ol>
           </Section>

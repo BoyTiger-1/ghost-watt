@@ -62,6 +62,7 @@ async function readPlan(file: File): Promise<{ dataUrl: string; aspect: number }
   }
 }
 
+/** A building outline drawn small, fitted into its box: the thumbnail in search results and building cards. */
 function OutlineThumb({ outline, className = "", tone = "light" }: { outline: [number, number][]; className?: string; tone?: "light" | "night" }) {
   const { points } = projectOutline(outline);
   const xs = points.map((p) => p[0]);
@@ -78,6 +79,10 @@ function OutlineThumb({ outline, className = "", tone = "light" }: { outline: [n
 
 /* ---- find your school ------------------------------------------------------------ */
 
+/**
+ * Search for a school by name. Waits until typing pauses before asking, since the
+ * lookup goes to OpenStreetMap's Nominatim, which asks for one request a second.
+ */
 function SchoolSearch({ onPick, autoFocus = false }: { onPick: (r: SchoolResult) => void; autoFocus?: boolean }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<SchoolResult[] | null>(null);
@@ -207,6 +212,11 @@ export function CampusView() {
     }
   };
 
+  /**
+   * The building chosen from the cards: it becomes the model's outline, and the
+   * floors it is mapped with are added (up to eight) so there is a floor to put
+   * each plan on.
+   */
   const pickBuilding = (c: Candidate, school: SchoolResult) => {
     const fp: Footprint = { outline: c.outline, levels: c.levels, name: c.name, osmId: c.osmId, kind: c.kind };
     const want = Math.max(campus.floors.length, c.levels ?? 1, 1);
@@ -217,11 +227,16 @@ export function CampusView() {
     setSelected(null);
   };
 
+  /** Another storey on top, named the way people say it ("Floor 2"). */
   const addFloor = () => {
     const level = campus.floors.length;
     save({ ...campus, floors: [...campus.floors, { id: campusId("f"), level, name: level === 0 ? "Ground floor" : `Floor ${level + 1}`, rooms: [], fit: { ...DEFAULT_FIT } }] });
   };
 
+  /**
+   * Scanned rooms that are on no floor plan yet, laid out in a tidy grid on the
+   * first floor without a plan, so they appear on the model before anyone draws them.
+   */
   const autoPlace = () => {
     const names = unplaced.map((w) => w.name);
     if (!names.length) return;

@@ -38,8 +38,13 @@ interface Todo {
   done?: FixRecord;
 }
 
+/** One fix in one room, as a stable key, so ticking it off survives a re-scan. */
 const fixKey = (area: string, categoryId: string, title: string) => `${area.toLowerCase()}|${categoryId}|${title}`;
 
+/**
+ * My places: every building scanned so far, each with its rooms worst first, a
+ * to-do list of fixes in payback order, and how each room has changed scan to scan.
+ */
 export function Places() {
   const store = useStore();
   const active = store.buildings.find((b) => b.id === store.activeBuildingId) ?? store.buildings[0] ?? null;
@@ -79,6 +84,7 @@ export function Places() {
 
 // ---- which place ----------------------------------------------------------
 
+/** Switch between places, or start a new one. */
 function PlacePicker({ activeId }: { activeId: string }) {
   const store = useStore();
   return (
@@ -110,6 +116,7 @@ function PlacePicker({ activeId }: { activeId: string }) {
 
 type PlaceTab = "overview" | "charts" | "report" | "details";
 
+/** One place: its totals, its rooms, its to-do list and its charts, in tabs. */
 function Place({ buildingId, initialTab, renameNow }: { buildingId: string; initialTab: PlaceTab; renameNow: boolean }) {
   const store = useStore();
   const building = store.buildings.find((b) => b.id === buildingId)!;
@@ -302,6 +309,7 @@ function Place({ buildingId, initialTab, renameNow }: { buildingId: string; init
   );
 }
 
+/** What a new place shows before its first scan: where to start. */
 function NoRoomsYet({ name }: { name: string }) {
   return (
     <div className="panel p-8 text-center">
@@ -325,6 +333,7 @@ function PencilIcon() {
 
 // ---- the place's charts ------------------------------------------------------------
 
+/** Where this place's waste is, by kind of device and by room. */
 function PlaceCharts({ building, audits }: { building: Building; audits: SavedAudit[] }) {
   const rollup = useMemo(() => rollupBuilding(audits), [audits]);
   const settings = rollup.rooms[0]?.audit.settings;
@@ -395,6 +404,7 @@ function PlaceCharts({ building, audits }: { building: Building; audits: SavedAu
 
 // ---- rooms, worst first -------------------------------------------------------
 
+/** Every room in the place, worst first. */
 function Rooms({ rooms }: { rooms: RoomRollup[] }) {
   const max = Math.max(1, ...rooms.map((r) => r.afterHoursCost));
   const [open, setOpen] = useState<string | null>(null);
@@ -413,6 +423,7 @@ function Rooms({ rooms }: { rooms: RoomRollup[] }) {
   );
 }
 
+/** One room: its yearly waste against the worst room, opening to its devices and scan history. */
 function RoomRow({ room: r, max, open, onToggle }: { room: RoomRollup; max: number; open: boolean; onToggle: () => void }) {
   const [confirm, setConfirm] = useState(false);
   const previous = r.history[0];
@@ -528,6 +539,10 @@ function History({ room }: { room: RoomRollup }) {
 
 // ---- the to-do list -----------------------------------------------------------
 
+/**
+ * The fixes across the whole place, the best payback first. Ticking one off
+ * records when it was done, so the next scan of that room can show whether it worked.
+ */
 function TodoList({ todos, buildingId, audits }: { todos: Todo[]; buildingId: string; audits: SavedAudit[] }) {
   const [showDone, setShowDone] = useState(true);
   const shown = showDone ? todos : todos.filter((t) => !t.done);
@@ -635,6 +650,7 @@ function Worked({ todo, audits }: { todo: Todo; audits: SavedAudit[] }) {
 
 // ---- every place --------------------------------------------------------------
 
+/** Every place side by side, for anyone looking after more than one building. */
 function AllPlaces() {
   const store = useStore();
   const rows = store.buildings
@@ -668,6 +684,11 @@ function AllPlaces() {
 
 // ---- keeping a copy -----------------------------------------------------------
 
+/**
+ * Getting data in and out: a full backup file to move to another browser, or a
+ * CSV of rooms from somewhere else to add to this place. Nothing leaves the device
+ * unless the person downloads it.
+ */
 function Backup() {
   const store = useStore();
   const active = store.buildings.find((b) => b.id === store.activeBuildingId) ?? store.buildings[0];
@@ -741,6 +762,7 @@ function Backup() {
   );
 }
 
+/** The page before anything has been scanned. */
 function Empty() {
   return (
     <div className="panel grid min-h-[320px] place-items-center p-8 text-center">
@@ -758,6 +780,7 @@ function Empty() {
   );
 }
 
+/** "3 days ago", for a stored date. */
 function ago(iso: string): string {
   const days = Math.floor((Date.now() - Date.parse(iso)) / 86_400_000);
   if (days <= 0) return "today";

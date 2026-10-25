@@ -1,5 +1,11 @@
 "use client";
 
+// One photo or video in the scan list. Collapsed, it is a single row: thumbnail,
+// what it costs a year, how many devices, and tags for when and where it was
+// taken. Opened, it shows the details a person can correct (room type, their own
+// wattage or hours, a note for the cloud model) and the actions: read it again,
+// or remove it. While it is being read, the row shows which stage it is on.
+
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { readTime, type Capture, type CaptureDetails } from "@/lib/capture";
@@ -31,15 +37,22 @@ export function CaptureCard({
   onDetails: (d: Partial<CaptureDetails>) => void;
   onPatch: (p: Partial<Capture>) => void;
   onReanalyze: () => void;
-  /** Offered when the cloud model failed but the on-device detector read something. */
+  /**
+   * Offered only on a capture that still ended in an error but has an on-device
+   * reading. A cloud model that is busy or down no longer ends in an error: the
+   * on-device reading is used automatically (Scanner.tsx), so this is rare.
+   */
   onUseOnDevice?: () => void;
   onRemove: () => void;
 }) {
   const [open, setOpen] = useState(!!defaultOpen);
   const [sentNote, setSentNote] = useState(c.details.note ?? "");
+  // When it was taken, against the building's hours: "after hours" is the case the app is for.
   const time = readTime(c.meta.takenAt, schedule);
   const working = c.status === "working" || c.status === "pending";
+  // A video shows its first frame with the on-device boxes drawn in.
   const thumb = c.keyframes?.[0]?.annotated ?? c.dataUrl;
+  // A note typed after the reading only reaches the model on a re-read, so the card offers one.
   const noteChanged = (c.details.note ?? "") !== sentNote && c.status === "done";
 
   return (
@@ -301,12 +314,14 @@ export function CaptureCard({
   );
 }
 
+/** A small rounded label on the collapsed row: after hours, the place, lights on. */
 function Tag({ tone, children }: { tone?: "lime" | "amber" | "cyan"; children: React.ReactNode }) {
   const cls =
     tone === "lime" ? "bg-lime/10 text-lime" : tone === "amber" ? "bg-amber/10 text-amber" : tone === "cyan" ? "bg-cyan/10 text-cyan" : "bg-surface2 text-mist";
   return <span className={`rounded-full px-2 py-px text-[0.66rem] font-medium ${cls}`}>{children}</span>;
 }
 
+/** One fact in the opened card's details grid, with its label above. */
 function Meta({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0">
@@ -316,6 +331,10 @@ function Meta({ label, children }: { label: string; children: React.ReactNode })
   );
 }
 
+/**
+ * A number the person knows better than the catalogue (watts, hours a day). Empty,
+ * zero or nonsense clears it rather than storing a bad value, and `max` caps it.
+ */
 function NumberField({
   label,
   suffix,

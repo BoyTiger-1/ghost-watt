@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { describeImagesAny, hedge } from "./vision";
+import { describeImagesAny, hedge, worthAnotherModel } from "./vision";
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -71,5 +71,15 @@ describe("fast mode against a model that refuses reasoning_effort", () => {
     expect(b.ok).toBe(true);
     expect(bodies).toHaveLength(3);
     expect(bodies[2].reasoning_effort).toBeUndefined();
+  });
+});
+
+describe("worthAnotherModel", () => {
+  it("moves to the next model on no credit or a busy free pool, not on this key's own limit", () => {
+    expect(worthAnotherModel(new Error("HTTP 402 Insufficient credits"), "google/gemini-2.5-flash")).toBe(true);
+    expect(worthAnotherModel(new Error("HTTP 429 rate-limited"), "google/gemma-4-31b-it:free")).toBe(true);
+    expect(worthAnotherModel(new Error("HTTP 429 temporarily rate-limited upstream"), "x/y")).toBe(true);
+    expect(worthAnotherModel(new Error("HTTP 429 Rate limit reached for model"), "qwen/qwen3.8-27b")).toBe(false);
+    expect(worthAnotherModel(new Error("HTTP 401 Invalid API Key"), "x:free")).toBe(false);
   });
 });

@@ -294,8 +294,11 @@ const HOSTED: HostedProvider[] = [
     id: "google",
     label: "Google Gemini",
     env: "GEMINI_API_KEY",
-    model: "gemini-2.5-flash",
-    fallbacks: ["gemini-2.5-flash-lite", "gemini-2.0-flash"],
+    // Gemini 3.5 Flash read a test classroom far better than 2.5 (lights, monitors,
+    // towers and their states, against lights alone) in about ten seconds, and is
+    // on the free tier. 2.5 stays behind it for keys or regions without 3.5.
+    model: "gemini-3.5-flash",
+    fallbacks: ["gemini-2.5-flash", "gemini-2.5-flash-lite"],
     maxImages: 16,
     signup: "https://aistudio.google.com/apikey",
     note: "Free tier with a generous daily quota, and very good at reading rooms. The best free option.",
@@ -346,7 +349,10 @@ const HOSTED: HostedProvider[] = [
     label: "OpenRouter",
     env: "OPENROUTER_API_KEY",
     model: "google/gemini-2.5-flash",
-    fallbacks: ["google/gemini-2.0-flash-001", "qwen/qwen2.5-vl-72b-instruct", "meta-llama/llama-4-scout", "google/gemini-2.0-flash-exp:free", "qwen/qwen2.5-vl-72b-instruct:free"],
+    // Paid first (cheap, and good at rooms), then the free vision models OpenRouter
+    // currently lists. A key with no credit gets a 402 on the paid ones and a busy
+    // free pool answers 429; either moves on to the next model (worthAnotherModel).
+    fallbacks: ["google/gemini-2.5-flash-lite", "meta-llama/llama-4-scout", "google/gemma-4-31b-it:free", "google/gemma-4-26b-a4b-it:free", "nvidia/nemotron-3.5-super-vl:free"],
     maxImages: 10,
     signup: "https://openrouter.ai/keys",
     note: "One key, many models, several of them free (the ':free' ids). Useful as a last fallback.",
@@ -456,9 +462,10 @@ export async function describeImagesAny(images: string[], prompt: string, schema
       } catch (err) {
         const msg = err instanceof Error ? err.message : "unknown";
         errors.push(`${hosted.label} (${model}): ${shortError(msg)}`);
-        // Only a model that no longer exists is worth trying the next model for;
-        // an auth failure or a rate limit means move on to the next provider.
-        if (!isRetiredModel(err)) break;
+        // A model that no longer exists, one this key has no credit for, or a free
+        // model whose shared pool is busy is worth trying the next model for; an
+        // auth failure or this key's own rate limit means move on to the next provider.
+        if (!isRetiredModel(err) && !worthAnotherModel(err, model)) break;
         if (i === candidates.length - 1) {
           const found = await discoverImageModel(hosted, key, model);
           if (found && !tried.has(found)) candidates.push(found);
@@ -531,9 +538,12 @@ export function hedge<T>(first: () => Promise<T | null>, second: () => Promise<T
 
 /** The useful part of a provider's error, without the JSON envelope. */
 function shortError(msg: string): string {
+  // Keep the status: "HTTP 429" is how a busy provider is told apart from a
+  // broken one (lib/quota.ts), and a bare "Provider returned error" loses it.
+  const status = /HTTP \d{3}/.exec(msg)?.[0];
   const m = /"message"\s*:\s*"([^"]{1,160})"/.exec(msg);
-  if (m) return m[1];
-  return msg.replace(/\s+/g, " ").slice(0, 160);
+  const text = m ? m[1] : msg.replace(/\s+/g, " ").slice(0, 160);
+  return status && !text.includes(status) ? `${status} ${text}` : text;
 }
 
 /**
@@ -618,6 +628,17 @@ export function retryDelayMs(message: string): number {
 }
 
 /** The provider said the model does not exist, or no longer does. */
+/**
+ * Failures that are about this model rather than this provider: OpenRouter's 402
+ * (no credit for a paid model) and a 429 on a ":free" model, whose limit is a pool
+ * shared by everyone on OpenRouter rather than this key's own quota.
+ */
+export function worthAnotherModel(err: unknown, model: string): boolean {
+  const msg = err instanceof Error ? err.message : "";
+  if (/HTTP 402/.test(msg)) return true;
+  return /HTTP 429/.test(msg) && (model.endsWith(":free") || /upstream/i.test(msg));
+}
+
 function isRetiredModel(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : "";
   return /HTTP (404|400)/.test(msg) && /model_not_found|decommissioned|does not exist|not found|no longer supported|is not a valid model|unsupported model|invalid model/i.test(msg);

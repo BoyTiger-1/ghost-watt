@@ -1,6 +1,6 @@
 # Deploying Ghost Watt
 
-Ghost Watt is a Next.js app with nine server routes. Those routes exist to hold API
+Ghost Watt is a Next.js app with sixteen server routes. Those routes exist to hold API
 keys: the browser never sees a credential, it asks this app's own backend and the
 backend calls the provider. That single design decision determines where this can be
 hosted.
@@ -9,7 +9,7 @@ hosted.
 
 GitHub Pages serves static files. It has no server, so:
 
-- The nine routes under `/api/*` do not run at all. Three of them are `POST`
+- The sixteen routes under `/api/*` do not run at all. Six of them take `POST`
   handlers, which static hosting cannot do under any configuration.
 - There is nowhere to keep a key. Making these calls from a static page means
   compiling credentials into JavaScript that any visitor can read. On a public repo
@@ -38,6 +38,11 @@ None of these are required. The app is built to degrade honestly: every missing 
 disables one feature and says so on `/settings` rather than erroring. Vision keys are
 tried in the order Anthropic, Gemini, Groq, Mistral, OpenAI, OpenRouter, each a
 fallback for the one before it, so two free ones (Gemini and Groq) cover a demo well.
+Each vision variable can also hold several keys, comma-separated (`GROQ_API_KEY=key1,key2`)
+or as `GROQ_API_KEY_2` through `_9`: requests take turns, and a key that hits its rate
+limit rests for as long as the provider asked while the next one answers
+(`src/lib/keypool.ts`). The data keys (EIA, NREL, OpenEI, OpenWeather, Rewiring America)
+take one key each; a list there is safe, and only its first key is used.
 After adding or changing a variable in Vercel, redeploy: functions read the
 environment at build time.
 
@@ -91,8 +96,10 @@ anyone who opens devtools and reads the network tab, so `src/lib/ratelimit.ts` c
 - **2 MB request bodies.** The client downscales to 768px at q0.72, which base64s to
   roughly 100–160KB, so this refuses blob-stuffing without touching real traffic.
 
-Tripping a limit returns a clear error on the capture, with a "use the on-device
-reading instead" option; nothing is invented.
+Tripping a limit, or every provider running out of quota, never shows as an error: the
+photo is read by the on-device detector instead, and the capture says why and when to
+try the cloud again ("Cloud model limit reached for now… try again in about 10 min").
+Nothing is invented; the on-device reading is a real reading of the same picture.
 Both numbers live in `RULES` in `src/lib/ratelimit.ts` and are covered by tests in
 `src/lib/ratelimit.test.ts`; change them there.
 

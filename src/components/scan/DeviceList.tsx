@@ -26,6 +26,11 @@ export interface DeviceLine {
   adjust?: DeviceAdjust;
 }
 
+/**
+ * Every device found, worst first. Hovering a row highlights its box on the photo
+ * (and the reverse), and opening a row shows why it costs what it does and lets
+ * the person correct it.
+ */
 export function DeviceList({
   lines,
   hovered,
@@ -80,6 +85,7 @@ export function DeviceList({
   );
 }
 
+/** One device line: its name, count, state, a bar scaled to the worst line, and the yearly cost. */
 function Row({
   line,
   max,
@@ -157,6 +163,11 @@ function Row({
   );
 }
 
+/**
+ * A row, opened: what the model saw, the wattage and hours behind the price, the
+ * efficiency verdict, and, for a line the cross-check could not confirm, the
+ * question of whether it is really there.
+ */
 function Details({ line, onAdjust }: { line: DeviceLine; onAdjust: (a: DeviceAdjust) => void }) {
   const o = line.offender;
   const adjust = line.adjust;
@@ -285,6 +296,11 @@ function Details({ line, onAdjust }: { line: DeviceLine; onAdjust: (a: DeviceAdj
   );
 }
 
+/**
+ * Corrections a person can make to one line: what the device really is, how many,
+ * its wattage and its hours. Each one re-prices the line locally, without asking
+ * the model again.
+ */
 function AdjustEditor({ offender: o, adjust, perUnit, onAdjust }: { offender: Offender; adjust?: DeviceAdjust; perUnit: number; onAdjust: (a: DeviceAdjust) => void }) {
   return (
     <div className="rounded-xl border border-line px-3.5 py-3">
@@ -348,6 +364,7 @@ function AdjustEditor({ offender: o, adjust, perUnit, onAdjust }: { offender: Of
   );
 }
 
+/** A titled sentence in the opened row: "What the model saw", "Why this price". */
 function Fact({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="rounded-xl bg-surface2/60 px-3 py-2.5">
@@ -357,10 +374,12 @@ function Fact({ title, children }: { title: string; children: React.ReactNode })
   );
 }
 
+/** A small chip for a single fact, such as a technology or a state. */
 function Pill({ children }: { children: React.ReactNode }) {
   return <span className="rounded-full bg-surface px-2.5 py-1 text-fog">{children}</span>;
 }
 
+/** One labelled figure in the opened row's numbers grid. */
 function Num({ label, value }: { label: React.ReactNode; value: string }) {
   return (
     <div className="min-w-0">
@@ -370,6 +389,7 @@ function Num({ label, value }: { label: React.ReactNode; value: string }) {
   );
 }
 
+/** A number input for a correction; clearing it returns the line to the catalogue figure. */
 function AdjustField({
   label,
   value,

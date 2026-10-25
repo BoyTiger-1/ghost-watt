@@ -104,6 +104,7 @@ export function AccessibilityPanel() {
   );
 }
 
+/** A titled block of related settings: Seeing, Reading, Motion and sound, Scanner. */
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <fieldset className="mt-5 border-t border-line pt-4">
@@ -113,6 +114,7 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
   );
 }
 
+/** A setting with a few named options (theme, text size), as a row of radio buttons. */
 function Choice({ label, sub, value, options, onChange }: { label: string; sub?: string; value: string; options: [string, string][]; onChange: (v: string) => void }) {
   return (
     <div>
@@ -139,6 +141,7 @@ function Choice({ label, sub, value, options, onChange }: { label: string; sub?:
   );
 }
 
+/** An on/off setting, as a switch that screen readers announce as one. */
 function Toggle({ label, sub, checked, onChange }: { label: string; sub: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <label className="flex cursor-pointer items-start gap-3 rounded-xl px-1 py-1">

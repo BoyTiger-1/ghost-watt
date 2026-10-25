@@ -124,6 +124,10 @@ export function StickerSheet() {
   );
 }
 
+/**
+ * One printable door sticker: the room, its worst offenders, what they cost, and a
+ * QR code that opens a fresh scan of this room, so the next check is one tap.
+ */
 function Sticker({ s, url }: { s: RoomSticker; url: string }) {
   const top = s.devices.slice(0, 3);
   return (
