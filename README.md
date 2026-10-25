@@ -24,7 +24,7 @@ It works for homes, offices and schools. It's free, and it's open source under t
 - [How it works](#how-it-works)
 - [Quick start](#quick-start)
 - [Running a vision model locally](#running-a-vision-model-locally)
-- [Configuration](#configuration)
+- [Where a photo goes](#where-a-photo-goes)
 - [Open source](#open-source)
 - [Data and sources](#data-and-sources)
 - [Responsible AI](#responsible-ai)
@@ -265,8 +265,23 @@ two keys are better than one:
 Set `<KEY NAME>_MODEL` to use a different model with any of them, or `VISION_PROVIDER` to
 pin one provider. Each variable can also hold several keys, comma-separated or as
 `GROQ_API_KEY_2` through `GROQ_API_KEY_9`: requests take turns, and a key that hits its rate
-limit rests while the next one answers. The data keys in [Configuration](#configuration)
-take one key each; if you put a list in one, only the first is used.
+limit rests while the next one answers.
+
+The data keys are optional too. Each one swaps a built-in figure for a live lookup:
+
+| Key | What it turns on | Where to get one |
+| --- | --- | --- |
+| `EIA_API_KEY` | Live state electricity prices, and the hourly fuel mix behind live grid carbon | [eia.gov/opendata](https://www.eia.gov/opendata/register.php) |
+| `OPENEI_API_KEY` / `NREL_API_KEY` | The local utility's own published tariff, split into open-hours and empty-hours prices; NREL also gives solar potential | [api.data.gov/signup](https://api.data.gov/signup/) (one key works for both) |
+| `OPENWEATHER_API_KEY` | Outdoor conditions, to sanity-check a heater running in July | [openweathermap.org/api](https://openweathermap.org/api) |
+| `REWIRING_AMERICA_API_KEY` | Rebates and tax credits for upgrades | [rewiringamerica.org/api](https://www.rewiringamerica.org/api) |
+| `ELECTRICITY_MAPS_KEY` | Live grid carbon for one zone (EIA already covers the U.S., so this can stay blank) | [electricitymaps.com](https://www.electricitymaps.com/) |
+
+These take one key each; if you put a list in one, only the first is used. Two more,
+`UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`, make team scans last two weeks
+instead of about 12 hours and share rate limits across server instances. Every variable is
+explained in [`.env.example`](.env.example). Put real values in `.env.local`, which git
+ignores, never in `.env.example`.
 
 `npm test` runs the tests, `npm run lint` runs ESLint, and `npm run build` makes a
 production build.
@@ -297,30 +312,7 @@ needs a hosted vision key or an Ollama server it can reach over the network (see
 [Hosting and deployment](#hosting-and-deployment)). Without either, it runs on-device. That
 still works, nothing breaks, but a hosted model recognises a lot more of a room.
 
-## Configuration
-
-None of these are required. Without any of them the app still scans, prices, plans and
-reports; each key swaps an assumption for a real lookup. Put them in `.env.local`, or on
-Vercel under Settings → Environment Variables and redeploy. [`.env.example`](.env.example)
-lists every one, and [`DEPLOY.md`](DEPLOY.md) says what each gets you and where to sign up.
-
-| Variable | What it turns on |
-| --- | --- |
-| `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `MISTRAL_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY` | The cloud reader, bill reading, AI room suggestions on floor plans, and Ghosty Insights. Tried in that order. |
-| `VISION_PROVIDER`, `VISION_TIMEOUT_MS` | Force one provider, and how long to wait for it (default 45000 ms) |
-| `OLLAMA_HOST`, `OLLAMA_VISION_MODEL`, `OLLAMA_TIMEOUT_MS` | A vision model on your own machine instead (defaults: `http://127.0.0.1:11434`, `moondream`, 120000 ms) |
-| `OPENEI_API_KEY` / `NREL_API_KEY` | The serving utility's own published tariff, split into open-hours and empty-hours prices; NREL also gives solar potential |
-| `EIA_API_KEY` | Live state electricity prices, and the hourly fuel mix behind live grid carbon |
-| `OPENWEATHER_API_KEY` | Outdoor conditions, to sanity-check a heater running in July |
-| `REWIRING_AMERICA_API_KEY` | Rebates and tax credits for upgrades |
-| `ELECTRICITY_MAPS_KEY` | Live grid carbon intensity for one zone |
-| `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | Team scans that last two weeks, and rate limits shared across server instances. Without them, team scans still work, end-to-end encrypted over a public relay, for about 12 hours. |
-| `NEXT_PUBLIC_DETECTOR_MODEL_URL` | A fine-tuned on-device detector that can box light fixtures ([`scripts/train-detector.py`](scripts/train-detector.py)) |
-
-The Settings page shows which vision engine and data providers the running server has
-turned on.
-
-### Where a photo goes
+## Where a photo goes
 
 No accounts, no tracking. What happens to a photo depends on which mode reads it, and the
 pill in the header always tells you which one is about to run:
@@ -578,8 +570,17 @@ What we'd do: deploy to Vercel with a free Gemini or Groq key for a link that do
 everything, and keep a local Ollama setup for when you want to show the seeing step running
 with nothing leaving the machine.
 
-[`DEPLOY.md`](DEPLOY.md) has the full guide, including why GitHub Pages won't work: it only
-serves static files, and the API routes that hold the keys need a server.
+GitHub Pages won't work: it only serves static files, and the API routes that hold the keys
+need a server. After adding or changing a variable on Vercel, redeploy so it takes effect.
+
+Once it's public, anyone can find the photo route in their browser's network tab, so
+[`src/lib/ratelimit.ts`](src/lib/ratelimit.ts) caps it: 120 requests per 10 minutes per
+network (sized so a class of thirty on one school connection isn't blocked), 1,500 a day
+across the whole site, and 2 MB per request. Hitting a limit never shows an error; the photo
+is read on the device instead, with a note saying when to try the cloud again. Without
+Upstash the counters are per server instance, so they're a soft limit. Set a spending cap
+with any paid provider as well: rate limits reduce the exposure, but a cap at the provider is
+what actually bounds it.
 
 ## AI assistance
 
