@@ -34,7 +34,7 @@ import { nowLocal } from "@/lib/exif";
 import { useEngine } from "@/lib/engine";
 import type { WeeklySchedule } from "@/lib/schedule";
 import type { AnalysisMode, AnalysisResult, AnalyzeError, AuditSettings } from "@/lib/types";
-import { applyFixes, boxToPx, easeAll, hitTest, placeTag, relabel, unstack, wattsInView, drawing, type HitRect, type TagFix } from "@/lib/wattTags";
+import { applyFixes, boxToPx, easeAll, hitTest, meterReading, placeTag, relabel, steadyStates, unstack, wattsInView, drawing, type HitRect, type StateMemory, type TagFix } from "@/lib/wattTags";
 import { Icon } from "./icons";
 import { TagCard } from "./TagCard";
 
@@ -411,6 +411,8 @@ export function CameraMode({
     let view: AuditedView | null = null;
     let lastEase = 0;
     let meterShown = 0;
+    const meterHistory: { t: number; w: number }[] = [];
+    const stateMemory: StateMemory = new Map();
     let lastSpark = 0;
     const spark: number[] = [];
 
@@ -560,7 +562,7 @@ export function CameraMode({
       }));
       // On a confirmed view, the confirmed answer replaces the candidates.
       // What the person corrected by tapping a tag wins over either.
-      itemsRef.current = applyFixes(view ? view.items : candidates, fixesRef.current, settingsRef.current);
+      itemsRef.current = applyFixes(view ? view.items : steadyStates(candidates, stateMemory, now, settingsRef.current), fixesRef.current, settingsRef.current);
       const holdProgress = view || aiRef.current.inFlight ? 0 : steadySince ? Math.min(1, (now - steadySince) / STEADY_MS) : 0;
 
       // Tag numbers and the meter ease toward the reading rather than jump.
@@ -568,12 +570,14 @@ export function CameraMode({
       lastEase = now;
       easeAll(shownWattsRef.current, new Map(itemsRef.current.map((i) => [i.key, drawing(i) ? i.watts : 0])), edt);
       const total = wattsInView(itemsRef.current);
-      meterShown += (total - meterShown) * (1 - Math.exp(-edt / 140));
-      if (Math.abs(total - meterShown) < 0.5) meterShown = total;
+      // The median of the last second or so, eased: a box blinking out for a few frames moves nothing.
+      const steady = meterReading(meterHistory, now, total);
+      meterShown += (steady - meterShown) * (1 - Math.exp(-edt / 400));
+      if (Math.abs(steady - meterShown) < 0.5) meterShown = steady;
       if (meterRef.current) meterRef.current.textContent = fmtWatts(meterShown);
       if (now - lastSpark > 250) {
         lastSpark = now;
-        spark.push(total);
+        spark.push(steady);
         if (spark.length > 48) spark.shift();
         const top = Math.max(50, ...spark);
         const d = spark.map((w, i) => `${i ? "L" : "M"}${((i / 47) * 72).toFixed(1)},${(22 - (w / top) * 19).toFixed(1)}`).join("");

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyFixes, easeAll, hitTest, placeTag, relabel, unstack, wattBand, wattsInView } from "./wattTags";
+import { applyFixes, easeAll, hitTest, meterReading, placeTag, relabel, steadyStates, unstack, wattBand, wattsInView } from "./wattTags";
 import { CATALOG_BY_ID } from "./devices";
 import type { LiveItem } from "./ondevice";
 import type { AuditSettings } from "./types";
@@ -105,5 +105,32 @@ describe("tag layout", () => {
     ];
     unstack(rects, 400);
     expect(rects[1].y).toBeGreaterThanOrEqual(133);
+  });
+});
+
+describe("steadiness", () => {
+  it("does not believe a screen's new state until it has held", () => {
+    const mem = new Map();
+    const lit = item({ categoryId: "monitor", state: "on", watts: 30 });
+    const dark = item({ categoryId: "monitor", state: "standby", watts: 1 });
+    expect(steadyStates([lit], mem, 0, settings)[0].state).toBe("on");
+    // A one-frame flip to standby is ignored, and the price stays the on price.
+    const flip = steadyStates([dark], mem, 50, settings)[0];
+    expect(flip.state).toBe("on");
+    expect(flip.watts).toBeGreaterThan(5);
+    // Back to on: the pending flip is forgotten.
+    expect(steadyStates([lit], mem, 100, settings)[0].state).toBe("on");
+    // Standby that holds is believed.
+    steadyStates([dark], mem, 200, settings);
+    expect(steadyStates([dark], mem, 950, settings)[0].state).toBe("standby");
+  });
+
+  it("the meter ignores a few dropped frames", () => {
+    const h: { t: number; w: number }[] = [];
+    for (let t = 0; t < 1000; t += 33) meterReading(h, t, 120, 1200);
+    // Three frames where a 90 W screen blinked out.
+    let r = 0;
+    for (let t = 1000; t < 1100; t += 33) r = meterReading(h, t, 30, 1200);
+    expect(r).toBe(120);
   });
 });

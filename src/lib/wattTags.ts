@@ -71,10 +71,10 @@ export function wattsInView(items: readonly LiveItem[]): number {
 /**
  * Ease each shown number toward its reading. A new tag counts up from zero,
  * which reads as the meter finding it; one gone from view is forgotten.
- * About a third of a second to settle, whatever the frame rate.
+ * About half a second to settle, whatever the frame rate.
  */
-export function easeAll(shown: Map<string, number>, targets: ReadonlyMap<string, number>, dtMs: number): Map<string, number> {
-  const k = 1 - Math.exp(-Math.max(0, dtMs) / 110);
+export function easeAll(shown: Map<string, number>, targets: ReadonlyMap<string, number>, dtMs: number, tauMs = 220): Map<string, number> {
+  const k = 1 - Math.exp(-Math.max(0, dtMs) / tauMs);
   for (const key of [...shown.keys()]) if (!targets.has(key)) shown.delete(key);
   for (const [key, target] of targets) {
     const cur = shown.get(key) ?? 0;
@@ -141,4 +141,55 @@ export function boxToPx(box: Box, rect: { x: number; y: number; w: number; h: nu
   const x1 = mirrored ? 1 - box[2] : box[0];
   const x2 = mirrored ? 1 - box[0] : box[2];
   return { x: rect.x + x1 * rect.w, y: rect.y + box[1] * rect.h, w: (x2 - x1) * rect.w, h: (box[3] - box[1]) * rect.h };
+}
+
+/** What each tracked thing was last shown as, and a change waiting to be believed. */
+export type StateMemory = Map<string, { state: LiveItem["state"]; why?: string; pending?: LiveItem["state"]; since?: number }>;
+
+/**
+ * A screen's on/standby read flips frame to frame when it sits near the line,
+ * and its watts swing with it. A new state is shown only once it has held for
+ * `holdMs`; until then the item keeps the state (and price) it was shown with.
+ */
+export function steadyStates(items: readonly LiveItem[], memory: StateMemory, now: number, settings: AuditSettings, holdMs = 700): LiveItem[] {
+  const keys = new Set(items.map((i) => i.key));
+  for (const k of [...memory.keys()]) if (!keys.has(k)) memory.delete(k);
+  return items.map((it) => {
+    const m = memory.get(it.key);
+    if (!m) {
+      memory.set(it.key, { state: it.state, why: it.why });
+      return it;
+    }
+    if (it.state === m.state) {
+      m.pending = undefined;
+      m.why = it.why;
+      return it;
+    }
+    if (m.pending !== it.state) {
+      m.pending = it.state;
+      m.since = now;
+    }
+    if (now - (m.since ?? now) >= holdMs) {
+      memory.set(it.key, { state: it.state, why: it.why });
+      return it;
+    }
+    // Not believed yet: shown as it was, priced as it was.
+    const cat = it.categoryId ? CATALOG_BY_ID[it.categoryId] : undefined;
+    if (!cat || !m.state) return { ...it, state: m.state, why: m.why };
+    const watts = estimateUnitWatts(cat, m.state).mid;
+    return { ...it, state: m.state, why: m.why, watts, costPerYear: (watts / 1000) * settings.unoccupiedHoursPerYear * settings.ratePerKwh };
+  });
+}
+
+/**
+ * The meter's reading: the median of the last `windowMs` of totals. A box that
+ * drops out for a few frames moves a median not at all, where it would yank an
+ * average or the raw sum.
+ */
+export function meterReading(history: { t: number; w: number }[], now: number, total: number, windowMs = 1200): number {
+  history.push({ t: now, w: total });
+  while (history.length && now - history[0].t > windowMs) history.shift();
+  const sorted = history.map((h) => h.w).sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
