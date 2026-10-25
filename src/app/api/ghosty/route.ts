@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { describeImagesAny } from "@/lib/vision";
-import { GHOSTY_SCHEMA, buildPrompt, extractJson, rulesReport, validateReport, type GhostyContext } from "@/lib/ghosty";
+import { GHOSTY_SCHEMA, buildPrompt, extractJson, rulesReport, validateReport, type GhostyContext, keepOnReason } from "@/lib/ghosty";
 import { RULES, checkLimits, clientIp, rateHeaders } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
@@ -34,6 +34,9 @@ function sanitize(raw: unknown): GhostyContext | null {
       savingsPerYear: num(d.savingsPerYear, 0, 250000),
       paybackMonths: d.paybackMonths === null ? null : num(d.paybackMonths, 0, 1200),
       confidence: str(d.confidence, 10),
+      // Worked out here from the label, so it never depends on the browser. A reason the
+      // browser sends (it knows the catalogue category) can only add caution, never remove it.
+      keepOn: keepOnReason(str(d.label, 60)) ?? (str(d.keepOn, 80) || null),
     };
   });
   const moves = (Array.isArray(c.moves) ? c.moves : []).slice(0, 10).map((x) => {

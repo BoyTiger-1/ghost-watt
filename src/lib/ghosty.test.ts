@@ -2,7 +2,7 @@
 // support. These pin that down, along with the rules it falls back on.
 
 import { describe, expect, it } from "vitest";
-import { buildPrompt, contextKey, extractJson, rulesReport, validateReport, type GhostyContext } from "./ghosty";
+import { buildPrompt, contextKey, extractJson, keepOnReason, rulesAnswer, rulesReport, unsafeAdvice, validateReport, type GhostyContext } from "./ghosty";
 
 const ctx: GhostyContext = {
   place: "school",
@@ -12,8 +12,8 @@ const ctx: GhostyContext = {
   rooms: ["Room 214", "Lab 108"],
   totals: { annual: 1500, wasted: 1017, recoverable: 966, co2Kg: 2740 },
   devices: [
-    { label: "Computer monitor", count: 30, state: "on", room: "Lab 108", wattsEach: 30, wastePerYear: 796, fix: "Smart power strips", fixCost: 60, savingsPerYear: 756, paybackMonths: 1, confidence: "high" },
-    { label: "Projector", count: 1, state: "standby", room: "Room 214", wattsEach: 5, wastePerYear: 221, fix: "Auto-off timer", fixCost: 40, savingsPerYear: 210, paybackMonths: 2.3, confidence: "low" },
+    { label: "Computer monitor", count: 30, state: "on", room: "Lab 108", wattsEach: 30, wastePerYear: 796, fix: "Smart power strips", fixCost: 60, savingsPerYear: 756, paybackMonths: 1, confidence: "high", keepOn: null },
+    { label: "Projector", count: 1, state: "standby", room: "Room 214", wattsEach: 5, wastePerYear: 221, fix: "Auto-off timer", fixCost: 40, savingsPerYear: 210, paybackMonths: 2.3, confidence: "low", keepOn: null },
   ],
   moves: [
     { title: "Turn on auto-sleep", device: "Computer monitor", room: "Lab 108", cost: 0, savingsPerYear: 400, paybackMonths: null },
@@ -100,5 +100,63 @@ describe("helpers", () => {
     expect(p).toContain("Write a note");
     expect(p).toContain("Lincoln Middle");
     expect(buildPrompt(ctx)).toContain("set answer to null");
+  });
+});
+
+describe("things that must stay on", () => {
+  const fridgeCtx: GhostyContext = {
+    ...ctx,
+    rooms: ["Staff room"],
+    totals: { annual: 400, wasted: 300, recoverable: 120, co2Kg: 800 },
+    devices: [
+      { label: "Refrigerator / mini-fridge", count: 2, state: "on", room: "Staff room", wattsEach: 60, wastePerYear: 200, fix: "Consolidate & unplug surplus units", fixCost: 0, savingsPerYear: 90, paybackMonths: null, confidence: "high", keepOn: "keep it on while it has food in it; an empty or unused one can usually be unplugged" },
+      { label: "Coffee maker", count: 1, state: "standby", room: "Staff room", wattsEach: 3, wastePerYear: 100, fix: "Smart plug", fixCost: 15, savingsPerYear: 30, paybackMonths: 6, confidence: "high", keepOn: null },
+    ],
+    moves: [],
+  };
+
+  it("knows a fridge, a server and an exit sign from a projector", () => {
+    expect(keepOnReason("Refrigerator", "fridge")).toBeTruthy();
+    expect(keepOnReason("Network rack", "server")).toBeTruthy();
+    expect(keepOnReason("Wi-Fi router")).toBeTruthy();
+    expect(keepOnReason("Exit sign")).toBeTruthy();
+    expect(keepOnReason("Projector", "projector")).toBeNull();
+  });
+
+  it("the rules never say to switch off a fridge, and say what to do instead", () => {
+    const r = rulesReport(fridgeCtx);
+    expect(r.checklist.some((c) => /switch off the 2 refrigerator/i.test(c))).toBe(false);
+    expect(r.checklist.some((c) => /^Keep the 2 refrigerator.* on if in use.*unplug any that are empty/i.test(c))).toBe(true);
+    expect(r.checklist.some((c) => /coffee maker/i.test(c))).toBe(true);
+    expect(rulesAnswer(fridgeCtx, "what can I do tonight for free?")).not.toMatch(/switch off the 2 refrigerator/i);
+  });
+
+  it("drops AI advice to unplug a fridge, but keeps unplugging a spare one", () => {
+    expect(unsafeAdvice("Unplug the fridge in the staff room at night", fridgeCtx)).toBe(true);
+    expect(unsafeAdvice("Switch off the refrigerator / mini-fridge before you leave", fridgeCtx)).toBe(true);
+    expect(unsafeAdvice("Empty and unplug the spare fridge", fridgeCtx)).toBe(false);
+    expect(unsafeAdvice("If the second fridge isn't being used, unplug it", fridgeCtx)).toBe(false);
+    expect(unsafeAdvice("Unplug the fridge if it's not in use", fridgeCtx)).toBe(false);
+    expect(unsafeAdvice("Unplug the server rack at night", fridgeCtx)).toBe(true);
+    expect(unsafeAdvice("Switch off the coffee maker", fridgeCtx)).toBe(false);
+    const r = validateReport(
+      {
+        headline: "The fridges are most of it.",
+        insights: [
+          { kind: "habit", title: "Unplug the fridges at night", detail: "Saves money.", savings: 90 },
+          { kind: "quick_win", title: "Consolidate the two fridges", detail: "Empty and unplug the spare one.", savings: 90 },
+        ],
+        checklist: ["Turn off the fridge", "Switch off the coffee maker"],
+        answer: null,
+      },
+      fridgeCtx,
+    )!;
+    expect(r.insights.map((i) => i.title)).toEqual(["Consolidate the two fridges"]);
+    expect(r.checklist).toEqual(["Switch off the coffee maker"]);
+  });
+
+  it("tells the model which things must stay on", () => {
+    expect(buildPrompt(fridgeCtx)).toMatch(/Never tell anyone to switch off, unplug/);
+    expect(buildPrompt(fridgeCtx)).toMatch(/one that is empty or not being used can usually be unplugged/);
   });
 });

@@ -56,8 +56,64 @@ export interface GhostyContext {
     savingsPerYear: number;
     paybackMonths: number | null;
     confidence: string;
+    /** Why this must not be switched off, when it must not (a fridge, a server, an exit sign). */
+    keepOn: string | null;
   }[];
   moves: { title: string; device: string; room: string; cost: number; savingsPerYear: number; paybackMonths: number | null }[];
+}
+
+// ---- things that must stay on -----------------------------------------------------
+
+/**
+ * Devices whose job is to run day and night. "Switch it off tonight" is the
+ * right advice for a projector and the wrong advice for a fridge full of food,
+ * the server the phones run on, or an exit sign, so these get their own fix
+ * (consolidate, set back, a timer on the lights) and never an off switch.
+ */
+const KEEP_ON_IDS: Record<string, string> = {
+  fridge: "keep it on while it has food in it; an empty or unused one can usually be unplugged",
+  vending_cold: "keep it on while it is stocked; an empty one can usually be unplugged",
+  walk_in_cooler: "keep it on while it has food in it; an empty or unused one can usually be unplugged",
+  reach_in_cooler: "keep it on while it has food in it; an empty or unused one can usually be unplugged",
+  ice_machine: "shut it down only over long breaks, not nightly",
+  server: "the network and phones depend on it",
+  security_recorder: "building security depends on it",
+  exit_sign: "it is required safety lighting",
+  aquarium: "the animals in it depend on it",
+  water_heater: "set it back on a timer rather than switching it off",
+  rtu: "set it back at night rather than switching it off",
+  heat_pump: "set it back at night rather than switching it off",
+};
+
+const KEEP_ON_WORDS: [RegExp, string][] = [
+  [/fridge|freezer|refrigerat|cooler|ice machine/i, "keep it on while it has food in it; an empty or unused one can usually be unplugged"],
+  [/server|router|modem|network switch|wi-?fi|access point|firewall|\bnas\b|phone system/i, "the network and phones depend on it"],
+  [/security|cctv|camera|alarm|smoke|carbon monoxide|fire panel/i, "it is safety or security equipment"],
+  [/exit sign|emergency light/i, "it is required safety lighting"],
+  [/medical|cpap|oxygen|nebuli[sz]er/i, "it is medical equipment"],
+  [/aquarium|fish tank|terrarium|incubator|vivarium/i, "the animals in it depend on it"],
+  [/sump pump/i, "it keeps the building from flooding"],
+];
+
+/** Why a device must not be switched off, or null when switching it off is fine. */
+export function keepOnReason(label: string, categoryId?: string): string | null {
+  if (categoryId && KEEP_ON_IDS[categoryId]) return KEEP_ON_IDS[categoryId];
+  for (const [re, why] of KEEP_ON_WORDS) if (re.test(label)) return why;
+  return null;
+}
+
+const OFF_WORDS = /\b(unplug|switch(?:ing)? (?:it |them )?off|turn(?:ing)? (?:it |them )?off|shut(?:ting)? (?:it |them )?(?:off|down)|power(?:ing)? (?:it |them )?(?:off|down)|cut the power)\b/i;
+/** Advice about a spare, empty or unused unit, which can be unplugged. */
+const SPARE_WORDS = /\b(spare|surplus|extra|second|empty|unused|duplicate|holiday|break|summer|not (?:being )?used|not in use|nothing in it)\b/i;
+
+/**
+ * Whether a line of advice tells someone to switch off a thing that must stay
+ * on. A model told not to can still slip; this is the check after it.
+ */
+export function unsafeAdvice(text: string, ctx: GhostyContext): boolean {
+  if (!OFF_WORDS.test(text) || SPARE_WORDS.test(text)) return false;
+  const named = ctx.devices.some((d) => d.keepOn && text.toLowerCase().includes(d.label.toLowerCase()));
+  return named || KEEP_ON_WORDS.some(([re]) => re.test(text));
 }
 
 const r0 = (n: number) => Math.round(n);
@@ -95,6 +151,7 @@ export function buildContext(input: {
       savingsPerYear: r0(o.annualSavings),
       paybackMonths: o.paybackMonths === null ? null : Math.round(o.paybackMonths * 10) / 10,
       confidence: o.confidence,
+      keepOn: keepOnReason(o.label, o.categoryId),
     })),
     moves: input.actions.slice(0, 10).map((a) => ({
       title: a.title,
@@ -159,6 +216,8 @@ export function buildPrompt(ctx: GhostyContext, question?: string, language?: st
       ? `- Write every text field (headline, titles, details, checklist, answer) in ${language}. Keep the JSON keys and the "kind" values in English.`
       : "",
     "- Free habit changes first, then cheap fixes with fast payback, then upgrades.",
+    "- Some things must keep running. A device with keepOn set says why. Never tell anyone to switch off, unplug, turn off or shut down a server, router or network gear, security camera or recorder, alarm, exit or emergency light, medical equipment, aquarium, sump pump, water heater or heating. For those, suggest only their listed fix (for example a night setback or a timer on the lighting). The same goes for anything whose job is to run day and night, even if it is not marked.",
+    "- Fridges, freezers and coolers depend on use: one that has food in it stays on, but one that is empty or not being used can usually be unplugged. Say it that way (for example 'if the second fridge is empty, unplug it'), never as a flat 'unplug the fridge'.",
     "- 'watch' insights flag something that looks odd or uncertain (low confidence, something running that should not be, one device dominating).",
     "- 'schedule' insights are about timers, shutdown routines or opening hours.",
     question
@@ -205,8 +264,13 @@ export function validateReport(raw: unknown, ctx: GhostyContext, model?: string)
       const savings = i.savings === null || !Number.isFinite(n) || n <= 0 || n > ceiling ? null : Math.round(n);
       return { kind: KINDS.includes(i.kind as InsightKind) ? (i.kind as InsightKind) : "quick_win", title, detail, savings };
     })
-    .filter((x): x is Insight => x !== null);
-  const checklist = (Array.isArray(o.checklist) ? o.checklist : []).map((c) => clean(c, 100)).filter(Boolean).slice(0, 5);
+    .filter((x): x is Insight => x !== null)
+    // Never show advice to switch off a fridge, a server or an exit sign, however it was worded.
+    .filter((x) => !unsafeAdvice(`${x.title} ${x.detail}`, ctx));
+  const checklist = (Array.isArray(o.checklist) ? o.checklist : [])
+    .map((c) => clean(c, 100))
+    .filter((c) => c && !unsafeAdvice(c, ctx))
+    .slice(0, 5);
   const answer = clean(o.answer, 1400) || null;
   return { headline, insights, checklist, answer, source: "ai", model };
 }
@@ -304,9 +368,22 @@ export function rulesReport(ctx: GhostyContext, question?: string): GhostyReport
     });
   }
 
+  // "Switch off" only for things that can be: a fridge or a server gets its own fix instead.
+  const where = (x: (typeof d)[number]) => (ctx.rooms.length > 1 ? ` (${x.room})` : "");
   const checklist = d
-    .slice(0, 5)
-    .map((x) => `${x.state === "standby" ? "Fully switch off" : "Switch off"} ${things(x.label, x.count)}${ctx.rooms.length > 1 ? ` (${x.room})` : ""}`);
+    .filter((x) => !x.keepOn)
+    .slice(0, 4)
+    .map((x) => `${x.state === "standby" ? "Fully switch off" : "Switch off"} ${things(x.label, x.count)}${where(x)}`);
+  const stay = d.find((x) => x.keepOn);
+  if (stay) {
+    // A fridge depends on use: on while it has food in it, unplugged when it is empty.
+    const inUse = /empty or unused|while it is stocked/.test(stay.keepOn ?? "");
+    checklist.push(
+      inUse
+        ? `Keep ${things(stay.label, stay.count)} on if in use${where(stay)}; unplug any that are empty`
+        : `Leave ${things(stay.label, stay.count)} on${where(stay)}: ${stay.fix.toLowerCase()} instead`,
+    );
+  }
 
   const answer = question ? rulesAnswer(ctx, question) : null;
 
@@ -355,7 +432,11 @@ export function rulesAnswer(ctx: GhostyContext, question: string): string {
   }
 
   if (/free|tonight|no cost|nothing to buy/.test(q)) {
-    const steps = d.slice(0, 3).map((x) => `switch off ${things(x.label, x.count)} in ${x.room}`);
+    const steps = d
+      .filter((x) => !x.keepOn)
+      .slice(0, 3)
+      .map((x) => `switch off ${things(x.label, x.count)} in ${x.room}`);
+    if (!steps.length) return `Everything wasting power here needs to keep running (${things(top.label, top.count)}: ${top.keepOn}). The fix is ${top.fix.toLowerCase()}, not a switch.`;
     return `Tonight, for free: ${steps.join(", ")}.${free.length ? ` Free changes in the fix list add up to ${money(free.reduce((s, m) => s + m.savingsPerYear, 0))} a year.` : ""} Doing it every night saves up to ${money(ctx.totals.wasted)} a year.`;
   }
 
