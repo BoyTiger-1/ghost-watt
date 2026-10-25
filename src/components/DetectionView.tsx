@@ -10,7 +10,7 @@ import { useMemo } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { fmtMoney } from "@/lib/energy";
 import { loadImage } from "@/lib/image";
-import { STATE_COLOR, STATE_PLAIN } from "./scan/plain";
+import { STATE_COLOR, STATE_PLAIN, USAGE_COLOR, type BoxKind } from "./scan/plain";
 import type { AnalysisMode, Box, DeviceState, Offender, Sighting } from "@/lib/types";
 
 export interface DetectionPhoto {
@@ -33,7 +33,12 @@ interface Mark {
   cost: number | null;
   /** Reported by the model but not backed by the detector: drawn dashed, not counted. */
   unverified?: boolean;
+  /** Meant to run all night (a fridge, a router): shown as usage, with what it costs a year to run. */
+  usage?: number;
 }
+
+/** Waste is red or amber by state; usage is always blue. */
+const markColor = (m: Mark) => (m.usage !== undefined ? USAGE_COLOR : STATE_COLOR[m.state]);
 
 export interface Placed {
   key: string;
@@ -49,7 +54,15 @@ export const offenderAnchor = (id: string) => `offender-${id}`;
 export function placeMarks(photo: DetectionPhoto): Placed[] {
   const out: Placed[] = [];
   for (const o of photo.offenders) {
-    const mark: Mark = { id: o.id, label: o.label, state: o.state, count: o.count, cost: o.costPerYear, unverified: o.unverified };
+    const mark: Mark = {
+      id: o.id,
+      label: o.label,
+      state: o.state,
+      count: o.count,
+      cost: o.costPerYear,
+      unverified: o.unverified,
+      ...(o.needed ? { usage: o.annualCostPerYear ?? o.typicalCostPerYear ?? 0 } : {}),
+    };
     (o.boxes ?? []).forEach((box, n) => out.push({ key: `${o.id}-${n}`, box, mark, n }));
   }
   for (const [i, s] of (photo.sightings ?? []).entries()) {
@@ -74,11 +87,11 @@ export function AnnotatedPhoto({
   /** A box was clicked: the device it belongs to. */
   onPick?: (offenderId: string) => void;
   showLabels?: boolean;
-  hidden?: ReadonlySet<DeviceState>;
+  hidden?: ReadonlySet<BoxKind>;
 }) {
   const reduceMotion = useReducedMotion();
   const placed = useMemo(() => placeMarks(photo), [photo]);
-  const visible = hidden ? placed.filter((p) => !hidden.has(p.mark.state)) : placed;
+  const visible = hidden ? placed.filter((p) => !hidden.has(p.mark.usage !== undefined ? "usage" : p.mark.state)) : placed;
   const cloud = photo.mode === "enhanced";
 
   return (
@@ -127,7 +140,7 @@ function BoxLayer({
     <>
         <AnimatePresence>
           {visible.map((p, i) => {
-            const color = STATE_COLOR[p.mark.state];
+            const color = markColor(p.mark);
             const isHot = hovered === p.mark.id;
             const dimmed = hovered !== null && !isHot;
             const [x1, y1, x2, y2] = p.box;
@@ -152,7 +165,7 @@ function BoxLayer({
                 onFocus={() => onHover(p.mark.id)}
                 onBlur={() => onHover(null)}
                 onClick={() => !sighting && onPick?.(p.mark.id)}
-                aria-label={`${p.mark.label}, ${STATE_PLAIN[p.mark.state].toLowerCase()}, ${costWords(p.mark)}`}
+                aria-label={`${p.mark.label}, ${p.mark.usage !== undefined ? "in use" : STATE_PLAIN[p.mark.state].toLowerCase()}, ${costWords(p.mark)}`}
                 className="absolute cursor-pointer outline-none focus-visible:ring-1 focus-visible:ring-white"
                 style={{
                   left: `${x1 * 100}%`,
@@ -203,11 +216,13 @@ function Corners({ color, thick }: { color: string; thick: boolean }) {
 
 function tag(m: Mark) {
   if (m.unverified) return "not sure";
+  if (m.usage !== undefined) return `${fmtMoney(m.usage)}/yr usage`;
   return m.cost === null ? "off" : m.cost > 0 ? `${fmtMoney(m.cost)}/yr wasted` : "no waste";
 }
 
 function costWords(m: Mark) {
   if (m.unverified) return `${m.count} the AI wasn't sure about, not counted`;
+  if (m.usage !== undefined) return `${fmtMoney(m.usage)} a year to run, meant to stay on, so usage, not waste`;
   return m.cost === null ? `${m.count} seen switched off, costing nothing` : `${fmtMoney(m.cost)} a year wasted for all ${m.count}`;
 }
 
@@ -236,7 +251,7 @@ export async function annotatedDataUrl(photo: DetectionPhoto, labels = true): Pr
   ctx.textBaseline = "top";
 
   for (const p of placeMarks(photo)) {
-    const color = STATE_COLOR[p.mark.state];
+    const color = markColor(p.mark);
     const x = p.box[0] * W;
     const y = p.box[1] * H;
     const w = (p.box[2] - p.box[0]) * W;

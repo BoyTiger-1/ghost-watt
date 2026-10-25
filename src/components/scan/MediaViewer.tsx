@@ -12,8 +12,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { AnnotatedPhoto, downloadAnnotated, type DetectionPhoto } from "../DetectionView";
 import { fmtMoney } from "@/lib/energy";
 import type { Capture } from "@/lib/capture";
-import type { DeviceState, Offender } from "@/lib/types";
-import { STATE_COLOR, STATE_PLAIN } from "./plain";
+import type { Offender } from "@/lib/types";
+import { STATE_COLOR, STATE_PLAIN, USAGE_COLOR, type BoxKind } from "./plain";
 import { Icon } from "./icons";
 import { accepted, usePastedFiles } from "./UploadMode";
 
@@ -49,7 +49,7 @@ export function MediaViewer({
   const inputRef = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
   const [labels, setLabels] = useState(true);
-  const [hidden, setHidden] = useState<Set<DeviceState>>(new Set());
+  const [hidden, setHidden] = useState<Set<BoxKind>>(new Set());
   usePastedFiles(onFiles);
 
   const sel = items.find((i) => i.capture.id === selectedId) ?? items[0];
@@ -60,9 +60,9 @@ export function MediaViewer({
     c.kind === "photo" && c.dataUrl && c.result
       ? { id: c.id, name: c.name, dataUrl: c.dataUrl, mode: c.result.mode, engine: c.result.engine, offenders: sel.offenders, sightings: c.result.sightings }
       : null;
-  const boxes = photo ? sel.offenders.flatMap((o) => (o.boxes ?? []).map(() => o.state)).concat((c.result?.sightings ?? []).flatMap((s) => s.boxes.map(() => s.state))) : [];
+  const boxes: BoxKind[] = photo ? sel.offenders.flatMap((o) => (o.boxes ?? []).map((): BoxKind => (o.needed ? "usage" : o.state))).concat((c.result?.sightings ?? []).flatMap((s) => s.boxes.map(() => s.state))) : [];
 
-  const toggle = (s: DeviceState) =>
+  const toggle = (s: BoxKind) =>
     setHidden((prev) => {
       const next = new Set(prev);
       if (next.has(s)) next.delete(s);
@@ -179,12 +179,13 @@ export function MediaViewer({
       {/* what the colours mean, and a way to hide one */}
       {photo && boxes.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5 border-b border-line px-3.5 py-2">
-          {(Object.keys(STATE_COLOR) as DeviceState[]).map((s) => {
+          {(["on", "standby", "usage", "off"] as BoxKind[]).map((s) => {
             const n = boxes.filter((b) => b === s).length;
             if (!n) return null;
+            // "In use": things meant to run all night, costed as usage rather than waste.
             return (
-              <Chip key={s} on={!hidden.has(s)} onClick={() => toggle(s)} color={STATE_COLOR[s]}>
-                {STATE_PLAIN[s]} · {n}
+              <Chip key={s} on={!hidden.has(s)} onClick={() => toggle(s)} color={s === "usage" ? USAGE_COLOR : STATE_COLOR[s]}>
+                {s === "usage" ? "In use" : STATE_PLAIN[s]} · {n}
               </Chip>
             );
           })}

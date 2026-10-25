@@ -134,3 +134,15 @@ describe("steadiness", () => {
     expect(r).toBe(120);
   });
 });
+
+describe("needed devices on the live camera", () => {
+  it("a tag corrected to a fridge runs all night on purpose, so it costs nothing as waste", () => {
+    const f = relabel(item(), { categoryId: "fridge", state: "on" }, settings);
+    expect(f.needed).toBeTruthy();
+    expect(f.costPerYear).toBe(0);
+    expect(f.watts).toBeGreaterThan(0);
+    const m = relabel(item(), { categoryId: "monitor", state: "on" }, settings);
+    expect(m.needed).toBeUndefined();
+    expect(m.costPerYear).toBeGreaterThan(0);
+  });
+});

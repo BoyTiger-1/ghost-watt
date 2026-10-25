@@ -81,5 +81,8 @@ describe("worthAnotherModel", () => {
     expect(worthAnotherModel(new Error("HTTP 429 temporarily rate-limited upstream"), "x/y")).toBe(true);
     expect(worthAnotherModel(new Error("HTTP 429 Rate limit reached for model"), "qwen/qwen3.8-27b")).toBe(false);
     expect(worthAnotherModel(new Error("HTTP 401 Invalid API Key"), "x:free")).toBe(false);
+    expect(worthAnotherModel(new Error("HTTP 503 This model is currently experiencing high demand"), "gemini-3.5-flash")).toBe(true);
+    expect(worthAnotherModel(new Error("HTTP 503 Service Unavailable"), "x")).toBe(true);
+    expect(worthAnotherModel(new Error("HTTP 500 Internal error"), "x")).toBe(false);
   });
 });

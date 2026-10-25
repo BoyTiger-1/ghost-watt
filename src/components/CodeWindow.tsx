@@ -151,7 +151,7 @@ function highlight(line: string) {
 export const ENERGY_TS: CodeFile = {
   name: "energy.ts",
   path: "src/lib",
-  startLine: 116,
+  startLine: 117,
   code: `  // The state this device is in through the building's empty hours. What was seen
   // is the answer when the picture was taken after hours (or the time is unknown);
   // a device seen running during the day is assumed to drop to standby at night
@@ -246,7 +246,7 @@ export const DEVICES_TS: CodeFile = {
 export const ENERGY_TS_SHORT: CodeFile = {
   name: "energy.ts",
   path: "src/lib",
-  startLine: 164,
+  startLine: 165,
   code: `  const hoursKnown = obs.hoursPerYear !== undefined && Number.isFinite(obs.hoursPerYear) && obs.hoursPerYear >= 0;
   const hours = hoursKnown ? Math.min(8760, obs.hoursPerYear!) : settings.unoccupiedHoursPerYear;
   const kwhPerYear = (totalWatts / 1000) * hours;

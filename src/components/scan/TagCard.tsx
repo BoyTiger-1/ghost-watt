@@ -69,7 +69,14 @@ export function TagCard({
               This kind of device: {fmtWatts(band.low)}–{fmtWatts(band.high)}
             </p>
           )}
-          {!off && (
+          {!off && item.needed && (
+            <div className="mt-3 rounded-xl bg-white/[0.07] px-2.5 py-2">
+              <div className="text-[0.64rem] leading-tight text-white/55">Usage, not waste</div>
+              <div className="mt-0.5 font-mono text-[0.98rem] font-semibold text-[#5aa9ff]">about {fmtMoney(item.typicalCostPerYear)}/yr to run</div>
+              <p className="mt-1 text-[0.74rem] leading-relaxed text-white/65">It&apos;s meant to stay on ({item.needed}), so it&apos;s costed but not counted as waste.</p>
+            </div>
+          )}
+          {!off && !item.needed && (
             <dl className="mt-3 grid grid-cols-2 gap-2">
               <div className="rounded-xl bg-white/[0.07] px-2.5 py-2">
                 <dt className="text-[0.64rem] leading-tight text-white/55">Left on every empty hour</dt>

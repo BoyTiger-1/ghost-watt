@@ -20,6 +20,15 @@ export const STATE_COLOR: Record<DeviceState, string> = {
   off: "#7d8799",
 };
 
+/**
+ * A device that is meant to run all night (a fridge, a router): usage, not waste.
+ * Blue, so it never reads as one of the red and amber things to switch off.
+ */
+export const USAGE_COLOR = "#5aa9ff";
+
+/** What a box on the photo is, for the legend under it: a state, or usage. */
+export type BoxKind = DeviceState | "usage";
+
 export const GLOSSARY = {
   watt: "How hard a device is pulling power at one moment. A phone charger uses about 5 watts, an LED bulb about 10, a microwave about 1,000.",
   kwh: "A kilowatt-hour is the unit your electric bill charges for: 1,000 watts running for one hour. In most of the US one costs between 12 and 30 cents.",

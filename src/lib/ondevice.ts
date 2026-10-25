@@ -13,6 +13,7 @@ import { iou } from "./boxes";
 import { typicalUse } from "./usage";
 import type { CategorizedObservation } from "./parse";
 import type { AuditSettings, Box, DeviceState } from "./types";
+import { neededAllNight } from "./essentials";
 
 /** A detection in fractional coordinates. */
 export interface FracDetection {
@@ -38,6 +39,8 @@ export interface LiveItem {
   costPerYear: number;
   /** At typical use where it is. */
   typicalCostPerYear: number;
+  /** Why it is meant to run all night (a fridge, a router), when it is: then none of it is waste. */
+  needed?: string;
 }
 
 /** Screens are what brightness can judge; everything else is assumed on. */
@@ -125,6 +128,8 @@ export function readItems(
       const cat = c.categoryId ? CATALOG_BY_ID[c.categoryId] : undefined;
       if (cat) watts = estimateUnitWatts(cat, state).mid;
     }
+    // A fridge seen live is meant to run all night: none of its draw is waste.
+    const needed = c.categoryId ? neededAllNight(c.categoryId, c.label) : null;
     items.push({
       key: d.id !== undefined ? `t${d.id}` : `d${i}`,
       kind: c.kind,
@@ -135,8 +140,9 @@ export function readItems(
       state,
       why,
       watts,
-      costPerYear: cost(watts),
+      costPerYear: needed ? 0 : cost(watts),
       typicalCostPerYear: typical(c.categoryId),
+      ...(needed ? { needed } : {}),
     });
   }
 
@@ -185,6 +191,7 @@ export function observationsToItems(
     if (!cat || !o.boxes?.length) return;
     const watts = o.userWatts ?? estimateUnitWatts(cat, o.state).mid;
     const typical = typicalUse(cat, estimateUnitWatts(cat, "on").mid, ctx, occupied).kwhPerYear * settings.ratePerKwh;
+    const needed = neededAllNight(o.categoryId, o.device);
     o.boxes.forEach((box, j) => {
       items.push({
         key: `${prefix}${i}-${j}`,
@@ -196,8 +203,9 @@ export function observationsToItems(
         state: o.state,
         why: o.evidence,
         watts,
-        costPerYear: (watts / 1000) * hours * settings.ratePerKwh,
+        costPerYear: needed ? 0 : (watts / 1000) * hours * settings.ratePerKwh,
         typicalCostPerYear: o.state === "off" ? 0 : typical,
+        ...(needed ? { needed } : {}),
       });
     });
   });

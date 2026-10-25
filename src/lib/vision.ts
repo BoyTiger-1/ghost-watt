@@ -630,12 +630,15 @@ export function retryDelayMs(message: string): number {
 /** The provider said the model does not exist, or no longer does. */
 /**
  * Failures that are about this model rather than this provider: OpenRouter's 402
- * (no credit for a paid model) and a 429 on a ":free" model, whose limit is a pool
- * shared by everyone on OpenRouter rather than this key's own quota.
+ * (no credit for a paid model), a model that is overloaded right now, and a 429 on
+ * a ":free" model, whose limit is a pool shared by everyone on OpenRouter rather
+ * than this key's own quota.
  */
 export function worthAnotherModel(err: unknown, model: string): boolean {
   const msg = err instanceof Error ? err.message : "";
   if (/HTTP 402/.test(msg)) return true;
+  // One model overloaded is not the provider down: its next model has its own capacity.
+  if (/HTTP 50[03]/.test(msg) && /overload|high demand|unavailable|capacity/i.test(msg)) return true;
   return /HTTP 429/.test(msg) && (model.endsWith(":free") || /upstream/i.test(msg));
 }
 

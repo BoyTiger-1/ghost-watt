@@ -96,3 +96,14 @@ describe("simulate", () => {
     expect(both.after.afterHours).toBeGreaterThanOrEqual(0);
   });
 });
+
+describe("fixes for things meant to run all night", () => {
+  it("lists a needed device's fix when there is something to save", async () => {
+    const { scoreObservation } = await import("./energy");
+    const s = { ratePerKwh: 0.15, co2PerKwh: 0.4, unoccupiedHoursPerYear: 6800 };
+    const two = scoreObservation({ device: "fridge", count: 2, state: "on", categoryId: "fridge" }, s, "Staff room", 0)!;
+    const one = scoreObservation({ device: "fridge", count: 1, state: "on", categoryId: "fridge" }, s, "Kitchen", 1)!;
+    const fixes = listActions([two, one], s).filter((a) => a.kind === "fix");
+    expect(fixes.map((a) => a.where)).toEqual(["Staff room"]);
+  });
+});

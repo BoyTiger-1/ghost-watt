@@ -280,8 +280,30 @@ describe("aggregate", () => {
   });
 
   it("never claims to recover more than is being spent", () => {
+    // Against the whole yearly spend, not just the waste: a spare fridge's saving
+    // comes out of what it costs to run, which is needed, not wasted.
     const t = aggregate(rows);
-    expect(t.recoverableCost).toBeLessThanOrEqual(t.costPerYear + 1e-9);
+    expect(t.recoverableCost).toBeLessThanOrEqual(t.annualCostPerYear + 1e-9);
+  });
+
+  it("counts a fridge, a router and an exit sign as needed, not wasted", () => {
+    const s = { ratePerKwh: 0.15, co2PerKwh: 0.4, unoccupiedHoursPerYear: 6800 };
+    const fridge = scoreObservation({ device: "fridge", count: 1, state: "on", categoryId: "fridge" }, s, "Staff room", 0)!;
+    const sign = scoreObservation({ device: "exit sign", count: 2, state: "on", categoryId: "exit_sign" }, s, "Hall", 1)!;
+    const router = scoreObservation({ device: "wifi router", count: 1, state: "on", categoryId: "x_wifi_router" }, s, "Office", 2)!;
+    const projector = scoreObservation({ device: "projector", count: 1, state: "on", categoryId: "projector" }, s, "Room 214", 3)!;
+    for (const o of [fridge, sign, router]) {
+      expect(o.needed, o.label).toBeTruthy();
+      expect(o.costPerYear, o.label).toBe(0);
+      expect(o.annualCostPerYear!, o.label).toBeGreaterThan(0);
+    }
+    expect(projector.needed).toBeUndefined();
+    expect(projector.costPerYear).toBeGreaterThan(0);
+    // One fridge has no spare to consolidate; two do.
+    expect(fridge.annualSavings).toBe(0);
+    const two = scoreObservation({ device: "fridge", count: 2, state: "on", categoryId: "fridge" }, s, "Staff room", 4)!;
+    expect(two.annualSavings).toBeGreaterThan(0);
+    expect(aggregate([fridge, sign, router, projector]).costPerYear).toBeCloseTo(projector.costPerYear, 6);
   });
 
   it("names the most expensive row as the top offender", () => {

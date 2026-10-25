@@ -236,6 +236,11 @@ export interface Offender {
   techLabel?: string;
   /** Shown but not counted: the reading could not be cross-checked and the user has not confirmed it. */
   unverified?: boolean;
+  /**
+   * Why this device has to keep running (a fridge, a router, an exit sign), when
+   * it does. Its after-hours draw is then counted as needed, not wasted.
+   */
+  needed?: string;
   /** The model's confidence, 0-1, when it gave one. */
   modelConfidence?: number;
   /** Hours a year this line is costed for. */

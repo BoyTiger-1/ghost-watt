@@ -8,6 +8,7 @@ import { evidenceWords } from "./tech";
 import { hvacInteraction } from "./thermal";
 import { typicalUse } from "./usage";
 import { coincidenceFactor, demandCost, demandLines, describeDemand } from "./demand";
+import { neededAllNight } from "./essentials";
 import type {
   AuditSettings,
   DeviceCategory,
@@ -214,7 +215,7 @@ export function scoreObservation(
   // device on adds only the draw above standby on top of it.
   const annualCostPerYear = thermostaticTotal(cat, costPerYear, typicalCostPerYear) ?? typicalCostPerYear + Math.max(0, costPerYear - standbyCostPerYear);
 
-  return {
+  const offender: Offender = {
     id: `${source}-${cat.id}-${index}`,
     categoryId: cat.id,
     // An unrecognised device keeps the name the model gave it.
@@ -257,6 +258,34 @@ export function scoreObservation(
     ...(obs.boxes?.length ? { boxes: obs.boxes } : {}),
     ...(obs.verification === "unverified" ? { unverified: true } : {}),
     ...(obs.confidence !== undefined ? { modelConfidence: obs.confidence } : {}),
+  };
+  // A fridge, a router or an exit sign is meant to run all night: not waste.
+  const needed = neededAllNight(cat.id, obs.device ?? "");
+  return needed ? asNeeded(offender, needed) : offender;
+}
+
+/**
+ * A device whose job is to run all night. Everything it draws is part of what the
+ * building needs, so nothing of it is waste; its fix (consolidate a spare unit,
+ * right-size a server) is priced against what it costs to run instead.
+ */
+function asNeeded(o: Offender, why: string): Offender {
+  const running = Math.max(o.annualCostPerYear ?? 0, o.costPerYear);
+  // "Consolidate the spare units" needs a spare: with one fridge there is nothing to save.
+  const needsSpare = o.action.type === "consolidate" || o.action.type === "remove";
+  const annualSavings = needsSpare && o.count <= 1 ? 0 : running * o.action.savingsFraction;
+  return {
+    ...o,
+    needed: why,
+    costPerYear: 0,
+    costLowPerYear: 0,
+    costHighPerYear: 0,
+    kwhPerYear: 0,
+    co2KgPerYear: 0,
+    standbyCostPerYear: 0,
+    annualCostPerYear: running,
+    annualSavings,
+    paybackMonths: o.fixCost > 0 && annualSavings > 0 ? (o.fixCost / annualSavings) * 12 : null,
   };
 }
 

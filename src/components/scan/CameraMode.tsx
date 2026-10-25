@@ -1377,6 +1377,8 @@ function bracket(ctx: CanvasRenderingContext2D, x: number, y: number, w: number,
 function tagText(it: ViewItem, watts: number): { main: string; sub: string } {
   if (it.kind === "person") return { main: "in use", sub: "person" };
   if (it.state === "off") return { main: "off", sub: `${it.label} · 0 W` };
+  // Meant to run all night: costed as usage, never shown as something to switch off.
+  if (it.needed) return { main: fmtWatts(watts), sub: `${it.label} · usage · ${fmtMoney(it.typicalCostPerYear)}/yr` };
   const state = it.why === "set by you" ? (it.state === "standby" ? " · standby" : "") + " · yours" : it.why === "screen dark" ? " · dark" : it.state === "standby" ? " · standby" : it.why === "screen lit" ? " · lit" : "";
   // Typical use under the watts: the honest everyday figure. The card adds the left-on one.
   return { main: fmtWatts(watts), sub: `${it.label}${state} · ${it.candidate ? "~" : ""}${fmtMoney(it.typicalCostPerYear)}/yr typ` };

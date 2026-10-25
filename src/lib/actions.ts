@@ -86,7 +86,9 @@ export function listActions(offenders: readonly Offender[], s: AuditSettings): A
   for (const o of offenders) {
     if (o.unverified) continue;
     const where = o.source;
-    if (o.annualSavings > 0.5 && o.costPerYear > 0) {
+    // A device meant to run all night has no waste, but its fix (consolidate a spare
+    // fridge, a timer on the tank light) still saves real money, so it still makes the list.
+    if (o.annualSavings > 0.5 && (o.costPerYear > 0 || o.needed)) {
       const co2 = kwhOf(o.annualSavings, s) * s.co2PerKwh;
       out.push({
         id: `${o.id}:fix`,

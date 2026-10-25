@@ -19,7 +19,7 @@ import type { DeviceAdjust } from "@/lib/capture";
 import type { Offender } from "@/lib/types";
 import { Icon } from "./icons";
 import { Term } from "./Term";
-import { STATE_COLOR, STATE_PLAIN, afterHoursWords, basisWords, confidenceWords, hoursPerDayWords, monthsWords, wattsPicture } from "./plain";
+import { STATE_COLOR, STATE_PLAIN, afterHoursWords, basisWords, confidenceWords, hoursPerDayWords, monthsWords, wattsPicture, USAGE_COLOR } from "./plain";
 
 export interface DeviceLine {
   offender: Offender;
@@ -127,11 +127,17 @@ function Row({
             </span>
             <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[0.76rem] text-dim">
               <span className="inline-flex items-center gap-1">
-                <span className="h-1.5 w-1.5 rounded-full" style={{ background: color }} aria-hidden />
-                {STATE_PLAIN[o.state]}
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: o.needed ? USAGE_COLOR : color }} aria-hidden />
+                {o.needed ? "In use" : STATE_PLAIN[o.state]}
               </span>
               <span className="truncate">{o.source}</span>
               {o.unverified && <span className="font-medium text-amber">AI not sure · not counted</span>}
+              {/* A fridge, a router or an exit sign is meant to run all night: usage, not waste. */}
+              {o.needed && (
+                <span className="font-medium" style={{ color: USAGE_COLOR }} title={`Still costed, but counted as usage, not waste: ${o.needed}.`}>
+                  usage, not waste
+                </span>
+              )}
             </span>
           </span>
         </span>
@@ -146,8 +152,14 @@ function Row({
         </span>
 
         <span className="text-right">
-          <span className={`block font-mono text-[1.02rem] font-semibold ${o.costPerYear > 0 ? "text-ember" : "text-dim"}`}>{o.costPerYear > 0 ? fmtMoneyFull(o.costPerYear) : "$0"}</span>
-          <span className="block text-[0.68rem] text-dim sm:hidden">wasted / yr</span>
+          {o.needed ? (
+            <span className="block font-mono text-[1.02rem] font-semibold" style={{ color: USAGE_COLOR }} title="What it costs a year to run. Counted as usage, not waste.">
+              {fmtMoneyFull(annual)}
+            </span>
+          ) : (
+            <span className={`block font-mono text-[1.02rem] font-semibold ${o.costPerYear > 0 ? "text-ember" : "text-dim"}`}>{o.costPerYear > 0 ? fmtMoneyFull(o.costPerYear) : "$0"}</span>
+          )}
+          <span className="block text-[0.68rem] text-dim sm:hidden">{o.needed ? "usage / yr" : "wasted / yr"}</span>
         </span>
         <Icon name="chevron" className={`h-4 w-4 text-dim transition-transform ${open ? "rotate-180" : ""}`} />
       </button>

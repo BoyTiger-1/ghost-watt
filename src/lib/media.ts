@@ -252,11 +252,14 @@ export const ITEM_COLOR = {
   light: "#ffd84d",
   person: "#2fe6cf",
   other: "#9aa3b2",
+  /** Meant to run all night (a fridge, a router): usage, not waste. */
+  usage: "#5aa9ff",
 } as const;
 
-export function itemColor(it: Pick<LiveItem, "kind" | "state">): string {
+export function itemColor(it: Pick<LiveItem, "kind" | "state"> & { needed?: string }): string {
   // Judged switched off by the AI: drawn, so the view reads as checked, but not as a cost.
   if (it.state === "off") return ITEM_COLOR.other;
+  if (it.needed) return ITEM_COLOR.usage;
   if (it.kind === "light") return ITEM_COLOR.light;
   if (it.kind === "person") return ITEM_COLOR.person;
   if (it.kind === "other" || !it.state) return ITEM_COLOR.other;
