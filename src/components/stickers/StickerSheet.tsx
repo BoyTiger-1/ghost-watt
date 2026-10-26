@@ -46,7 +46,7 @@ export function StickerSheet() {
           Put the audit <span className="italic text-cyan">on the door.</span>
         </h1>
         <p className="mt-5 max-w-[60ch] text-[1.02rem] leading-[1.65] text-mist">
-          One sticker per scanned room: what it wastes after hours and what to switch off. Anyone who scans the QR on the way out gets a checklist on their
+          One sticker per scanned room: what sits idle after hours and what to switch off. Anyone who scans the QR on the way out gets a checklist on their
           phone. Nothing to install, and the room&apos;s figures travel inside the code itself.
         </p>
 
@@ -107,7 +107,7 @@ export function StickerSheet() {
         <div className="no-print panel mt-10 p-8 text-center">
           <h2 className="text-lg font-semibold text-fog">No rooms to make stickers for yet</h2>
           <p className="mx-auto mt-2 max-w-md text-[0.92rem] leading-relaxed text-mist">
-            Scan a room that has something left on, and give it a name. Each named room with waste in it gets a sticker.
+            Scan a room that has something left on, and give it a name. Each named room with idle cost in it gets a sticker.
           </p>
           <Link href="/scan" className="mt-5 inline-block rounded-full bg-fog px-5 py-2.5 text-[0.9rem] font-medium text-ink">
             Open the scanner

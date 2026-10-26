@@ -19,7 +19,8 @@ import { useStore } from "@/lib/useStore";
 import { auditsFor, type SavedAudit } from "@/lib/storage";
 import { rollupBuilding } from "@/lib/rollup";
 import { buildBrief, headline, type BriefItem } from "@/lib/report";
-import { fmtCo2, fmtMoney, fmtMoneyFull, fmtPayback } from "@/lib/energy";
+import { fmtCo2, fmtMoney, fmtMoneyFull, fmtPayback, roundSplit } from "@/lib/energy";
+import { SplitView } from "./scan/CostBreakdown";
 import { annotatedDataUrl, type DetectionPhoto } from "./DetectionView";
 import { downloadText } from "@/lib/export";
 import { reportData } from "@/lib/importData";
@@ -169,7 +170,7 @@ export function ReportBrief({ current, pictures = [] }: { current?: SavedAudit |
         {/* Masthead */}
         <header className="space-y-3 border-b border-line pb-6">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <span className="mono-label text-cyan">energy waste report</span>
+            <span className="mono-label text-cyan">idle energy report</span>
             <span className="font-mono text-[0.72rem] text-dim">{dated}</span>
           </div>
           <input
@@ -192,29 +193,29 @@ export function ReportBrief({ current, pictures = [] }: { current?: SavedAudit |
 
         {/* The ask, as four numbers. */}
         <section className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-4">
-          <Cell label="Wasted while empty, a year" value={fmtMoneyFull(brief.annualWaste)} tone="ember" />
+          <Cell label="Idle while empty, a year" value={fmtMoneyFull(brief.annualWaste)} tone="ember" />
           <Cell label="Could be saved, a year" value={fmtMoneyFull(brief.totalRecoverable)} tone="lime" />
           <Cell label="Cost of the fixes" value={brief.totalUpfront > 0 ? fmtMoneyFull(brief.totalUpfront) : "Nothing"} />
           <Cell label="Pays for itself in" value={brief.paybackMonths === null ? "Right away" : fmtPayback(brief.paybackMonths)} />
         </section>
 
-        {/* The split the whole app is built on, stated once in plain words. */}
-        <section className="avoid-break grid gap-4 border-b border-line pb-6 text-[0.86rem] leading-relaxed text-mist sm:grid-cols-2">
-          <p>
-            <span className="font-semibold text-ember">{fmtMoneyFull(brief.annualWaste)} a year</span> is what the devices seen cost to keep running through
-            the hours nobody is there, if they stay as they were photographed. Likely between {fmtMoneyFull(brief.annualWasteLow)} and{" "}
-            {fmtMoneyFull(brief.annualWasteHigh)}.
+        {/* The split the whole app is built on, stated once: one total, two parts. */}
+        <section className="avoid-break space-y-2 border-b border-line pb-6">
+          <p className="text-[0.86rem] leading-relaxed text-mist">
+            The used part is the devices doing their job. The idle part is what the fixes below go after.
           </p>
-          <p>
-            <span className="font-semibold text-fog">{fmtMoneyFull(brief.typicalCost)} a year</span> is what the same devices cost while people are actually using
-            them. That part is not waste; the first figure is what the fixes below go after.
-          </p>
+          <SplitView
+            cost={roundSplit(brief.split.total, brief.split.idle)}
+            watts={brief.watts}
+            range={brief.idleRangeLine}
+            caption={brief.idleCaption}
+          />
         </section>
 
-        {/* Where the waste is, drawn. */}
+        {/* Where the idle cost is, drawn. */}
         {wasteItems.length > 0 && (
           <section className="avoid-break space-y-3">
-            <h2 className="text-lg font-semibold tracking-tight text-fog">Where the waste is</h2>
+            <h2 className="text-lg font-semibold tracking-tight text-fog">Where the idle cost is</h2>
             <ul className="space-y-2">
               {wasteItems.map((i) => (
                 <li key={i.categoryId} className="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)_4.5rem] items-center gap-3 text-[0.84rem] sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)_5rem]">
@@ -356,7 +357,7 @@ export function ReportBrief({ current, pictures = [] }: { current?: SavedAudit |
 
         {/* Context a decision-maker will ask for. */}
         <section className="grid gap-4 border-t border-line pt-6 sm:grid-cols-3">
-          <Fact label="Carbon from the waste" value={`${fmtCo2(brief.co2KgPerYear)} of CO₂ a year`} />
+          <Fact label="Carbon from the idle part" value={`${fmtCo2(brief.co2KgPerYear)} of CO₂ a year`} />
           <Fact label="Likely range" value={`${fmtMoneyFull(brief.annualWasteLow)} – ${fmtMoneyFull(brief.annualWasteHigh)}`} />
           <Fact label="How sure" value={brief.confidence === "high" ? "Quite sure" : brief.confidence === "medium" ? "Fairly sure" : "A rough guess"} />
         </section>

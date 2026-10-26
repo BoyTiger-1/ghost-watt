@@ -21,7 +21,7 @@ export const STATE_COLOR: Record<DeviceState, string> = {
 };
 
 /**
- * A device that is meant to run all night (a fridge, a router): usage, not waste.
+ * A device that is meant to run all night (a fridge, a router): usage, not idle.
  * Blue, so it never reads as one of the red and amber things to switch off.
  */
 export const USAGE_COLOR = "#5aa9ff";
@@ -33,12 +33,12 @@ export const GLOSSARY = {
   watt: "How hard a device is pulling power at one moment. A phone charger uses about 5 watts, an LED bulb about 10, a microwave about 1,000.",
   kwh: "A kilowatt-hour is the unit your electric bill charges for: 1,000 watts running for one hour. In most of the US one costs between 12 and 30 cents.",
   standby: "Asleep means switched “off” but still plugged in and using a trickle of power, like a TV waiting for its remote.",
-  empty: "The hours nobody is in the room: nights, weekends and holidays. Anything left running then is paying for nothing.",
+  empty: "The hours nobody is in the room: nights, weekends and holidays. Anything left running then is idle.",
   payback: "How long the savings take to cover what the fix costs. After that, the savings are money in your pocket.",
   carbon: "Most electricity is made by burning fuel, which puts carbon dioxide (CO₂) into the air, the main gas warming the planet.",
   range: "We can’t read the exact model of every device from a photo, so we give a likely low and high. Typing in real wattages or your bill’s price narrows it.",
-  needed: "What these devices cost while people are actually using them. That part isn’t waste.",
-  wasted: "What they cost while the room is empty, because they were left on or asleep. This is the part the fixes go after.",
+  used: "What the device costs while people are actually using it. That part is doing its job.",
+  idle: "What it costs while the room is empty, because it was left on or asleep. How much depends on what it really does when nobody is there, which is why we show a range. This is the part the fixes go after.",
 } as const;
 
 export type GlossaryKey = keyof typeof GLOSSARY;

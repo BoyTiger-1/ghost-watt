@@ -63,7 +63,7 @@ export function Hero() {
 
           <div className="mt-10 flex flex-wrap gap-x-8 gap-y-3">
             <Metric value="~$340/yr" label="a single lab of monitors" />
-            <Metric value="1.2 t CO₂" label="wasted, ranked & costed" />
+            <Metric value="1.2 t CO₂" label="idle, ranked & costed" />
             <Metric value="$60 · 2 mo" label="typical fix & payback" />
           </div>
         </motion.div>

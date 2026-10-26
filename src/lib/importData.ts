@@ -51,16 +51,18 @@ export function csvToAudits(text: string, buildingId: string): SavedAudit[] | st
   const meta = new Map(lines.filter((l) => l.length >= 2 && l[0] && !/^\d+$/.test(l[0])).map((l) => [l[0], l[1]]));
   const head = lines.findIndex((l) => l[0] === "Rank" && l.includes("Device"));
   if (head < 0) return "That CSV isn't one Ghost Watt made. Use the “CSV for facilities” file from the Report tab.";
-  const col = (name: string) => lines[head].indexOf(name);
+  // Files from before the used + idle split carry the old names; both are read.
+  const col = (...names: string[]) => names.map((n) => lines[head].indexOf(n)).find((i) => i >= 0) ?? -1;
   const c = {
     area: col("Area"),
     device: col("Device"),
     count: col("Count"),
     state: col("State"),
     watts: col("Watts each"),
-    total: col("Watts total"),
-    kwh: col("kWh/yr"),
-    cost: col("Cost/yr ($)"),
+    total: col("Watts idle (all units)", "Watts total"),
+    kwh: col("kWh idle/yr", "kWh/yr"),
+    cost: col("Idle/yr ($)", "Cost/yr ($)"),
+    annual: col("Total/yr ($)"),
     co2: col("CO2/yr (kg)"),
     confidence: col("Confidence"),
     fix: col("Recommended fix"),
@@ -96,6 +98,7 @@ export function csvToAudits(text: string, buildingId: string): SavedAudit[] | st
       totalWatts: num(row[c.total]),
       kwhPerYear: num(row[c.kwh]),
       costPerYear: cost,
+      ...(c.annual >= 0 ? { annualCostPerYear: Math.max(cost, num(row[c.annual])) } : {}),
       co2KgPerYear: num(row[c.co2]),
       costLowPerYear: cost * 0.7,
       costHighPerYear: cost * 1.4,

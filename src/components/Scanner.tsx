@@ -41,7 +41,7 @@ import { Icon } from "./scan/icons";
 import { analysisSquare } from "@/lib/image";
 import type { CategorizedObservation } from "@/lib/parse";
 import { ON_DEVICE_ENGINE, describeAnalyzeError, useEngine } from "@/lib/engine";
-import { aggregate, counted } from "@/lib/energy";
+import { aggregate, counted, idleCaptionAll, splitAll } from "@/lib/energy";
 import { applyReconciliation, reconcile, reconcileLines } from "@/lib/reconcile";
 import { crossCheck } from "@/lib/crosscheck";
 import { costRange, RATE_SIGMA, type RateQuality } from "@/lib/estimate";
@@ -861,6 +861,7 @@ export function Scanner() {
   );
   /** The lines that count toward totals, plans and exports. */
   const countedOffenders = useMemo(() => counted(offenders), [offenders]);
+  const idleAll = useMemo(() => splitAll(countedOffenders), [countedOffenders]);
   const totals = useMemo(() => aggregate(offenders, settings), [offenders, settings]);
   const done = priced.filter((p) => p.c.result);
   const rateQuality = useMemo<RateQuality>(() => {
@@ -1242,11 +1243,13 @@ export function Scanner() {
                   annual={totals.annualCostPerYear}
                   range={annualRange}
                   wasted={totals.costPerYear}
-                  needed={Math.max(0, totals.annualCostPerYear - totals.costPerYear)}
+                  idleLow={idleAll.range.low}
+                  idleHigh={idleAll.range.high}
+                  watts={idleAll.watts}
+                  caption={idleCaptionAll(countedOffenders, place)}
                   recoverable={totals.recoverableCost}
                   actions={actions}
                   top={totals.topOffender}
-                  co2Kg={totals.co2KgPerYear}
                   place={place}
                   photos={done.length}
                   working={working}
@@ -1284,7 +1287,7 @@ export function Scanner() {
 
           {tab === "devices" && (
             <div className="no-print">
-              <DeviceList lines={deviceLines} hovered={hovered} onHover={setHovered} onAdjust={setAdjust} openId={openDevice} onOpen={setOpenDevice} />
+              <DeviceList lines={deviceLines} hovered={hovered} onHover={setHovered} onAdjust={setAdjust} openId={openDevice} onOpen={setOpenDevice} place={place} />
             </div>
           )}
 
@@ -1352,7 +1355,7 @@ export function Scanner() {
                     <span>
                       <span className="block text-[0.95rem] font-semibold text-fog">Print room stickers</span>
                       <span className="mt-0.5 block text-[0.84rem] text-mist">
-                        One per room, with what it wastes and a QR code that opens a before-you-leave checklist.
+                        One per room, with what it idles and a QR code that opens a before-you-leave checklist.
                       </span>
                     </span>
                     <span aria-hidden className="text-cyan">&rarr;</span>
@@ -1576,7 +1579,7 @@ function ModeSwitch({ mode, onChange }: { mode: Mode; onChange: (m: Mode) => voi
 function TabBar({ tab, onChange, count }: { tab: ResultTab; onChange: (t: ResultTab) => void; count: number }) {
   const t = useT();
   const tabs: { id: ResultTab; label: string; hint: string }[] = [
-    { id: "devices", label: t("tab.devices"), hint: "Everything found, most wasteful first" },
+    { id: "devices", label: t("tab.devices"), hint: "Everything found, biggest idle cost first" },
     { id: "fix", label: t("tab.fix"), hint: "What to do, in order, and what it saves" },
     { id: "charts", label: t("tab.charts"), hint: "Pictures of the result, and how you compare" },
     { id: "report", label: t("tab.report"), hint: "A report to print or save as a PDF" },

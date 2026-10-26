@@ -164,6 +164,6 @@ export function describeDemand(offenders: readonly Offender[], settings: AuditSe
     `About ${kw.toFixed(1)} kW of what was found is likely present at the building's monthly peak, ` +
     `which at $${rate.toFixed(2)}/kW costs roughly $${Math.round(cost).toLocaleString()} a year in demand charges. ` +
     `The devices add up to ${naiveKw.toFixed(1)} kW of nameplate draw, but they do not all peak together, ` +
-    `so only the coincident share is counted. Overnight waste is excluded: it raises no peak.`
+    `so only the coincident share is counted. Overnight idle cost is excluded: it raises no peak.`
   );
 }

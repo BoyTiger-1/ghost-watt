@@ -98,17 +98,17 @@ export function calibrate(
   let message: string;
   if (plausibility === "believable") {
     message =
-      `The waste in this audit accounts for ${pct}% of the building's metered electricity. ` +
+      `The idle cost in this audit accounts for ${pct}% of the building's metered electricity. ` +
       `That is a plausible share for after-hours plug and lighting load, which is the ` +
       `weakest evidence this model is behaving sensibly - and it passes.`;
   } else if (plausibility === "high") {
     message =
-      `The waste in this audit accounts for ${pct}% of the building's metered electricity. ` +
+      `The idle cost in this audit accounts for ${pct}% of the building's metered electricity. ` +
       `That is high but not impossible for a building with a serious after-hours problem. ` +
       `Worth confirming the audited rooms are representative before quoting the total.`;
   } else {
     message =
-      `The waste in this audit accounts for ${pct}% of the building's entire metered ` +
+      `The idle cost in this audit accounts for ${pct}% of the building's entire metered ` +
       `electricity, which is not credible for phantom load. Most likely a device count or ` +
       `the unoccupied-hours figure is too high, or the bill covers only part of the campus. ` +
       `Treat the ranking as useful and the total as unreliable until that is resolved.`;
@@ -133,7 +133,7 @@ export function euiVerdict(vsMedian: number | null, typeLabel: string): string |
   if (vsMedian === null) return null;
   const pct = Math.round(Math.abs(vsMedian - 1) * 100);
   if (vsMedian < 0.8) {
-    return `This building uses ${pct}% less electricity per square foot than a median ${typeLabel.toLowerCase()}. It is already efficient - which makes the waste below the part still worth chasing.`;
+    return `This building uses ${pct}% less electricity per square foot than a median ${typeLabel.toLowerCase()}. It is already efficient - which makes the idle cost below the part still worth chasing.`;
   }
   if (vsMedian <= 1.2) {
     return `This building sits within ${pct}% of the median ${typeLabel.toLowerCase()} for electricity per square foot. Typical, in other words, which is exactly why the after-hours findings matter.`;

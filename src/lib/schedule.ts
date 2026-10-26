@@ -72,7 +72,7 @@ export const SCHEDULE_PRESETS: SchedulePreset[] = [
   {
     id: "always_on",
     label: "24/7 facility",
-    description: "Never unoccupied - only true standby waste counts.",
+    description: "Never unoccupied - only true standby idle cost counts.",
     schedule: { hoursPerDay: [24, 24, 24, 24, 24, 24, 24], operatingWeeks: 52, closedDays: 0 },
   },
 ];

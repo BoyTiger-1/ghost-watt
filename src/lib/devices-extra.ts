@@ -339,7 +339,7 @@ export const EXTRA_DEVICES: DeviceCategory[] = [
       type: "policy",
       cost: 0,
       savingsFraction: 0.4,
-      note: "Idle ovens held at temperature between services are the biggest single kitchen waste.",
+      note: "Idle ovens held at temperature between services are the biggest single kitchen idle cost.",
     },
   },
   {

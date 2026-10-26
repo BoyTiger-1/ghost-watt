@@ -69,7 +69,7 @@ export function AddToPlace({
       open={open}
       onClose={onClose}
       title="Add to a place"
-      sub="Save these rooms to My places, where you'll see which room wastes the most, tick off fixes, and check they worked."
+      sub="Save these rooms to My places, where you'll see which room idles the most, tick off fixes, and check they worked."
       footer={
         <button
           onClick={submit}
@@ -160,7 +160,7 @@ export function AddToPlace({
                       className="w-full rounded-lg border border-transparent bg-transparent px-1.5 py-1 text-[0.92rem] text-fog outline-none hover:border-line focus:border-cyan"
                     />
                     <span className="block px-1.5 text-[0.74rem] text-dim">
-                      {fmtMoney(i.wastePerYear)}/yr wasted{saved ? ` · already in ${saved.name}` : ""}
+                      {fmtMoney(i.wastePerYear)}/yr idle{saved ? ` · already in ${saved.name}` : ""}
                     </span>
                   </span>
                 </li>

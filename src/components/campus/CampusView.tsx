@@ -20,7 +20,7 @@ const CampusScene = dynamic(() => import("./CampusScene").then((m) => m.CampusSc
 });
 
 const LAYERS: { id: string; label: string; groups: string[] | null }[] = [
-  { id: "all", label: "All waste", groups: null },
+  { id: "all", label: "All idle", groups: null },
   { id: "light", label: "Lighting", groups: ["lighting"] },
   { id: "screens", label: "Screens", groups: ["display"] },
   { id: "computers", label: "Computers", groups: ["computing", "network", "office"] },
@@ -374,7 +374,7 @@ export function CampusView() {
           </div>
           <dl className="pointer-events-auto flex gap-2">
             {[
-              ["Wasted / yr", fmtMoneyFull(total)],
+              ["Idle / yr", fmtMoneyFull(total)],
               ["Rooms scanned", `${scanned.length}/${placed.rooms.length || 0}`],
             ].map(([l, v]) => (
               <div key={l} className="rounded-2xl border border-white/10 bg-[#161a2b]/70 px-3.5 py-2 backdrop-blur-md">
@@ -627,7 +627,7 @@ export function CampusView() {
                               <div className="mb-3 flex items-center justify-between gap-3">
                                 <div>
                                   <h3 className="text-[1.05rem] font-semibold text-fog">Mark the rooms · {f.name}</h3>
-                                  <p className="text-[0.8rem] text-dim">Name each room the way it was scanned (&quot;Room 214&quot;, &quot;Gym&quot;) so its waste shows on the model.</p>
+                                  <p className="text-[0.8rem] text-dim">Name each room the way it was scanned (&quot;Room 214&quot;, &quot;Gym&quot;) so its idle cost shows on the model.</p>
                                 </div>
                                 <button onClick={() => setEditing(null)} className="shrink-0 rounded-full bg-fog px-5 py-2 text-[0.88rem] font-medium text-ink">
                                   Done

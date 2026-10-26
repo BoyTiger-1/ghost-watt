@@ -117,7 +117,7 @@ export function SolarOffset({
           </h3>
           <p className="mt-0.5 text-sm text-mist">
             Sized against the {Math.round(annualKwhWasted).toLocaleString()} kWh this audit
-            found going to waste
+            found sitting idle
           </p>
         </div>
         <span className="mono-label" style={{ color: tint }}>
@@ -151,7 +151,7 @@ export function SolarOffset({
         {/* ---- coverage control ---- */}
         <div className="mt-6">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <span className="mono-label">how much of the waste to offset</span>
+            <span className="mono-label">how much of the idle energy to offset</span>
             <span className="font-mono text-[0.72rem] text-lime tabular-nums">
               {Math.round(coverage * 100)}%
             </span>
@@ -163,7 +163,7 @@ export function SolarOffset({
             step={0.05}
             value={coverage}
             onChange={(e) => setCoverage(Number(e.target.value))}
-            aria-label="Share of the audited waste to offset with solar"
+            aria-label="Share of the audited idle energy to offset with solar"
             className="mt-2.5 w-full accent-lime"
           />
           <div className="mt-1 flex justify-between text-[0.72rem] text-dim">

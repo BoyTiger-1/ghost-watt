@@ -326,7 +326,7 @@ function Board({ code, onLeave }: { code: string; onLeave: () => void }) {
         <>
           <motion.section animate={flash ? { borderColor: "var(--color-lime)" } : {}} transition={{ duration: 0.4 }} className="panel overflow-hidden">
             <div className="grid grid-cols-2 gap-px bg-line md:grid-cols-4">
-              <Stat label="Wasted a year, found so far" value={fmtMoneyFull(data.totals.costPerYear)} tint="var(--color-ember)" />
+              <Stat label="Idle a year, found so far" value={fmtMoneyFull(data.totals.costPerYear)} tint="var(--color-ember)" />
               <Stat label="Could be saved a year" value={fmtMoneyFull(data.totals.recoverable)} tint="var(--color-lime)" />
               <Stat label="Rooms scanned" value={String(data.totals.areaCount)} />
               <Stat label="People helping" value={String(data.totals.contributorCount)} />
@@ -337,7 +337,7 @@ function Board({ code, onLeave }: { code: string; onLeave: () => void }) {
             <section className="panel overflow-hidden">
               <header className="border-b border-line px-5 py-4">
                 <h3 className="text-[1.05rem] font-semibold text-fog">Worst devices, whole place</h3>
-                <p className="mt-0.5 text-[0.8rem] text-dim">Everyone&apos;s scans added together, most wasteful first.</p>
+                <p className="mt-0.5 text-[0.8rem] text-dim">Everyone&apos;s scans added together, biggest idle cost first.</p>
               </header>
               <ul className="divide-y divide-line">
                 <AnimatePresence initial={false}>

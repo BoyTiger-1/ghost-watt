@@ -263,7 +263,7 @@ export function GridPulse({
                 <>
                   {" "}
                   For the {Math.round(annualKwhWasted).toLocaleString()} kWh this audit found
-                  going to waste, that timing difference alone is worth{" "}
+                  sitting idle, that timing difference alone is worth{" "}
                   <strong className="font-semibold text-cyan">
                     {Math.round(kgSwing).toLocaleString()} kg CO₂e a year
                   </strong>
