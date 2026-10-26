@@ -1,65 +1,91 @@
 # Ghost Watt
 
-Point your phone at a room, or upload a photo of one, and Ghost Watt finds the things
-plugged in there: screens, computers, lights, appliances. It prices each one at your actual
-electricity rate, works out how much of that is normal use and how much is waste (left on
-overnight, sitting in standby), and sorts the fixes by how much they save for what they
-cost. Scan enough rooms and you get the whole building, as a 3D model coloured by waste and
-as a one-page brief you can hand to whoever pays the bill.
+**Find the energy your building wastes after hours, with nothing but a phone.**
 
-There are two ways it can read a photo, and the pill in the header tells you which one is
-about to run. On-device uses a small detector in the browser, so the picture never leaves
-your phone. Enhanced sends the photo to a hosted vision model, which reads it and throws it
-away. Either way the energy math is ordinary code you can read top to bottom. Every number
-comes with a range and a source, and if a scan couldn't be read, the app tells you instead
-of filling in a guess.
-
-It works for homes, offices and schools. It's free, and it's open source under the
-[MIT License](LICENSE).
+Ghost Watt turns a photo or live scan of a room into a ranked list of energy fixes: what's
+left on, what it costs, and what to fix first. It works for homes, offices and schools, and
+it's free and open source under the [MIT License](LICENSE).
 
 ## Contents
 
-- [Why we built it](#why-we-built-it)
-- [What it does](#what-it-does)
+- [Overview](#overview)
+- [Inspiration](#inspiration)
+- [Features](#features)
+- [Tech stack](#tech-stack)
 - [How it works](#how-it-works)
-- [Checked against a real meter](#checked-against-a-real-meter)
-- [Quick start](#quick-start)
-- [Running a vision model locally](#running-a-vision-model-locally)
-- [Where a photo goes](#where-a-photo-goes)
-- [Open source](#open-source)
+- [Accuracy](#accuracy)
+- [Getting started](#getting-started)
+- [Privacy](#privacy)
 - [Data and sources](#data-and-sources)
 - [Responsible AI](#responsible-ai)
+- [Challenges we faced](#challenges-we-faced)
+- [Roadmap: version 2.0](#roadmap-version-20)
 - [Accessibility](#accessibility)
 - [Project layout](#project-layout)
-- [Hosting and deployment](#hosting-and-deployment)
-- [What's next](#whats-next)
-- [AI assistance](#ai-assistance)
+- [Deployment](#deployment)
+- [Contributing](#contributing)
+- [AI usage](#ai-usage)
 - [License](#license)
 
-## Why we built it
+## Overview
 
-It started in our own school. All four of us take classes in its two computer labs, and we
-kept noticing the same thing: rows of desktops left on all day, even when no class was using
-the room. Eventually we wanted to know what that was costing, both in energy and in money the
-school could be spending on something else.
+Ghost Watt is a multi-device web app that turns a photo or scan of a room into a ranked list
+of energy fixes, showing device-specific cost and waste, and direct next steps for what to
+fix. Users can point the camera at a room to scan, or upload a photo or video. The app finds
+the devices that use energy (screens, computers, lights and appliances) and gives a detailed
+analysis of each one's normal-use cost, as well as the money it wastes after hours or in
+standby. Everything is priced from published utility rates and given a reasonable range.
+Anything the cloud AI claims that our on-device detector can't confirm is marked
+"unverified" and left out of the totals until the user confirms it.
 
-We couldn't find a good answer. There were rough estimates online and professional energy
-audits, but an audit costs money and takes weeks to book, and nothing worked at the level of
-one room or one device. That gap mattered to us because of where we live: our district,
-Northshore, has been dealing with debt and cutting programs since the pandemic, so a paid
-audit was never going to make the list. And it isn't just our school. EPA's ENERGY STAR
-program estimates that about 30% of the energy used in commercial buildings is wasted.
+The app then suggests fixes ranked by financial impact, such as turning a device off after
+hours or swapping an appliance for an efficient one. You can scan as many rooms as you want
+and group them into a building, which turns the photo reports into a one-page building brief
+that facility managers can act on. For larger buildings, users can set up a team scan, where
+several people scan rooms and the analysis adds up for the whole building.
 
-So we built the tool we wanted: something a student or a facilities manager can run with a
-phone in about ten minutes, in words and numbers anyone can follow. Point it at an empty
-computer lab with thirty monitors still on and it estimates roughly $800 a year of waste,
-then tells you that about $60 of smart power strips fixes most of it. What you end up with is
-a to-do list: fix this first, here's what it costs, here's when it pays for itself.
+Ghost Watt has two modes, and the app always shows which one is in use. In On-device mode,
+everything runs locally and the photo never leaves the phone. In Enhanced mode, a cloud AI
+identifies the devices in the photo and discards it right away. In both modes, our own code
+does all of the cost math and ranks the fixes.
 
-We've tested it in classrooms across our school, and we plan to take the biggest waste
-patterns we found to our school and district.
+One example that highlights the app is a classic high school computer lab. A lab with 30
+monitors left on can cost about $800 a year, while a fix Ghost Watt suggests, such as smart
+power strips, costs about $60. What makes Ghost Watt stand out is that professional energy
+audits cost a lot of money and take time to book, while Ghost Watt can do one in about 10
+minutes with a phone. Whether you have a large building to audit or just one room, Ghost
+Watt is built for anyone who wants to find and prevent unnecessary financial and energy
+waste.
 
-## What it does
+## Inspiration
+
+Our high school has two main computer labs that all of our team takes classes in, and
+throughout the year we noticed that the desktop computers in these labs were always on, even
+when no classes were using them. After seeing this again and again, we started wondering how
+much energy this was wasting and whether it cost our school anything, and how much our
+school's buildings spend on computers running after everyone leaves. Other than a few rough
+estimates online or expensive professional audits, we couldn't find a tool that could quickly
+audit a whole room or building; plug-in meters only measure one device at a time. So we
+decided to address this gap by building an app. Schools and average facilities often can't
+afford professional audits, and they are exactly who we built it for.
+
+After some early research, we realized we had to broaden the problem we were solving,
+because buildings all around the U.S. face it. According to the EPA's ENERGY STAR program,
+about 30% of the energy used in commercial buildings is wasted. Because of our audience and
+purpose, the vision was to keep the app simple and accessible for people who can't afford
+professionals, which meant using terms and metrics everyone is familiar with and a
+user-friendly interface.
+
+This app is personally important to our region. Our school district, Northshore, has dealt
+with large debts and had to make cuts across many parts of education in the post-COVID
+years. Professional audits would be a low priority for those funds, so all four of us hope to
+spread the app and help bring change to our community. We've already tested Ghost Watt in
+many of our school's classrooms, and we plan to present the major waste patterns we found to
+our school and district leadership. Overall, our local experience with energy waste keeps
+reminding us of our purpose: make waste visible, countable, and fixable, so that everyday
+people know exactly how to avoid it.
+
+## Features
 
 ### Scanning
 
@@ -84,8 +110,8 @@ estimate.
 Every device gets up to two suggestions, usually a habit fix for after hours and a more
 efficient replacement, ranked by savings per dollar. Tick the ones you'd do and the bill,
 payback and carbon update as you go. Replacements come with the rebates and tax credits
-you qualify for where you live (through Rewiring America, when that key is set) and links
-to the product at retailers you've heard of.
+you qualify for where you live (from Rewiring America) and links to the product at
+well-known retailers.
 
 Ghosty Insights reads the results back to you in plain language: what stands out, what to
 do first, and why. It only works from the numbers already on the page.
@@ -113,6 +139,24 @@ It's available in nine languages (English, Spanish, Simplified Chinese, Tagalog,
 Vietnamese, French, Korean, Portuguese and Hindi), and once loaded it works offline as an
 installable web app, with your scans stored on the device.
 
+## Tech stack
+
+| Area | What we used |
+| --- | --- |
+| App | Next.js (App Router), React, TypeScript |
+| Styling and motion | Tailwind CSS v4, Framer Motion |
+| 3D school | three.js with React Three Fiber and drei |
+| On-device detection | MediaPipe Tasks (EfficientDet-Lite0 detector, EfficientNet-Lite0 classifier) |
+| Cloud vision | Anthropic, Google Gemini, Groq, Mistral, OpenAI or OpenRouter, or a local Ollama model |
+| Testing | Vitest |
+| Hosting | Vercel |
+| Detector training | Python ([`scripts/train-detector.py`](scripts/train-detector.py)) |
+
+The AI only does the seeing. It's asked what's in the frame and whether each thing is on.
+Every watt, dollar, kilogram of CO₂ and payback date after that is plain TypeScript you can
+follow line by line, which is why the Method page can publish every formula and you can
+check any number by hand.
+
 ## How it works
 
 One rule shaped the whole design: the fuzzy part and the exact part never mix. A model
@@ -133,7 +177,9 @@ act on can be checked by hand.
    [`src/lib/devices.ts`](src/lib/devices.ts), which stores a published range per class
    rather than one number. [`src/lib/energy.ts`](src/lib/energy.ts) then costs it twice:
    once at normal use for that kind of room ([`src/lib/rooms.ts`](src/lib/rooms.ts)) and
-   once as waste over the hours the building sits empty. Totals are 80% ranges from a
+   once as waste over the hours the building sits empty. Things that are meant to run all
+   night, like fridges, routers and exit signs, are still costed but counted as usage, not
+   waste ([`src/lib/essentials.ts`](src/lib/essentials.ts)). Totals are 80% ranges from a
    Monte Carlo run over wattage, hours and price.
 4. **Deciding.** Each line gets an after-hours fix and an efficient swap, ranked by savings
    per dollar ([`src/lib/actions.ts`](src/lib/actions.ts)).
@@ -173,8 +219,8 @@ app uses the local utility's published tariff from OpenEI, at the rate a typical
 actually reaches, weighted by hour on time-of-use plans
 ([`src/lib/tariff.ts`](src/lib/tariff.ts)). Without one, it uses the state's 2024 average
 from the EIA. A rate from your own bill beats both, and a plug-in meter reading replaces
-the catalog wattage for that device. The Method page keeps a running table of how our
-estimates compared to every meter reading people entered.
+the catalog wattage for that device. The Method page shows our own meter check and keeps a
+running table of how the estimates compared to every meter reading people entered.
 
 Each device also gets a grade from A to F against a modern efficient version (an LED bulb,
 an ENERGY STAR monitor) and a verdict: replace it, change the habit, it's in standby, or
@@ -225,7 +271,7 @@ narrower than the evidence supports ([`src/lib/estimate.ts`](src/lib/estimate.ts
 
 ### The 3D school
 
-[`src/lib/campus.ts`](src/lib/campus.ts) puts three things on one grid measured in metres.
+[`src/lib/campus.ts`](src/lib/campus.ts) puts three things on one grid measured in meters.
 The building outline comes from OpenStreetMap, found by school name through Nominatim, with
 Overpass as a backup for nearby buildings. Floor plans are photos with rooms drawn on them.
 Scans are matched to plan rooms by name, so "Room 214", "rm 214" and "214" all count as the
@@ -233,7 +279,7 @@ same room. You line each floor plan up with the outline by rotating, scaling and
 If there's no outline, the floor plan's own rectangle stands in. The scene uses React Three
 Fiber and only redraws when something changes.
 
-### At a glance
+### The pipeline at a glance
 
 | Step | Input | What happens | Output |
 | --- | --- | --- | --- |
@@ -247,14 +293,14 @@ You can change the assumptions (electricity rate, grid carbon, how many hours a 
 building is empty) and every number on the page recalculates. The full formulas and the
 wattage table are on the Methodology page in the app.
 
-## Checked against a real meter
+## Accuracy
 
-We didn't want to just trust our own numbers, so we checked them with a plug-in watt meter,
-a small device that sits between the outlet and an appliance and reads the power it actually
-draws. We put five everyday devices on it and compared each reading with Ghost Watt's
-estimate for the same device:
+We validated Ghost Watt using a watt meter, a plug-in device that sits between the outlet and
+the appliance and reads the watts it actually draws. Across five devices, our estimates
+stayed within about 10 percent of the meter, as the data table shows, with errors in both
+directions. That means Ghost Watt's numbers are close to real-world values.
 
-| Device | Meter | Ghost Watt | Real cost / yr | App cost / yr | Off by |
+| Device | Measured | App | Real cost / yr | App cost / yr | Error |
 | --- | --- | --- | --- | --- | --- |
 | Laptop | 32.3 W | 31 W | $25.75 | $24.71 | −4.0% |
 | Lamp | 3.2 W | 3.5 W | $2.21 | $2.42 | +9.4% |
@@ -262,18 +308,21 @@ estimate for the same device:
 | Electronic photo frame | 3.9 W | 4.2 W | $3.32 | $3.58 | +7.7% |
 | TV | 87.6 W | 81 W | $78.91 | $72.95 | −7.6% |
 
-Every estimate landed within 10% of the meter: 7.1% off on average, and 9.4% at worst (the
-lamp). The misses go both ways, three low and two high, so the app isn't quietly inflating
-anything. All five together, it came in 5.8% under the meter. Both cost columns use the same
-hours and electricity price, so each device's cost is off by the same amount as its watts.
+- Average error: 7.1%. Largest: 9.4% (the lamp).
+- Three estimates came in low and two high, so the app isn't consistently over- or
+  under-estimating.
+- All five together, the app came in 5.8% under the meter.
+- Both cost columns use the same hours and electricity price, so each device's cost error
+  matches its wattage error.
 
-Five devices is a sanity check, not a study. It tests the wattage once a device has been
-recognised correctly, and it can't catch a device the camera missed entirely. That's why the
-app still shows a range, and why any meter reading you type in replaces our estimate for that
-device. The same table, plus every reading people enter, is on the Method page under
-"Checked against a meter".
+Five devices is a sanity check, not a full study. It tests the wattage once a device has been
+recognized correctly; it can't catch a device the camera missed. That's why the app still
+shows a range, and why any meter reading a user enters replaces our estimate for that device.
+The same table is on the Method page under "Checked against a meter".
 
-## Quick start
+## Getting started
+
+### Quick start
 
 You'll need Node.js 20 or newer.
 
@@ -287,6 +336,8 @@ npm run dev
 Open http://localhost:3000. Without any keys the app runs on-device, and almost everything
 works: the scanner, the wattage tags, costs, the plan, rooms, buildings, the 3D school and
 the brief.
+
+### API keys
 
 For the cloud reader, copy [`.env.example`](.env.example) to `.env.local`, add at least one
 vision key, and restart. They're tried in this order, each one a backup for the last, so
@@ -322,10 +373,16 @@ instead of about 12 hours and share rate limits across server instances. Every v
 explained in [`.env.example`](.env.example). Put real values in `.env.local`, which git
 ignores, never in `.env.example`.
 
-`npm test` runs the tests, `npm run lint` runs ESLint, and `npm run build` makes a
-production build.
+### Scripts
 
-## Running a vision model locally
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Starts the app at http://localhost:3000 |
+| `npm test` | Runs the test suite (over 450 tests) |
+| `npm run lint` | Runs ESLint |
+| `npm run build` | Makes a production build |
+
+### Running a vision model locally
 
 You don't have to send photos to anyone's cloud. [Ollama](https://ollama.com) runs open
 vision models on your own machine, and the app uses it like any other provider: it sends the
@@ -348,10 +405,10 @@ model, and every result says which engine read it.
 The catch: the app has to run on the same machine as Ollama. A deployed copy can't reach it,
 because `localhost` on a hosting server means that server, not your laptop. So a deployment
 needs a hosted vision key or an Ollama server it can reach over the network (see
-[Hosting and deployment](#hosting-and-deployment)). Without either, it runs on-device. That
-still works, nothing breaks, but a hosted model recognises a lot more of a room.
+[Deployment](#deployment)). Without either, it runs on-device. That
+still works, nothing breaks, but a hosted model recognizes a lot more of a room.
 
-## Where a photo goes
+## Privacy
 
 No accounts, no tracking. What happens to a photo depends on which mode reads it, and the
 pill in the header always tells you which one is about to run:
@@ -361,45 +418,6 @@ pill in the header always tells you which one is about to run:
 | On-device | Nowhere. The detector runs in your browser. | No |
 | Enhanced (cloud) | Sent once to the vision model, which doesn't keep it. | Yes, one vision key |
 | Local Ollama | Nowhere off your own machine. | No, but you run the model |
-
-## Open source
-
-Ghost Watt is MIT licensed. Use it for your own school, office or home, change it, or build
-something on top of it. We wrote it to be read, especially the energy math, which is plain
-TypeScript with a source next to every figure.
-
-### Contributing
-
-Issues and pull requests are welcome.
-
-1. Fork the repo and make a branch.
-2. Make your change. Please keep models and math apart: a model can say what's in a
-   picture, but never what it costs.
-3. Run `npm test` and `npm run lint`. Both should pass. There are over 400 tests, covering
-   the energy math, parsing, the tracker, the 3D geometry and more.
-4. If you change a wattage, an hours figure or a price, cite where it came from, either in
-   [`src/lib/sources.ts`](src/lib/sources.ts) or on the row itself.
-5. Open a pull request that says what you changed and why.
-
-### What it's built on
-
-It's TypeScript almost all the way down. Next.js (App Router) and React for the app,
-Tailwind CSS v4 for styling, Framer Motion for animation, three.js with React Three Fiber and
-drei for the 3D school, MediaPipe Tasks running EfficientDet-Lite0 for the in-browser
-detector, qrcode-generator for the room stickers and Vitest for the tests. The one bit of
-Python is the script that fine-tunes the detector on light fixtures
-([`scripts/train-detector.py`](scripts/train-detector.py)). Each library is used under its
-own license.
-
-The seeing is done by a vision model, either a hosted one (Anthropic, Google, Groq, Mistral,
-OpenAI or OpenRouter) or a local [Ollama](https://ollama.com) model, and that's all the AI
-does. It's asked what's in the frame and whether each thing is on. Every watt, dollar,
-kilogram of CO₂ and payback date after that is plain TypeScript you can follow line by line,
-which is why the Method page can publish every formula and you can check any number by hand.
-
-Building outlines are © OpenStreetMap contributors (ODbL), found through Nominatim and
-Overpass. Tariffs come from OpenEI's Utility Rate Database, prices from the U.S. Energy
-Information Administration, and grid carbon from EPA eGRID. The full list is below.
 
 ## Data and sources
 
@@ -500,64 +518,79 @@ Reading wattage off a photo is an estimate, not a meter reading, and we don't pr
 otherwise. What matters most is the order of the list: what to tackle first. That order
 holds up even when a single watt figure is a bit off.
 
-### What was hard
+## Challenges we faced
 
-Guessing power from one photo without overselling it. Keeping the seeing apart from the
-accounting, showing ranges, and leaning on the ranking instead of fake precision is what
-made it honest.
+Some of the technical difficulties we faced were model issues: our AI model sometimes failed
+to recognize objects that use electricity, or ignored them. The on-device detector's boxes
+would also blink between video frames, which made our live wattage readings jump or flicker.
+We also had to optimize the tokens our AI model used, because in early development we hit
+our AI rate limits quickly. Beyond that, we had trouble fact-checking wattage estimates: the
+AI would sometimes give confident but wrong wattages for appliances, which confused us. In
+the end, we stopped trusting the AI's wattage guesses and based every estimate on published
+wattage data, then checked our figures against real-world measurements with a plug-in meter.
+From there, we had to make sure the app gave sensible advice. Early on, it made rash
+suggestions that didn't help the user, such as unplugging or getting rid of a fridge, which
+defeats the purpose of sustainable living.
 
-The small detector misses things. Instead of tuning it forever, we made live mode a
-candidate finder with smoothing over time, plus a step where a steady frame gets the full
-read. We measured the alternatives first (that's the benchmark) and kept the one that won.
+Outside of application bugs, we had to optimize Ghost Watt's models and data analysis so the
+app doesn't lag or cause problems on the user's device. Working as a development team, we
+also ran into Git and GitHub issues. For instance, we had merge problems when not all changes
+were fetched properly from the main branch, which made combining everyone's work frustrating.
+The final major issue was deployment. On Vercel, only Ronit could push changes that deployed;
+when someone else pushed, the deploy failed. This was a problem we had never faced before, so
+it was new for us to work around.
 
-Models invent devices. A strict schema at temperature 0, a field asking whether the item is
-actually visible, and the detector cross-check turn a silent miscount into an "unverified"
-tag you can see and fix.
+### How we solved them
 
-We started out pricing every device as if it ran all year, which was wrong. Usage profiles
-per room type and an explicit after-hours state (seen, assumed standby, or set by you)
-replaced it.
+| Problem | What we did |
+| --- | --- |
+| The AI missed or invented devices | Kept the AI to identifying devices only, required a strict answer format with a "can you actually see it?" field, and cross-checked every cloud reading against the on-device detector. Anything it can't confirm is marked unverified and left out of the totals. |
+| Live readings flickered | Labels stay on screen once they appear, a screen has to hold a new state briefly before it changes, and the meter is smoothed over the last second. |
+| Rate limits | Smaller requests, several API keys that take turns, six providers in a chain so a busy one hands off to the next, and an automatic fallback to the on-device reader instead of an error. |
+| Wrong wattage guesses | Every estimate starts from published wattage ranges; the AI's guess is only a small hint. Checked against a plug-in meter (see [Accuracy](#accuracy)). |
+| Unsafe advice | Fridges, routers, alarms and exit signs are treated as things that must keep running: their cost shows as usage, not waste, and advice to switch them off is blocked unless a fridge is empty or spare. |
+| Lag on phones | A small, fast live detector (we benchmarked bigger models; they were three times slower with no gain), the full read only when the camera holds still, and a 3D view that only redraws when something changes. |
+| Merge problems | We made a habit of pulling before every push. |
+| Vercel deploys | For a private repository, Vercel's free plan only deploys commits from the account that owns the project, so we route deploys through that account. |
 
-We also took out every preset and sample result. That meant building real empty states and
-real error states everywhere, and saving each scan automatically so the rooms, buildings
-and brief pages always show real data.
+## Roadmap: version 2.0
 
-The model would sometimes state a wattage with total confidence and be badly wrong. We
-stopped letting its watt guess count for much on its own: the catalogue's published range
-comes first, and checking our figures against real-world usage data (and later a plug-in
-meter) is how we found where the model was off.
+Our current version 1.0 proves that users can find and price waste with a phone. Version 2.0
+would focus on making the identification model more accurate, proving it works with
+real-life studies in different locations, and reaching more people through communities and
+platforms.
 
-Free AI tiers run out fast. Early on we hit rate limits within a few scans, so we cut what
-each request sends, let several keys take turns, chained six providers so a busy one hands
-off to the next, and made the app fall back to the on-device reader instead of erroring.
+To start, we would build a smarter on-device detector. The current on-device model doesn't
+use the cloud and often misses small screens or appliances as the user scans multiple areas.
+To fix this, we would use a strategy we planned from the beginning but never had time to
+fully develop: training our own computer vision model on real photos of classrooms,
+buildings, labs and offices. This builds on the early training script already in our
+repository ([`scripts/train-detector.py`](scripts/train-detector.py)), which hasn't been given
+data yet. A model trained this way with supervised learning would help in two ways: accuracy
+would improve offline without the cloud model, and the training data would teach it device
+types it doesn't know today.
 
-The live camera's numbers jumped around. Labels blinked in and out and the total swung from
-0 W to over 100 W while panning, which looked broken. Holding labels on screen once they
-appear, waiting a moment before believing a screen changed state, and smoothing the meter
-over the last second fixed it.
+Next, we would focus on proving the app's accuracy through real-life studies. The first pilot
+study, for example, would take place in our own school with the facilities team. We would
+scan buildings of different types, apply the fixes ranked highest by financial impact, and
+check whether they worked by comparing against the actual electricity bill over a semester.
+We wouldn't stop at the results, though: we would use them to tune the wattage and cost
+estimates for higher accuracy. After one school, we could continue with other local
+buildings and schools in our district, using team scan mode to cover whole buildings. This
+kind of large-scale, real-world testing would not only improve the app but also benefit
+communities in Washington.
 
-The AI's advice wasn't always sensible. Early on it suggested unplugging a fridge. Now
-fridges, routers, alarms and exit signs are treated as things that have to keep running:
-their cost shows as usage rather than waste, and advice to switch them off is blocked
-(unless a fridge is empty or spare).
-
-Running detection on a phone without it lagging took work. The live detector is a small,
-fast model (we benchmarked bigger ones and they were three times slower for no gain), the
-heavier full read waits until the camera holds still, and the 3D view only redraws when
-something changes.
-
-Working as a team had its own problems. Changes didn't always come through cleanly when we
-merged, so we got into the habit of pulling before every push. Deploys were stranger: on
-Vercel, only pushes from one of our accounts went through, and a teammate's push would fail.
-It turned out to be how Vercel's free plan handles commits from people outside the project,
-so we routed deploys through the account that owns it.
+Finally, we want to reach more people. Our team is already familiar with Xcode and Apple's
+development environment, so we would build an iOS app with the same features as the website
+in a layout made for phones, followed by an Android app. The website already supports nine
+languages, and we would keep adding more so the app can reach communities around the world.
 
 ## Accessibility
 
 Settings → Display & accessibility has the options, saved on your device and applied before
 the page first draws.
 
-For seeing: light, dark or system theme, text size, high contrast, a colour-blind-safe
+For seeing: light, dark or system theme, text size, high contrast, a color-blind-safe
 palette, greyscale, a large pointer, an always-visible focus ring, and a lite mode with no
 3D or decorative motion. For reading: nine languages, a plain font, bold text, wider letter
 spacing, taller lines, underlined links, a reading guide that follows your pointer, and
@@ -609,7 +642,7 @@ docs/               The detector benchmark
 scripts/            Detector training and build helpers
 ```
 
-## Hosting and deployment
+## Deployment
 
 It's a standard Next.js app, so it runs anywhere that runs Node: Vercel, Render, or your own
 server. On Vercel, sign in with GitHub, import the repo and deploy with the default settings.
@@ -621,7 +654,7 @@ For cloud reading on a deployment, you have a few options:
 1. Add a vision key. This is the easy one, and what a shared link should use. Put one or more
    of `GEMINI_API_KEY`, `GROQ_API_KEY`, `MISTRAL_API_KEY` or `OPENROUTER_API_KEY` under
    Settings → Environment Variables and redeploy. All four have free tiers. `ANTHROPIC_API_KEY`
-   and `OPENAI_API_KEY` recognise the most but cost money. Two providers beat one, since each
+   and `OPENAI_API_KEY` recognize the most but cost money. Two providers beat one, since each
    backs up the one before it, and any variable can hold several comma-separated keys that
    take turns.
 2. Host Ollama yourself on a cloud machine, ideally with a GPU, behind a secured endpoint, and
@@ -651,56 +684,54 @@ Upstash the counters are per server instance, so they're a soft limit. Set a spe
 with any paid provider as well: rate limits reduce the exposure, but a cap at the provider is
 what actually bounds it.
 
-## What's next
+## Contributing
 
-Version 1.0 shows that you can find and price waste with a phone. For 2.0 we want the
-detection to be more accurate, proven in real buildings, and in more people's hands.
+Ghost Watt is open source under the MIT License. Use it for your own school, office or home,
+change it, or build something on top of it. We wrote it to be read, especially the energy
+math, which is plain TypeScript with a source next to every figure. Issues and pull requests
+are welcome.
 
-A smarter on-device detector comes first. The one in the browser misses small screens and
-some appliances, and it only knows 80 everyday object types. We'd train our own model on real
-photos of classrooms, labs and offices, building on the training script that's already in
-the repo ([`scripts/train-detector.py`](scripts/train-detector.py)) but doesn't have data yet.
-That would make offline readings more accurate and teach it devices it can't see today.
+1. Fork the repo and make a branch.
+2. Make your change. Please keep models and math apart: a model can say what's in a
+   picture, but never what it costs.
+3. Run `npm test` and `npm run lint`. Both should pass. There are over 450 tests, covering
+   the energy math, parsing, the tracker, the 3D geometry and more.
+4. If you change a wattage, an hours figure or a price, cite where it came from, either in
+   [`src/lib/sources.ts`](src/lib/sources.ts) or on the row itself.
+5. Open a pull request that says what you changed and why.
 
-Next, proof. We'd run a pilot at our own school with the facilities team: scan the
-buildings, make the fixes the app ranks highest, and compare against the actual electricity
-bill over a semester. Then we'd use what we learn to tune the estimates, and repeat it at
-other schools in our district, with team scans covering whole buildings.
+## AI usage
 
-Then reach. Our team already knows Xcode and Apple's tools, so an iOS app would come next,
-with the same features arranged for a phone, followed by Android. And while the app already
-speaks nine languages, we'd keep adding more.
+We used AI tools in the later phase of our development, primarily for debugging, polishing
+our models, understanding complex APIs and libraries, and styling our frontend. For debugging
+and tracking down errors, especially with our Python model, we used Claude Code in the VS Code
+IDE. When it came time to integrate third-party APIs for AI models into our app, some code
+modification and editing used the aid of Claude Code. Because of all these different
+libraries, we had to use new syntax, which we used AI to help with. Similarly, we used Claude
+Code for styling (CSS) almost all of the website according to our chosen color scheme and
+layout design. After our basic implementation, some parts of the website's HTML were also
+reviewed and edited using Claude Code to avoid repetitive code. However, we made sure to plan
+out all of the UI design on a digital whiteboard beforehand, so that our AI tools followed a
+high-quality design we had already decided on. For understanding complex libraries such as
+three.js, we used Gemini and Claude for documentation research.
 
-## AI assistance
+For testing, we also used Manus, a special kind of AI. Unlike a chat assistant, Manus runs on
+its own Linux virtual computer with a real browser, so it can mimic a user's experience:
+opening Ghost Watt, clicking through the scanner, uploading photos, filling in forms and
+switching modes. We used it for bug testing, and it mostly found UI problems we had stopped
+noticing. Some screens got too cluttered, and on the scanner the analytics panel could
+overlap the camera view and cover what you were trying to scan. We fixed those, along with a
+handful of smaller UI issues it flagged.
 
-We used AI tools in the later part of development, mostly for debugging, polishing our
-models, understanding complicated APIs and libraries, and styling the frontend.
-
-For debugging and tracking down errors, especially in our Python model, we used Claude Code
-in VS Code. When we integrated third-party AI model APIs into the app, some of that code was
-written and edited with Claude Code's help, and since all these libraries came with syntax we
-hadn't used before, we used AI to learn it. We also used Claude Code to style almost all of
-the website's CSS to our chosen colour scheme and layout, and after our first implementation,
-parts of the HTML were reviewed and cleaned up with it to cut down on repetitive code. We
-planned every screen on a digital whiteboard first, so the AI was working to a design we had
-already decided on. To understand complex libraries like three.js, we used Gemini and Claude
-to research the documentation.
-
-Near the end, we used Manus for testing. Manus is different from a chat assistant: it's an AI
-agent that runs on its own Linux virtual computer with a real browser, so it can open Ghost
-Watt and use it the way a person would, clicking through the scanner, uploading photos,
-filling in forms and switching modes. That made it useful for bug testing, and it mostly found layout
-problems we had stopped noticing. Some screens got too crowded, and on the scanner the
-analytics panel could overlap the camera view and cover what you were trying to scan. We
-fixed those, along with a handful of smaller UI issues it flagged.
-
-The base of the classification and prediction models, the core features, the UI design,
-extensive testing, the video and the key decisions were our team's work. So were the early
-stages: brainstorming, layout design, choosing features with our audience in mind, and
-picking the models for the backend. Testing and finishing the app were mostly done by us too,
-because we didn't think AI should be the one to judge a product meant for real communities.
-We tested it in our school and in our homes, and made the changes ourselves to keep the focus
-on the people using it. Making the video and sharing the project was all us.
+The base of the classification and prediction models, core app features, UI design,
+extensive testing, video creation and key decisions were the work of our team. The beginning
+phases of this project, such as initial brainstorming, layout design, picking features with
+the target audience in mind, and choosing the models for the backend, were all done by our
+team. After development, the testing and finalization were mostly done by our team, since we
+didn't think AI should be used to benchmark a product meant for real communities. We tested
+within our school and our houses, and made decisions to change the app ourselves to keep
+prioritizing user experience. The final steps of creating the video and sharing our project
+were all done by the team.
 
 ## License
 
