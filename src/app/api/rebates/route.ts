@@ -1,3 +1,7 @@
+// GET /api/rebates: rebates and tax credits for the fixes a scan recommends, by ZIP
+// code, from Rewiring America. Works without a key on the shared rate limit; a key
+// raises it. Nothing about the household is stored.
+
 import { firstKey } from "@/lib/keypool";
 import { NextResponse } from "next/server";
 import { normaliseIncentive, type Incentive } from "@/lib/rebates";

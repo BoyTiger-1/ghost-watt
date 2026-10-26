@@ -321,7 +321,7 @@ export const SOURCES: Source[] = [
     publisher: "Google",
     year: "V7",
     url: "https://storage.googleapis.com/openimages/web/index.html",
-    used: "The 40 photos the live detectors were benchmarked on before EfficientDet-Lite0 was chosen (docs/live-detector-benchmark.md).",
+    used: "The 40 photos the live detectors were benchmarked on before EfficientDet-Lite0 was chosen (see 'Choosing the live detector' in the project README).",
   },
   {
     id: "vision-models",

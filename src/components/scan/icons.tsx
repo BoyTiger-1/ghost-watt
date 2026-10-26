@@ -1,3 +1,6 @@
+// The small line icons used across the scanner (camera, upload, torch, flip and the
+// rest), drawn as SVG paths so they take the text color.
+
 const P = { fill: "none", stroke: "currentColor", strokeWidth: 1.7, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
 
 export type IconName =

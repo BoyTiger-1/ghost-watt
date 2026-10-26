@@ -1,5 +1,8 @@
 "use client";
 
+// The landing page's original hero: headline and buttons over a 3D orb (Scene3D).
+// Not currently used; the home page renders HomeHero instead. Kept for reference.
+
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { motion } from "framer-motion";

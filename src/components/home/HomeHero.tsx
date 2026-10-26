@@ -1,5 +1,9 @@
 "use client";
 
+// The top of the home page: the headline and the 3D school with its lit-up rooms.
+// Phones, and anyone who chose lite visuals, get a still card instead of the WebGL
+// scene, so the first screen loads fast everywhere.
+
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { motion } from "framer-motion";

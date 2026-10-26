@@ -1,3 +1,8 @@
+// GET /api/footprint: building outlines near a point, for the 3D school. Asks the
+// public Overpass servers and Nominatim at the same time (either can be down), scores
+// every outline the same way, and returns the likeliest school building first.
+// Cached for a day so a class setting up the same school doesn't hammer OpenStreetMap.
+
 import { NextResponse } from "next/server";
 import { RULES, checkLimits, clientIp } from "@/lib/ratelimit";
 import { pointInPolygon, polygonArea, type Footprint } from "@/lib/campus";

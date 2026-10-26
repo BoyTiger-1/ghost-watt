@@ -1,5 +1,8 @@
 "use client";
 
+// A glowing 3D orb, the background of the original landing hero (Hero.tsx).
+// Not currently used on the site.
+
 import { useMemo, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Float, Icosahedron, MeshDistortMaterial, Points, PointMaterial } from "@react-three/drei";

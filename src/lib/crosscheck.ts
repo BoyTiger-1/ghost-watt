@@ -8,7 +8,7 @@
 // shown, still editable, but not in the totals until the user confirms it.
 //
 // Calibrated against the detector's measured recall (about half of screens in
-// ordinary photos, docs/live-detector-benchmark.md): the detector missing some
+// ordinary photos; README, "Choosing the live detector"): the detector missing some
 // of what the model saw is normal and is not a disagreement; the model seeing
 // several where the detector saw none, or far more than it saw, is.
 
@@ -25,7 +25,7 @@ const COMPARABLE: Record<string, string[]> = {
   vending_cold: ["fridge", "vending_cold", "reach_in_cooler"],
   microwave: ["microwave"],
   // Lights are not cross-checked: the on-device light finder misses most
-  // fixtures (docs/live-detector-benchmark.md), so its silence is not evidence.
+  // fixtures (README, "Choosing the live detector"), so its silence is not evidence.
 };
 
 /** Below this the model itself was hedging, whatever the detector saw. */

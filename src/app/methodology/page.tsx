@@ -1,3 +1,7 @@
+// The Method page: every formula the app uses, the wattage table, how hours and prices
+// are chosen, our plug-in meter check, and the full list of sources. The point is that
+// anyone can follow a dollar figure back to where it came from.
+
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Reveal } from "@/components/Reveal";

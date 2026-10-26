@@ -5,7 +5,7 @@
 // Pick frames (yours - the kitchen, the office, the bedroom), run, and every
 // detector lists what it found, how sure it was and how long it took. The same
 // page exposes window.__bench so the comparison can be scripted against a
-// labelled set (docs/live-detector-benchmark.md has the one that chose the
+// labelled set (the README's "Choosing the live detector" has the one that chose the
 // model). Development only. A YOLOv8n ONNX Runtime Web variant was in this list
 // while it was being evaluated; it lost, and its code went with it.
 

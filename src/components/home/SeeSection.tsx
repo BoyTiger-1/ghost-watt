@@ -1,5 +1,9 @@
 "use client";
 
+// Home page section "What the camera sees, live": a phone showing the live scanner,
+// with notes on how detection works on the device and how a held-still frame gets the
+// full read.
+
 import { useRef } from "react";
 import { motion, useScroll, useSpring, useTransform } from "framer-motion";
 import { Phone } from "./Devices";

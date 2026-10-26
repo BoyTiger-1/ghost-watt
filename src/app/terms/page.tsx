@@ -1,3 +1,7 @@
+// The terms of service: what the free service provides, that its figures are estimates
+// and AI summaries can be wrong, acceptable use, the MIT license and the map data's
+// license, and the usual limits of liability.
+
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalPage, type LegalSection } from "@/components/Legal";

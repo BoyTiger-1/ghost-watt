@@ -1,3 +1,7 @@
+// GET /api/school-search: find a school by name for the 3D school, using
+// OpenStreetMap's Nominatim. Each result has where it is and, when it's mapped, its
+// outline. Rate-limited and cached, as Nominatim's usage policy asks.
+
 import { NextResponse } from "next/server";
 import { RULES, checkLimits, clientIp } from "@/lib/ratelimit";
 

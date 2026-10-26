@@ -1,3 +1,9 @@
+// POST /api/analyze: the cloud half of a scan. Takes a downscaled photo (or a few
+// video frames), sends it to the first vision provider that answers, and turns the
+// reply into device observations. It never prices anything; the client does that.
+// Rate-limited per network and per day, and a provider out of quota comes back as a
+// clean "try again in N minutes" so the client can read the photo on-device instead.
+
 import { quotaHit, quotaWaitSeconds } from "@/lib/quota";
 import { NextResponse } from "next/server";
 import { describeImagesAny } from "@/lib/vision";

@@ -1,5 +1,8 @@
 "use client";
 
+// Adding photos and videos without the live camera: drag and drop, paste, or pick
+// files. Only image and video files are accepted; everything else is ignored.
+
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Icon } from "./icons";

@@ -1,5 +1,13 @@
 "use client";
 
+// The scanner page, and the heart of the app. It holds every capture (live photos,
+// uploads, videos, typed-in rooms), runs each through the on-device read and, in
+// Enhanced mode, the cloud model, then prices the results at the right rate for
+// where and when they were taken. A cloud failure falls back to the on-device
+// reading with a note, never an error. It also saves each scan to a room, and lays
+// out the results: the photo with its boxes, the summary, Ghosty, the device list,
+// the fix plan, charts and the printable report.
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";

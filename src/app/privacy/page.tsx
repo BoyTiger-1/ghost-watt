@@ -1,3 +1,7 @@
+// The privacy policy: what the app handles, what stays in the browser, what goes to
+// which outside service and why, and the choices a user has. Kept in step with what the
+// code actually sends; update it when a new service or field is added.
+
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalPage, LegalTable, type LegalSection } from "@/components/Legal";

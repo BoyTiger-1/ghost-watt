@@ -1,3 +1,8 @@
+// POST /api/ghosty: Ghosty Insights for one scan. Gets the scan's already-computed
+// figures (never a photo), asks an AI model to explain and rank them, and checks every
+// dollar it hands back against those figures. Advice to switch off a fridge, a router
+// or an exit sign is dropped. With no model available, the built-in rules answer.
+
 import { NextResponse } from "next/server";
 import { describeImagesAny } from "@/lib/vision";
 import { GHOSTY_SCHEMA, buildPrompt, extractJson, rulesReport, validateReport, type GhostyContext, keepOnReason } from "@/lib/ghosty";

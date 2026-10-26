@@ -200,9 +200,51 @@ and that frame goes through the same full read a photo gets, and the confirmed r
 replaces the candidates. Photo audits the current frame. Video records a walkthrough and
 audits each distinct view once.
 
-We didn't just pick a detector and hope. We benchmarked EfficientDet-Lite0 against Lite2
-and YOLOv8n on 40 Open Images photos and kept the winner; the numbers are in
-[`docs/live-detector-benchmark.md`](docs/live-detector-benchmark.md).
+We didn't just pick a detector and hope. We benchmarked the options first (see
+[Choosing the live detector](#choosing-the-live-detector)) and kept the one that won.
+
+### Choosing the live detector
+
+The live view needs a detector that runs in the browser fast enough for video and finds the
+powered things in a room. We measured four candidates on the same 40 photos from the Open
+Images validation set, picked because each had at least two clearly labeled screens, laptops,
+microwaves or fridges (37 screens, 25 laptops, 8 microwaves and 2 fridges in all). A
+detection counted if it had the right class and overlapped the labeled box by at least 50%.
+Times are per photo on a laptop CPU.
+
+| Model | Size | Time per photo | Found (recall) | Correct (precision) | Screens | Laptops | Microwaves | Fridges |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| EfficientDet-Lite0 | 7 MB | 124 ms | 54% | 81% | 18/37 | 16/25 | 3/8 | 2/2 |
+| EfficientDet-Lite0, zoomed tiles (photo mode) | 7 MB + classifier | 12.6 s | 57% | 84% | 18/37 | 19/25 | 3/8 | 1/2 |
+| EfficientDet-Lite2 | 12 MB | 343 ms | 54% | 74% | 19/37 | 15/25 | 3/8 | 2/2 |
+| YOLOv8n | 13 MB | 423 ms | 58% | 72% | 17/37 | 20/25 | 3/8 | 2/2 |
+
+What we decided from it:
+
+- EfficientDet-Lite0 runs the live view. It was three times faster than anything else, and
+  nothing bigger found more screens at the same accuracy. YOLOv8n found two more laptops but
+  made twice as many false calls.
+- We dropped Lite2: no better than Lite0 on these photos, at three times the cost.
+- No small model is good enough to price from on its own. About half the labeled screens
+  were missed by all four. That's why live detections are only candidates, and a held-still
+  frame gets the full read (the cloud model in Enhanced mode, or the zoomed-tile pass, which
+  had the best accuracy of the four, on the device).
+- Our pixel-based light finder over-counts on still photos: on 28 photos with no lights
+  labeled, it claimed 32 lit fixtures. So lights found on the device stay unverified until
+  you or the cloud model confirm them.
+
+These are ordinary indoor photos, not phone frames of a classroom, so the numbers compare
+the models with each other rather than promise anything about a particular room. To re-run
+it on your own photos, start the app with `npm run dev`, open `/bench`, pick some pictures
+and run it; each detector lists what it found, how sure it was, and how long it took.
+
+The stock detector has no class for lamps, lights or fans, so no setting can make it box a
+light. [`scripts/train-detector.py`](scripts/train-detector.py) fine-tunes one on Open Images
+photos of lamps, bulbs, chandeliers, ceiling fans, screens, laptops and appliances, and
+setting `NEXT_PUBLIC_DETECTOR_MODEL_URL` to its output swaps it in with no code changes. It's
+written for a Colab GPU and we haven't trained it yet (it's first on our
+[roadmap](#roadmap-version-20)). Even once trained, it would know what a lamp is, not
+whether it's on, so the brightness check or cloud confirm would still decide that.
 
 ### Two costs, real prices, a grade
 
@@ -638,7 +680,6 @@ src/
     campus.ts       Geometry and per-room waste for the 3D school
     i18n.ts i18n-more.ts   Translations
     storage.ts      Rooms, buildings and scans, stored in the browser
-docs/               The detector benchmark
 scripts/            Detector training and build helpers
 ```
 

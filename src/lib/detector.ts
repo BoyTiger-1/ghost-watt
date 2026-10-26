@@ -17,7 +17,7 @@ const WASM_ROOT = "/runtimes/mediapipe";
 const MODELS = "https://storage.googleapis.com/mediapipe-models/object_detector";
 // Lite0 (320 px, 7 MB) on either delegate. Lite2 (448 px, 12 MB) and YOLOv8n
 // (ONNX Runtime Web, 13 MB) were measured against it on 40 labelled Open Images
-// photos of screens, laptops and appliances (docs/live-detector-benchmark.md):
+// photos of screens, laptops and appliances (README, "Choosing the live detector"):
 // neither found more at the same precision, and both were ~3x slower on CPU.
 // A detector fine-tuned on lights and the other devices that matter here
 // (scripts/train-detector.py) can replace it without a code change: set

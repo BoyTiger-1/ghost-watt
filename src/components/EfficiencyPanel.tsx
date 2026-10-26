@@ -1,5 +1,9 @@
 "use client";
 
+// Sorts every device by its efficiency verdict: replace it (an efficient model would
+// save money in normal use), fix the habit (efficient, but left on), or fine. The
+// grades come from lib/efficiency.ts, priced at the scan's own rate.
+
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { summarizeEfficiency, type Assessment } from "@/lib/efficiency";

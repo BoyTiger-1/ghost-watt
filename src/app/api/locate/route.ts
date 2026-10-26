@@ -1,3 +1,7 @@
+// GET /api/locate: turns a photo's coordinates into the numbers the money depends on:
+// the place name, the local utility's published rate for the right sector (home or
+// commercial), and the grid's carbon factor. Coordinates are rounded before any lookup.
+
 import { NextResponse } from "next/server";
 import { REGION_BY_CODE, RATE_TABLE_SOURCE, regionOrDefault, regionRate } from "@/lib/grid";
 import { lookupTariff, type Sector } from "@/lib/tariff";

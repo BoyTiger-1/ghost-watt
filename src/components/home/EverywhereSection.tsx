@@ -1,5 +1,9 @@
 "use client";
 
+// Home page section "Show the decision-maker": the same scan on a laptop, tablet and
+// phone, with captions for the budget planner, the printable brief and the ranked list
+// of offenders. It slides into place as you scroll.
+
 import { useRef } from "react";
 import { motion, useScroll, useSpring, useTransform } from "framer-motion";
 import { Laptop, Phone, Tablet } from "./Devices";

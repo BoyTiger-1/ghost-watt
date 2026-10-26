@@ -1,5 +1,11 @@
 "use client";
 
+// The live camera. Every frame runs through the in-browser detector, a tracker keeps
+// boxes steady, and each powered thing gets a wattage tag; a meter adds up the watts in
+// view. Holding still sends that frame for the full read (cloud in Enhanced mode,
+// on-device otherwise). Also handles taking a photo, recording a walkthrough video,
+// the torch, full screen, and tapping a tag to correct it.
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {

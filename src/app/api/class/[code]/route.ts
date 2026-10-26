@@ -1,3 +1,7 @@
+// /api/class/[code]: one team scan. GET returns the building as everyone has
+// scanned it so far; POST adds one person's room. Only computed device rows travel,
+// never a photo, and each team expires on its own (two weeks with Upstash).
+
 import { NextResponse } from "next/server";
 import {
   MAX_CONTRIBUTIONS,

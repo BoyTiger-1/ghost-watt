@@ -1,3 +1,6 @@
+// The site footer: the product and reference links, the GitHub link, and the one line
+// that sums the app up. Shown on every page on desktop; phones get a shorter version.
+
 import Link from "next/link";
 import { Mark } from "./HomeNav";
 import { GITHUB_URL } from "@/lib/site";

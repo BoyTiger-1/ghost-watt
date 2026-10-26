@@ -1,3 +1,7 @@
+// The About page: why we built Ghost Watt, who it's for, and the questions people
+// ask first (where the photos go, what you get at the end, whether team scans need
+// accounts). Plain words, written for someone who has never read an electric bill.
+
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
