@@ -30,7 +30,7 @@ const STEPS = [
 
 const BELIEFS = [
   {
-    title: "Nobody wastes power on purpose",
+    title: "Nobody leaves power idle on purpose",
     body: "A projector humming at midnight is invisible. Once people can actually see it, most of it gets switched off.",
   },
   {

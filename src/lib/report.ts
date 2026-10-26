@@ -22,7 +22,7 @@
 // one - and the reader can tell the difference.
 
 import { listActions, rankActions, type ActionItem } from "./actions";
-import { counted } from "./energy";
+import { counted, idleCaptionAll, idleRangeText, splitAll, splitLineOf, type CostSplit, type WattSplit } from "./energy";
 import { SOURCE_BY_ID, type Source } from "./sources";
 import type { AuditSettings, Offender } from "./types";
 import type { SavedAudit, Building } from "./storage";
@@ -65,6 +65,19 @@ export interface Brief {
   annualWasteHigh: number;
   /** What the same devices cost in normal use, for the room type they are in. */
   typicalCost: number;
+  /** The year as one total in two parts that add up: used + idle. */
+  split: CostSplit;
+  /** "$X a year = $Y used + $Z idle", printed the same everywhere. */
+  splitLine: string;
+  /** The idle part if everything slept, and if everything stayed on. */
+  idleLow: number;
+  idleHigh: number;
+  /** "idle could be $a to $b depending on ...", when there is a range. */
+  idleRangeLine: string | null;
+  /** The draw behind each part. */
+  watts: WattSplit;
+  /** What the idle figure assumes, in a few words. */
+  idleCaption: string;
   co2KgPerYear: number;
 
   /** The best moves, ranked by dollars saved per dollar spent, free ones first. */
@@ -303,6 +316,7 @@ export function buildBrief(audit: SavedAudit, building?: Building): Brief {
   const capital = group(worth.filter((i) => i.fixCost > 0));
 
   const annualWaste = items.reduce((s, i) => s + i.annualWaste, 0);
+  const all = splitAll(offenders);
   const totalRecoverable = free.annualSavings + capital.annualSavings;
   const totalUpfront = capital.upfront;
 
@@ -317,6 +331,13 @@ export function buildBrief(audit: SavedAudit, building?: Building): Brief {
     annualWasteLow: offenders.reduce((s, o) => s + o.costLowPerYear, 0),
     annualWasteHigh: offenders.reduce((s, o) => s + o.costHighPerYear, 0),
     typicalCost: offenders.reduce((s, o) => s + (o.typicalCostPerYear ?? 0), 0),
+    split: all.cost,
+    splitLine: splitLineOf(all.cost.total, all.cost.idle),
+    idleLow: all.range.low,
+    idleHigh: all.range.high,
+    idleRangeLine: idleRangeText(all.range.low, all.range.high),
+    watts: all.watts,
+    idleCaption: idleCaptionAll(offenders, audit.settings.usageContext),
     co2KgPerYear: offenders.reduce((s, o) => s + o.co2KgPerYear, 0),
     topActions,
     sources: sourcesFor(offenders, building, audit.settings),

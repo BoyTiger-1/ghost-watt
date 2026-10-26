@@ -8,10 +8,8 @@
 
 import { CATALOG_BY_ID } from "./devices";
 import { estimateUnitWatts } from "./estimate";
-import { typicalUse } from "./usage";
-import type { LiveItem } from "./ondevice";
+import { priceUnit, type LiveItem } from "./ondevice";
 import type { AuditSettings, Box, DeviceState } from "./types";
-import { neededAllNight } from "./essentials";
 
 /** What a person said a tagged thing really is. */
 export interface TagFix {
@@ -19,19 +17,18 @@ export interface TagFix {
   state: DeviceState;
   /** Their name for it, when they picked one from the catalog. */
   label?: string;
+  /** What it does when nobody is there, when they said (the scan report's afterHours). */
+  afterHours?: DeviceState;
+  /** Hours a day it sits unused, when they said (the scan report's hoursPerYear / 365). */
+  idleHoursPerDay?: number;
 }
 
 /** The same item, re-priced as another device or another state. */
 export function relabel(item: LiveItem, fix: TagFix, settings: AuditSettings): LiveItem {
   const cat = CATALOG_BY_ID[fix.categoryId];
   if (!cat) return item;
-  const hours = settings.unoccupiedHoursPerYear;
-  const occupied = settings.occupiedHoursPerYear ?? Math.max(0, 8760 - hours);
   const watts = estimateUnitWatts(cat, fix.state).mid;
-  // Corrected to a fridge or a router: it runs all night on purpose.
-  const needed = neededAllNight(cat.id, fix.label ?? cat.label);
-  const typical =
-    fix.state === "off" ? 0 : typicalUse(cat, estimateUnitWatts(cat, "on").mid, settings.usageContext ?? "school", occupied).kwhPerYear * settings.ratePerKwh;
+  const label = fix.label ?? cat.label;
   return {
     ...item,
     kind: cat.group === "lighting" ? "light" : "device",
@@ -41,9 +38,18 @@ export function relabel(item: LiveItem, fix: TagFix, settings: AuditSettings): L
     why: "set by you",
     score: 1,
     watts,
-    costPerYear: needed ? 0 : (watts / 1000) * hours * settings.ratePerKwh,
-    typicalCostPerYear: typical,
-    needed: needed ?? undefined,
+    // Priced by the same scorer as the scan report, so a corrected tag and a scanned
+    // photo of the same device agree to the cent.
+    ...priceUnit(
+      {
+        categoryId: cat.id,
+        state: fix.state,
+        device: label,
+        afterHours: fix.afterHours,
+        hoursPerYear: fix.idleHoursPerDay !== undefined ? fix.idleHoursPerDay * 365 : undefined,
+      },
+      settings,
+    ),
   };
 }
 
@@ -181,7 +187,7 @@ export function steadyStates(items: readonly LiveItem[], memory: StateMemory, no
     const cat = it.categoryId ? CATALOG_BY_ID[it.categoryId] : undefined;
     if (!cat || !m.state) return { ...it, state: m.state, why: m.why };
     const watts = estimateUnitWatts(cat, m.state).mid;
-    return { ...it, state: m.state, why: m.why, watts, costPerYear: it.needed ? 0 : (watts / 1000) * settings.unoccupiedHoursPerYear * settings.ratePerKwh };
+    return { ...it, state: m.state, why: m.why, watts, ...priceUnit({ categoryId: cat.id, state: m.state, device: it.label }, settings) };
   });
 }
 

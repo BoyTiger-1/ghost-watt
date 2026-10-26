@@ -102,6 +102,6 @@ describe("demandLines", () => {
     }
     const words = describeDemand(audit(withCharge), withCharge)!;
     expect(words).toMatch(/do not all peak together/);
-    expect(words).toMatch(/Overnight waste is excluded/);
+    expect(words).toMatch(/Overnight idle cost is excluded/);
   });
 });

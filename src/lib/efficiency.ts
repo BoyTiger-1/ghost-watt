@@ -157,11 +157,11 @@ export function assessEfficiency(o: Offender, settings: Pick<AuditSettings, "rat
     replace: "Inefficient - replace it",
     consider: "Worth upgrading at the next replacement",
     habit: good
-      ? "Efficient - the waste is leaving it on"
+      ? "Efficient - the idle cost is leaving it on"
       : grade === "C"
-        ? "Middling efficiency - the bigger waste is leaving it on"
+        ? "Middling efficiency - the bigger idle cost is leaving it on"
         : "Inefficient, and left on",
-    standby: "Fine in use - the waste is standby draw",
+    standby: "Fine in use - the idle cost is standby draw",
     fine: "Efficient - leave it",
   };
   const detail: Record<Verdict, string> = {

@@ -113,7 +113,7 @@ export function ActionPlan({ offenders, settings }: { offenders: Offender[]; set
         })}
       </ol>
       <p className="border-t border-line px-5 py-3 text-[0.76rem] leading-relaxed text-dim sm:px-6">
-        A fix removes its share of the after-hours waste; a swap lowers the draw in use and after hours alike. Ticking both for one device
+        A fix removes its share of the idle cost; a swap lowers the draw in use and after hours alike. Ticking both for one device
         counts the watts once. Swap savings are priced at typical use, so they are what shows up on a bill, not a best case.
       </p>
     </section>

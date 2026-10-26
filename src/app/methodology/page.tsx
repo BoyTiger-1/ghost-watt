@@ -97,13 +97,24 @@ export default function MethodologyPage() {
                 times the count. Thermostatic gear (fridges, AC, vending) uses a duty-cycle average.
               </li>
               <li>
-                <span className="text-fog">Savings</span>{" "}are the waste times the fix&apos;s
+                <span className="text-fog">Savings</span>{" "}are the idle cost times the fix&apos;s
                 effectiveness; <span className="text-fog">payback</span>{" "}is the fix&apos;s cost over
                 the savings.
               </li>
               <li>
-                Waste only counts during the hours the building is empty, so every figure scales with
+                Idle cost only counts during the hours the building is empty, so every figure scales with
                 one assumption you can see and change: <span className="text-fog">empty hours per year</span>.
+              </li>
+              <li>
+                <span className="text-fog">One total, two parts.</span> Every device is shown as{" "}
+                <span className="font-mono text-[0.9em] text-fog">$total a year = $used + $idle</span>, and the two parts always add up.
+                Idle is what it costs through the empty hours; used is the rest of the year&apos;s cost. The idle figure
+                depends on what a device does when nobody is there, so it also carries a range: from sleeping (its standby draw)
+                to staying fully on. Beside every idle figure a short caption says what it assumes:{" "}
+                <span className="text-fog">&ldquo;assumes it sleeps overnight&rdquo;</span> when the photo was taken in the day and
+                the device was seen on, <span className="text-fog">&ldquo;as photographed&rdquo;</span> when it was seen in the state
+                it is priced in, or <span className="text-fog">&ldquo;set by you&rdquo;</span> when you said what it does; then{" "}
+                <span className="text-fog">&ldquo;your hours&rdquo;</span> or the place&apos;s schedule and its empty hours a year.
               </li>
               <li>
                 Four terms refine that figure when — and only when — something is known that supports
@@ -184,9 +195,9 @@ export default function MethodologyPage() {
             <p className="mt-4 text-[1rem] leading-relaxed text-mist">
               Which way it goes is not something you can assume, and that is the reason it is
               computed. A building that shuts at four o&apos;clock (an office or a school, say) is{" "}
-              <span className="text-fog">closed through an evening peak</span> — so its overnight waste
+              <span className="text-fog">closed through an evening peak</span> — so its overnight idle cost
               costs about a tenth <em>more</em> than the average said — and{" "}
-              <span className="text-fog">open through a midday one</span>, where the same waste costs
+              <span className="text-fog">open through a midday one</span>, where the same idle hours cost
               about a fifth less. A tariff sheet carries a price for every hour of every month; the
               schedule says which of those hours the building is open; crossing the two is the whole
               calculation.
@@ -254,7 +265,7 @@ export default function MethodologyPage() {
               The same monitor costs a different amount in a classroom, an office and a bedroom,
               because it is used for a different number of hours. Each room type carries the hours a
               day its devices are typically in use; the rest of the lit or standby time is what the
-              app calls after-hours waste. Published figures are tagged with their source; the rest
+              app calls idle cost. Published figures are tagged with their source; the rest
               are this app&apos;s own estimates and are marked as such.
             </p>
             <RoomHoursTable />

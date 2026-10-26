@@ -30,7 +30,7 @@ const STEPS: Step[] = [
   {
     target: "add",
     title: "Add a picture",
-    body: "Each device we find gets a box on the photo. Next to it you'll get the short version: what it all costs a year, what's wasted, and what you could save.",
+    body: "Each device we find gets a box on the photo. Next to it you'll get the short version: what it all costs a year, what's idle, and what you could save.",
   },
   {
     target: "settings",

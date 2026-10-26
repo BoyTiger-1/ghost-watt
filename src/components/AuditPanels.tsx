@@ -25,7 +25,7 @@ export function LoadMixPanel({ offenders }: { offenders: Offender[] }) {
   return (
     <section className="panel ticked @container p-5 sm:p-6">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-lg font-semibold text-fog">Where the waste lives</h3>
+        <h3 className="text-lg font-semibold text-fog">Where the idle cost lives</h3>
         <span className="mono-label">by equipment type</span>
       </div>
 
@@ -36,7 +36,7 @@ export function LoadMixPanel({ offenders }: { offenders: Offender[] }) {
       <p className="mt-5 border-t border-line pt-4 text-sm leading-relaxed text-mist">
         The top three offenders carry{" "}
         <strong className="font-mono font-semibold text-cyan tabular-nums">{fmtPct(top3)}</strong>{" "}
-        of the total. Waste is almost always this concentrated, which is why a short
+        of the total. Idle cost is almost always this concentrated, which is why a short
         list beats a building-wide policy: fix three things and most of it is gone.
       </p>
     </section>
@@ -105,7 +105,7 @@ export function BenchmarkPanel({
           <div className="mt-4 grid grid-cols-2 divide-x divide-line border border-line bg-surface2/50 @2xl:grid-cols-4">
             <Cell label="phantom EUI" value={`${result.phantomEui.toFixed(2)}`} sub="kBtu/sq ft" />
             <Cell label={`${type?.label ?? "type"} median`} value={String(result.medianEui)} sub="kBtu/sq ft" />
-            <Cell label="waste / sq ft" value={`$${result.costPerSqFt.toFixed(3)}`} sub="per year" />
+            <Cell label="idle / sq ft" value={`$${result.costPerSqFt.toFixed(3)}`} sub="per year" />
             <Cell label="continuous draw" value={fmtWatts(watts)} sub="average" />
           </div>
         </>
@@ -152,7 +152,7 @@ export function BenchmarkPanel({
 
       {/* geography */}
       <div className="mt-5 border-t border-line pt-4">
-        <span className="mono-label">the same waste, elsewhere</span>
+        <span className="mono-label">the same idle cost, elsewhere</span>
         <div className="mt-3">
           <CompareBars
             rows={[
@@ -217,7 +217,7 @@ export function ExportBar({
     const save = offenders.reduce((s, o) => s + o.annualSavings, 0);
     const lines = [
       `Ghost Watt phantom-load audit - ${buildingName}`,
-      `Wasted: ${fmtMoneyFull(total)}/yr. Recoverable: ${fmtMoneyFull(save)}/yr.`,
+      `Idle: ${fmtMoneyFull(total)}/yr. Recoverable: ${fmtMoneyFull(save)}/yr.`,
       "",
       ...offenders
         .slice(0, 5)

@@ -1,25 +1,27 @@
 "use client";
 
-// Every device found, one short row each, most wasteful first.
+// Every device found, one short row each, the one that idles the most first.
 //
-// A row says what it is, what it's doing and what it wastes, with a bar so the
-// order reads at a glance. Opening it gives the rest in plain sentences: how
-// much power, when, the fix and what it pays back, and, for anyone who wants
-// them, the raw figures and a way to correct what the AI got wrong.
+// A row says what it is, what it's doing and what it costs a year, as one total
+// in two parts (used + idle), with a bar so the order reads at a glance. Opening
+// it shows the same three figures with the watts behind each, then the fix and
+// what it pays back, and, for anyone who wants them, the raw figures and a way
+// to correct what the AI got wrong.
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { DeviceGlyph } from "../DeviceGlyph";
 import { offenderAnchor } from "../DetectionView";
 import { GRADE_COLOR } from "../EfficiencyPanel";
-import { fmtCo2, fmtKwh, fmtMoney, fmtMoneyFull } from "@/lib/energy";
+import { fmtAmt, fmtCo2, fmtKwh, fmtMoney, fmtMoneyFull, idleRange, splitDollars } from "@/lib/energy";
 import { assessEfficiency } from "@/lib/efficiency";
 import { DEVICE_CATALOG } from "@/lib/devices";
 import type { DeviceAdjust } from "@/lib/capture";
 import type { Offender } from "@/lib/types";
 import { Icon } from "./icons";
 import { Term } from "./Term";
-import { STATE_COLOR, STATE_PLAIN, afterHoursWords, basisWords, confidenceWords, hoursPerDayWords, monthsWords, wattsPicture, USAGE_COLOR } from "./plain";
+import { CostBreakdown } from "./CostBreakdown";
+import { STATE_COLOR, STATE_PLAIN, basisWords, confidenceWords, hoursPerDayWords, monthsWords, wattsPicture, USAGE_COLOR } from "./plain";
 
 export interface DeviceLine {
   offender: Offender;
@@ -38,6 +40,7 @@ export function DeviceList({
   onAdjust,
   openId,
   onOpen,
+  place,
 }: {
   lines: DeviceLine[];
   hovered: string | null;
@@ -46,8 +49,10 @@ export function DeviceList({
   /** The row a box on the photo asked to open. */
   openId: string | null;
   onOpen: (id: string | null) => void;
+  /** The kind of place, to name the schedule the idle figure assumes. */
+  place?: "home" | "school" | "office";
 }) {
-  const max = Math.max(1, ...lines.map((l) => l.offender.annualCostPerYear ?? l.offender.costPerYear));
+  const max = Math.max(1, ...lines.map((l) => splitDollars(l.offender).total));
 
   if (!lines.length) {
     return (
@@ -62,9 +67,9 @@ export function DeviceList({
       <div className="hidden grid-cols-[minmax(0,1fr)_minmax(0,14rem)_6.5rem_1.5rem] gap-4 border-b border-line px-4 py-2 text-[0.72rem] text-dim sm:grid">
         <span>Device</span>
         <span>
-          Yearly cost: <span className="text-cyan">needed</span> + <span className="text-ember">wasted</span>
+          <span className="text-cyan">Used</span> + <span className="text-ember">idle</span>
         </span>
-        <span className="text-right">Wasted a year</span>
+        <span className="text-right">A year</span>
         <span />
       </div>
       <ul className="divide-y divide-line">
@@ -78,6 +83,7 @@ export function DeviceList({
             highlighted={hovered === l.offender.id}
             onHover={onHover}
             onAdjust={(a) => onAdjust(l.offender.id, a)}
+            place={place}
           />
         ))}
       </ul>
@@ -94,6 +100,7 @@ function Row({
   highlighted,
   onHover,
   onAdjust,
+  place,
 }: {
   line: DeviceLine;
   max: number;
@@ -102,11 +109,18 @@ function Row({
   highlighted: boolean;
   onHover: (id: string | null) => void;
   onAdjust: (a: DeviceAdjust) => void;
+  place?: "home" | "school" | "office";
 }) {
   const o = line.offender;
-  const annual = o.annualCostPerYear ?? o.costPerYear;
-  const needed = Math.max(0, annual - o.costPerYear);
+  const d = splitDollars(o);
   const color = STATE_COLOR[o.state];
+  const money = (n: number) => fmtAmt(n, d.cents);
+  // One line, printed once per breakpoint: the parts of the total.
+  const parts = (
+    <span className="text-[0.72rem] text-dim">
+      <span className="text-cyan">{money(d.used)}</span> used + <span className="text-ember">{money(d.idle)}</span> idle
+    </span>
+  );
 
   return (
     <li
@@ -132,34 +146,29 @@ function Row({
               </span>
               <span className="truncate">{o.source}</span>
               {o.unverified && <span className="font-medium text-amber">AI not sure · not counted</span>}
-              {/* A fridge, a router or an exit sign is meant to run all night: usage, not waste. */}
+              {/* A fridge, a router or an exit sign is meant to run all night: usage, not idle. */}
               {o.needed && (
-                <span className="font-medium" style={{ color: USAGE_COLOR }} title={`Still costed, but counted as usage, not waste: ${o.needed}.`}>
-                  usage, not waste
+                <span className="font-medium" style={{ color: USAGE_COLOR }} title={`Still costed, but counted as usage, not idle: ${o.needed}.`}>
+                  meant to run
                 </span>
               )}
             </span>
+            <span className="mt-0.5 block sm:hidden">{parts}</span>
           </span>
         </span>
 
         {/* the year, split */}
         <span className="hidden sm:block" aria-hidden>
           <span className="flex h-2.5 overflow-hidden rounded-full bg-surface2">
-            <span className="h-full bg-cyan/60" style={{ width: `${(needed / max) * 100}%` }} />
-            <span className="h-full bg-ember" style={{ width: `${(o.costPerYear / max) * 100}%` }} />
+            <span className="h-full bg-cyan/60" style={{ width: `${(d.used / max) * 100}%` }} />
+            <span className="h-full bg-ember" style={{ width: `${(d.idle / max) * 100}%` }} />
           </span>
-          <span className="mt-1 block text-[0.7rem] text-dim">{fmtMoney(annual)} a year in all</span>
+          <span className="mt-1 block">{parts}</span>
         </span>
 
         <span className="text-right">
-          {o.needed ? (
-            <span className="block font-mono text-[1.02rem] font-semibold" style={{ color: USAGE_COLOR }} title="What it costs a year to run. Counted as usage, not waste.">
-              {fmtMoneyFull(annual)}
-            </span>
-          ) : (
-            <span className={`block font-mono text-[1.02rem] font-semibold ${o.costPerYear > 0 ? "text-ember" : "text-dim"}`}>{o.costPerYear > 0 ? fmtMoneyFull(o.costPerYear) : "$0"}</span>
-          )}
-          <span className="block text-[0.68rem] text-dim sm:hidden">{o.needed ? "usage / yr" : "wasted / yr"}</span>
+          <span className="block font-mono text-[1.02rem] font-semibold text-fog">{money(d.total)}</span>
+          <span className="block text-[0.68rem] text-dim">a year</span>
         </span>
         <Icon name="chevron" className={`h-4 w-4 text-dim transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
@@ -167,7 +176,7 @@ function Row({
       <AnimatePresence initial={false}>
         {open && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-            <Details line={line} onAdjust={onAdjust} />
+            <Details line={line} onAdjust={onAdjust} place={place} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -180,7 +189,7 @@ function Row({
  * efficiency verdict, and, for a line the cross-check could not confirm, the
  * question of whether it is really there.
  */
-function Details({ line, onAdjust }: { line: DeviceLine; onAdjust: (a: DeviceAdjust) => void }) {
+function Details({ line, onAdjust, place }: { line: DeviceLine; onAdjust: (a: DeviceAdjust) => void; place?: "home" | "school" | "office" }) {
   const o = line.offender;
   const adjust = line.adjust;
   const [editing, setEditing] = useState(false);
@@ -188,6 +197,7 @@ function Details({ line, onAdjust }: { line: DeviceLine; onAdjust: (a: DeviceAdj
   const perUnit = o.count > 0 ? o.totalWatts / o.count : o.perUnitWatts;
   const eff = assessEfficiency(o, { ratePerKwh: o.kwhPerYear > 0 ? o.costPerYear / o.kwhPerYear : 0.15 });
   const each = o.count > 1 ? " each" : "";
+  const range = idleRange(o);
 
   return (
     <div className="space-y-3 px-4 pb-4 sm:pl-[4.25rem]">
@@ -207,46 +217,26 @@ function Details({ line, onAdjust }: { line: DeviceLine; onAdjust: (a: DeviceAdj
         </div>
       )}
 
-      {/* the three things to know */}
-      <div className="grid gap-2 sm:grid-cols-3">
-        <Fact title="How much power">
-          About {Math.round(perUnit).toLocaleString()} <Term k="watt">watts</Term>
-          {each}, {wattsPicture(perUnit)}.
-        </Fact>
-        <Fact title="When the room is empty">
-          {o.state === "off" ? "It's off, so it costs nothing then." : afterHoursWords(o)}
-          {o.hoursPerYear !== undefined && o.state !== "off" && <> That&apos;s about {hoursPerDayWords(o.hoursPerYear)} of <Term k="empty">empty time</Term>.</>}
-        </Fact>
-        <Fact title="In normal use">
-          {o.typicalCostPerYear !== undefined ? (
-            <>
-              Costs {fmtMoneyFull(o.typicalCostPerYear)} a year while people use it
-              {o.typicalHoursPerDay !== undefined ? ` (about ${o.typicalHoursPerDay < 1 ? `${Math.round(o.typicalHoursPerDay * 60)} minutes` : `${o.typicalHoursPerDay.toFixed(1)} hours`} a day)` : ""}. That part is fine.
-            </>
-          ) : (
-            "We don't have a typical-use figure for this one."
-          )}
-        </Fact>
+      {/* the year: one total, used + idle, the watts behind each */}
+      <div className="rounded-xl bg-surface2/60 px-3.5 py-3">
+        <CostBreakdown offender={o} place={place} />
       </div>
 
       {/* the fix */}
       {o.costPerYear > 0 && (
         <div className="rounded-xl border border-lime/25 bg-lime/[0.06] px-3.5 py-3">
-          <div className="text-[0.74rem] font-medium text-lime">The fix</div>
-          <p className="mt-0.5 text-[0.92rem] font-medium text-fog">{o.action.label}</p>
-          <p className="mt-0.5 text-[0.82rem] leading-relaxed text-mist">{o.action.note}</p>
-          <div className="mt-2 flex flex-wrap gap-1.5 text-[0.76rem]">
-            <Pill>Costs {o.fixCost > 0 ? fmtMoneyFull(o.fixCost) : "nothing"}</Pill>
-            <Pill>Saves {fmtMoneyFull(o.annualSavings)} a year</Pill>
-            <Pill>
-              <Term k="payback">Pays for itself</Term> {o.paybackMonths === null ? "right away" : `in ${monthsWords(o.paybackMonths)}`}
-            </Pill>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+            <span className="text-[0.9rem] font-medium text-fog">{o.action.label}</span>
+            <span className="text-[0.76rem] text-lime">
+              saves {fmtMoneyFull(o.annualSavings)}/yr · {o.fixCost > 0 ? `costs ${fmtMoneyFull(o.fixCost)}` : "free"} · <Term k="payback">pays back</Term> {o.paybackMonths === null ? "right away" : monthsWords(o.paybackMonths)}
+            </span>
           </div>
+          <p className="mt-1 text-[0.8rem] leading-relaxed text-mist">{o.action.note}</p>
         </div>
       )}
 
       {/* is the device itself the problem? */}
-      <div className="flex gap-3 rounded-xl bg-surface2/60 px-3 py-2.5">
+      <div className="flex gap-3 rounded-xl bg-surface2/60 px-3 py-2">
         <span
           className="grid h-9 w-9 shrink-0 place-items-center rounded-lg font-mono text-base font-bold text-white"
           style={{ background: GRADE_COLOR[eff.grade] }}
@@ -254,10 +244,7 @@ function Details({ line, onAdjust }: { line: DeviceLine; onAdjust: (a: DeviceAdj
         >
           {eff.grade}
         </span>
-        <div className="min-w-0">
-          <div className="text-[0.84rem] font-medium text-fog">{eff.headline}</div>
-          <p className="mt-0.5 text-[0.78rem] leading-relaxed text-mist">{eff.detail}</p>
-        </div>
+        <div className="min-w-0 self-center text-[0.84rem] font-medium text-fog">{eff.headline}</div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -276,9 +263,15 @@ function Details({ line, onAdjust }: { line: DeviceLine; onAdjust: (a: DeviceAdj
 
       {more && (
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-xl border border-line px-3.5 py-3 text-[0.78rem] sm:grid-cols-4">
-          <Num label={<>Energy wasted a year (<Term k="kwh">kWh</Term>)</>} value={fmtKwh(o.kwhPerYear)} />
+          <Num label="Power" value={`${Math.round(perUnit).toLocaleString()} W${each}, ${wattsPicture(perUnit)}`} />
+          <Num label="Empty time" value={o.hoursPerYear !== undefined ? hoursPerDayWords(o.hoursPerYear) : "-"} />
+          {o.typicalHoursPerDay !== undefined && (
+            <Num label="In use" value={o.typicalHoursPerDay < 1 ? `${Math.round(o.typicalHoursPerDay * 60)} minutes a day` : `${o.typicalHoursPerDay.toFixed(1)} hours a day`} />
+          )}
+          <Num label={<>Idle energy a year (<Term k="kwh">kWh</Term>)</>} value={fmtKwh(o.kwhPerYear)} />
           <Num label={<><Term k="carbon">Carbon</Term> a year</>} value={fmtCo2(o.co2KgPerYear)} />
-          <Num label="Cost range" value={o.costPerYear > 0 ? `${fmtMoney(o.costLowPerYear)} to ${fmtMoney(o.costHighPerYear)}` : "$0"} />
+          <Num label="Range from wattage uncertainty" value={o.costPerYear > 0 ? `${fmtMoney(o.costLowPerYear)} to ${fmtMoney(o.costHighPerYear)}` : "$0"} />
+          <Num label="Idle cost by behaviour" value={range.high > 0 ? `${fmtMoney(range.low)} asleep to ${fmtMoney(range.high)} on` : "$0"} />
           <Num label="How we know the power" value={basisWords(o)} />
           <Num label="How clear it was" value={confidenceWords(o.confidence)} />
           {/* The term nobody expects: its heat is a load on the building too. */}
@@ -295,6 +288,7 @@ function Details({ line, onAdjust }: { line: DeviceLine; onAdjust: (a: DeviceAdj
             />
           )}
           {o.evidence && <Num label="What the AI saw" value={`“${o.evidence}”`} />}
+          <div className="col-span-2 text-[0.76rem] leading-relaxed text-dim sm:col-span-4">{eff.detail}</div>
           {o.hvacBasis && o.hvacFactor !== undefined && o.hvacFactor !== 1 && (
             <div className="col-span-2 sm:col-span-4 text-[0.76rem] leading-relaxed text-dim">
               {o.hvacBasis}
@@ -374,21 +368,6 @@ function AdjustEditor({ offender: o, adjust, perUnit, onAdjust }: { offender: Of
       </div>
     </div>
   );
-}
-
-/** A titled sentence in the opened row: "What the model saw", "Why this price". */
-function Fact({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-xl bg-surface2/60 px-3 py-2.5">
-      <div className="text-[0.72rem] font-medium text-dim">{title}</div>
-      <p className="mt-0.5 text-[0.84rem] leading-relaxed text-fog">{children}</p>
-    </div>
-  );
-}
-
-/** A small chip for a single fact, such as a technology or a state. */
-function Pill({ children }: { children: React.ReactNode }) {
-  return <span className="rounded-full bg-surface px-2.5 py-1 text-fog">{children}</span>;
 }
 
 /** One labelled figure in the opened row's numbers grid. */

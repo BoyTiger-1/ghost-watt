@@ -28,7 +28,7 @@ import { readStill } from "@/lib/still";
 import { analysisSquare } from "@/lib/image";
 import { LightTracker, readScene, regionSaturation, regionStats, type SceneRead } from "@/lib/scene";
 import { FrameReader, KeyframeCollector, PixelReader, itemColor, recorderMime, toCanvas, toJpeg, type Keyframe } from "@/lib/media";
-import { fmtMoney, fmtWatts } from "@/lib/energy";
+import { fmtAmt, fmtMoney, fmtWatts, idleCaptionAll, idleRangeText, roundSplit, splitAll, splitCost } from "@/lib/energy";
 import { readTime, type GeoContext } from "@/lib/capture";
 import { nowLocal } from "@/lib/exif";
 import { useEngine } from "@/lib/engine";
@@ -37,6 +37,7 @@ import type { AnalysisMode, AnalysisResult, AnalyzeError, AuditSettings } from "
 import { applyFixes, boxToPx, easeAll, hitTest, meterReading, placeTag, relabel, steadyStates, unstack, wattsInView, drawing, type HitRect, type StateMemory, type TagFix } from "@/lib/wattTags";
 import { Icon } from "./icons";
 import { TagCard } from "./TagCard";
+import { SplitView } from "./CostBreakdown";
 
 /**
  * Bright things inside these are not lights: glare on a car's paint or windscreen,
@@ -913,6 +914,7 @@ export function CameraMode({
                 })()}
                 inView={items.some((i) => i.key === selected.key)}
                 fixed={fixes.has(selected.key)}
+                fix={fixes.get(selected.key)}
                 settings={settings}
                 onFix={(fix) => {
                   const next = new Map(fixes);
@@ -976,7 +978,7 @@ export function CameraMode({
                   exit={{ opacity: 0, y: 12 }}
                   className={`mb-2 overflow-y-auto rounded-2xl bg-black/70 p-3 backdrop-blur-xl ${full ? "max-h-[48dvh]" : "max-h-[38svh]"}`}
                 >
-                  <LiveRead items={items} scene={scene} ai={ai} time={time} geo={geo} geoBusy={geoBusy} onLocate={onLocate} dark />
+                  <LiveRead items={items} scene={scene} ai={ai} time={time} geo={geo} geoBusy={geoBusy} onLocate={onLocate} place={settings.usageContext} dark />
                 </motion.div>
               )}
             </AnimatePresence>
@@ -1072,7 +1074,7 @@ export function CameraMode({
             </p>
           </div>
         ) : (
-          <LiveRead items={items} scene={scene} ai={ai} time={time} geo={geo} geoBusy={geoBusy} onLocate={onLocate} />
+          <LiveRead items={items} scene={scene} ai={ai} time={time} geo={geo} geoBusy={geoBusy} onLocate={onLocate} place={settings.usageContext} />
         )}
       </aside>
     </div>
@@ -1088,9 +1090,16 @@ interface Row {
   state: LiveItem["state"];
   count: number;
   watts: number;
-  cost: number;
-  typical: number;
+  /** Its year, in the two parts that make it. */
+  total: number;
+  used: number;
+  idle: number;
   score: number;
+}
+
+/** The split of one live item: nothing when it is not priced (a person, something off). */
+function splitOf(it: LiveItem) {
+  return it.priced ? splitCost(it.priced) : { total: 0, used: 0, idle: 0 };
 }
 
 function group(items: readonly LiveItem[]): Row[] {
@@ -1102,14 +1111,16 @@ function group(items: readonly LiveItem[]): Row[] {
     if (r) {
       r.count++;
       r.watts += it.watts;
-      r.cost += it.costPerYear;
-      r.typical += it.typicalCostPerYear;
+      const sp = splitOf(it);
+      r.total += sp.total;
+      r.used += sp.used;
+      r.idle += sp.idle;
       r.score = Math.max(r.score, it.score);
     } else {
-      rows.set(key, { key, label: it.label, kind: it.kind, state: it.state, count: 1, watts: it.watts, cost: it.costPerYear, typical: it.typicalCostPerYear, score: it.score });
+      rows.set(key, { key, label: it.label, kind: it.kind, state: it.state, count: 1, watts: it.watts, ...splitOf(it), score: it.score });
     }
   }
-  return [...rows.values()].sort((a, b) => b.cost - a.cost || b.count - a.count);
+  return [...rows.values()].sort((a, b) => b.idle - a.idle || b.count - a.count);
 }
 
 /**
@@ -1121,7 +1132,8 @@ function SummaryLine({ items, dark, ai }: { items: readonly ViewItem[]; dark?: b
   const t = useT();
   const shown = items.filter((i) => i.kind !== "other" && i.state !== "off");
   const estimate = shown.some((i) => i.candidate);
-  const cost = shown.reduce((s, i) => s + i.costPerYear, 0);
+  const all = splitAll(shown.flatMap((i) => (i.priced ? [i.priced] : [])));
+  const d = roundSplit(all.cost.total, all.cost.idle);
   if (!shown.length) {
     return (
       <span className="flex min-w-0 items-baseline gap-2">
@@ -1133,11 +1145,11 @@ function SummaryLine({ items, dark, ai }: { items: readonly ViewItem[]; dark?: b
   return (
     <span className="flex min-w-0 items-baseline gap-2">
       <span className={`font-mono text-[1.05rem] font-semibold ${dark ? "text-white" : "text-fog"}`}>
-        ≈{fmtMoney(cost)}
+        ≈{fmtAmt(d.total, d.cents)}
         <span className={`text-[0.72rem] font-normal ${dark ? "text-white/60" : "text-dim"}`}>{t("cam.if.left.on")}</span>
       </span>
       <span className={`truncate text-[0.78rem] ${dark ? "text-white/70" : "text-mist"}`}>
-        {shown.length} {t("cam.in.view")} · {estimate ? (ai?.kind === "confirming" ? t("cam.confirming") : t("cam.estimate")) : t("cam.confirmed.short")}
+        {fmtAmt(d.used, d.cents)} used + {fmtAmt(d.idle, d.cents)} idle · {shown.length} {t("cam.in.view")} · {estimate ? (ai?.kind === "confirming" ? t("cam.confirming") : t("cam.estimate")) : t("cam.confirmed.short")}
       </span>
     </span>
   );
@@ -1169,6 +1181,7 @@ function LiveRead({
   geo,
   geoBusy,
   onLocate,
+  place,
   dark,
 }: {
   items: readonly ViewItem[];
@@ -1178,13 +1191,13 @@ function LiveRead({
   geo: GeoContext | null;
   geoBusy: boolean;
   onLocate: () => void;
+  place?: "home" | "school" | "office";
   dark?: boolean;
 }) {
   const shown = items.filter((i) => i.state !== "off");
   const rows = group(shown);
-  const cost = shown.reduce((s, i) => s + i.costPerYear, 0);
-  const typical = shown.reduce((s, i) => s + i.typicalCostPerYear, 0);
-  const watts = shown.reduce((s, i) => s + i.watts, 0);
+  const priced = shown.flatMap((i) => (i.priced ? [i.priced] : []));
+  const all = splitAll(priced);
   const confirmed = ai.kind === "confirmed";
   const estimate = shown.some((i) => i.candidate);
   const tr = useT();
@@ -1204,13 +1217,13 @@ function LiveRead({
       <div className={dark ? "" : "mt-3"}>
         {shown.length ? (
           <>
-            <div className={`font-mono text-[2rem] font-bold leading-none ${t.fog}`}>
-              ≈{fmtMoney(cost)}
-              <span className={`ml-1 text-sm font-normal ${t.dim}`}>{tr("cam.if.left.on")}</span>
-            </div>
-            <p className={`mt-1.5 text-[0.78rem] ${t.mist}`}>
-              <span className={`font-mono font-semibold ${t.fog}`}>≈{fmtMoney(typical)}/yr</span> {tr("cam.typical")} · {fmtWatts(watts)} {tr("cam.drawing")}
-            </p>
+            <SplitView
+              cost={roundSplit(all.cost.total, all.cost.idle)}
+              watts={all.watts}
+              range={idleRangeText(all.range.low, all.range.high)}
+              caption={idleCaptionAll(priced, place)}
+              dark={dark}
+            />
           </>
         ) : (
           <>
@@ -1250,8 +1263,10 @@ function LiveRead({
             </span>
             {r.kind !== "person" && (
               <span className="text-right">
-                <span className={`block font-mono text-[0.8rem] font-semibold ${t.fog}`}>{fmtMoney(r.cost)}</span>
-                <span className={`block font-mono text-[0.64rem] ${t.dim}`}>{fmtMoney(r.typical)} typ</span>
+                <span className={`block font-mono text-[0.8rem] font-semibold ${t.fog}`}>{fmtMoney(r.total)}</span>
+                <span className={`block font-mono text-[0.64rem] ${t.dim}`}>
+                  {fmtMoney(r.used)} used + {fmtMoney(r.idle)} idle
+                </span>
               </span>
             )}
           </motion.li>
@@ -1378,10 +1393,12 @@ function tagText(it: ViewItem, watts: number): { main: string; sub: string } {
   if (it.kind === "person") return { main: "in use", sub: "person" };
   if (it.state === "off") return { main: "off", sub: `${it.label} · 0 W` };
   // Meant to run all night: costed as usage, never shown as something to switch off.
-  if (it.needed) return { main: fmtWatts(watts), sub: `${it.label} · usage · ${fmtMoney(it.typicalCostPerYear)}/yr` };
+  const sp = splitOf(it);
+  const parts = `${it.candidate ? "~" : ""}${fmtMoney(sp.used)} used + ${fmtMoney(sp.idle)} idle`;
+  if (it.needed) return { main: fmtWatts(watts), sub: `${it.label} · ${fmtMoney(sp.total)}/yr · all used` };
   const state = it.why === "set by you" ? (it.state === "standby" ? " · standby" : "") + " · yours" : it.why === "screen dark" ? " · dark" : it.state === "standby" ? " · standby" : it.why === "screen lit" ? " · lit" : "";
-  // Typical use under the watts: the honest everyday figure. The card adds the left-on one.
-  return { main: fmtWatts(watts), sub: `${it.label}${state} · ${it.candidate ? "~" : ""}${fmtMoney(it.typicalCostPerYear)}/yr typ` };
+  // The year under the watts, as the card shows it: used + idle.
+  return { main: fmtWatts(watts), sub: `${it.label}${state} · ${parts}` };
 }
 
 interface TagCtx {

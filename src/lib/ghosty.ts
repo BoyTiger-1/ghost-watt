@@ -206,7 +206,7 @@ export function buildPrompt(ctx: GhostyContext, question?: string, language?: st
         ? "an office manager"
         : "a student, teacher or facilities manager at a school";
   return [
-    `You are Ghosty, the energy coach inside Ghost Watt, an app that finds electricity wasted after hours. You are talking to ${who}.`,
+    `You are Ghosty, the energy coach inside Ghost Watt, an app that finds electricity left idle after hours. You are talking to ${who}.`,
     "Below are the results of a scan. Every figure was computed by the app from published wattages, the local electricity price and the hours the place stands empty. Treat them as correct.",
     "Rules:",
     "- Use ONLY figures that appear in the data, or sums of them. Never estimate, invent or round up a number. If you have no figure, say so or leave savings null.",
@@ -302,10 +302,10 @@ export function rulesReport(ctx: GhostyContext, question?: string): GhostyReport
 
   if (!d.length || wasted <= 0) {
     return {
-      headline: "Nothing in this scan is wasting power after hours. That is exactly what you want to find.",
+      headline: "Nothing in this scan is sitting idle after hours. That is exactly what you want to find.",
       insights: [],
       checklist: ["Scan another room, ideally after everyone has gone home"],
-      answer: question ? "There is nothing wasted in this scan to work with yet. Scan a room that is still lit or running after hours." : null,
+      answer: question ? "There is nothing idle in this scan to work with yet. Scan a room that is still lit or running after hours." : null,
       source: "rules",
     };
   }
@@ -321,7 +321,7 @@ export function rulesReport(ctx: GhostyContext, question?: string): GhostyReport
 
   const headline =
     share >= 0.4
-      ? `${top.count > 1 ? `${top.count} ${top.label.toLowerCase()}s` : `The ${top.label.toLowerCase()}`} in ${top.room} ${top.count > 1 ? "are" : "is"} ${Math.round(share * 100)}% of the waste here: ${money(top.wastePerYear)} a year.`
+      ? `${top.count > 1 ? `${top.count} ${top.label.toLowerCase()}s` : `The ${top.label.toLowerCase()}`} in ${top.room} ${top.count > 1 ? "are" : "is"} ${Math.round(share * 100)}% of the idle cost here: ${money(top.wastePerYear)} a year.`
       : `${money(wasted)} a year goes to things left on after hours, and ${money(ctx.totals.recoverable)} of it can be won back.`;
 
   if (free.length) {
@@ -346,7 +346,7 @@ export function rulesReport(ctx: GhostyContext, question?: string): GhostyReport
     insights.push({
       kind: "watch",
       title: `Focus on the ${top.label.toLowerCase()}`,
-      detail: `One line, ${top.label} in ${top.room}, is ${Math.round(share * 100)}% of everything wasted. ${top.fix} saves ${money(top.savingsPerYear)} a year.`,
+      detail: `One line, ${top.label} in ${top.room}, is ${Math.round(share * 100)}% of everything idle. ${top.fix} saves ${money(top.savingsPerYear)} a year.`,
       savings: top.savingsPerYear,
     });
   }
@@ -407,7 +407,7 @@ function things(label: string, count: number): string {
 export function rulesAnswer(ctx: GhostyContext, question: string): string {
   const q = question.toLowerCase();
   const d = ctx.devices;
-  if (!d.length) return "There is nothing wasted in this scan to work with yet.";
+  if (!d.length) return "There is nothing idle in this scan to work with yet.";
   const top = d[0];
   const free = ctx.moves.filter((m) => m.cost === 0 && m.savingsPerYear > 0);
   const budget = /\$\s?(\d[\d,]*)/.exec(question);
@@ -436,7 +436,7 @@ export function rulesAnswer(ctx: GhostyContext, question: string): string {
       .filter((x) => !x.keepOn)
       .slice(0, 3)
       .map((x) => `switch off ${things(x.label, x.count)} in ${x.room}`);
-    if (!steps.length) return `Everything wasting power here needs to keep running (${things(top.label, top.count)}: ${top.keepOn}). The fix is ${top.fix.toLowerCase()}, not a switch.`;
+    if (!steps.length) return `Everything idling here needs to keep running (${things(top.label, top.count)}: ${top.keepOn}). The fix is ${top.fix.toLowerCase()}, not a switch.`;
     return `Tonight, for free: ${steps.join(", ")}.${free.length ? ` Free changes in the fix list add up to ${money(free.reduce((s, m) => s + m.savingsPerYear, 0))} a year.` : ""} Doing it every night saves up to ${money(ctx.totals.wasted)} a year.`;
   }
 
@@ -455,5 +455,5 @@ export function rulesAnswer(ctx: GhostyContext, question: string): string {
     ].join("\n");
   }
 
-  return `Start with ${things(top.label, top.count)} in ${top.room}: ${money(top.wastePerYear)} a year wasted, and ${top.fix.toLowerCase()} saves ${money(top.savingsPerYear)}.${free.length ? ` Free changes alone save ${money(free.reduce((s, m) => s + m.savingsPerYear, 0))} a year.` : ""} (Short answer from the numbers; Ghosty's AI isn't available on this site right now.)`;
+  return `Start with ${things(top.label, top.count)} in ${top.room}: ${money(top.wastePerYear)} a year idle, and ${top.fix.toLowerCase()} saves ${money(top.savingsPerYear)}.${free.length ? ` Free changes alone save ${money(free.reduce((s, m) => s + m.savingsPerYear, 0))} a year.` : ""} (Short answer from the numbers; Ghosty's AI isn't available on this site right now.)`;
 }

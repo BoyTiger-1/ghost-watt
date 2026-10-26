@@ -10,10 +10,9 @@ import { COCO_MAP } from "./live";
 import { estimateUnitWatts } from "./estimate";
 import { classifyScreen, regionSaturation, regionStats, ringStats, type LightBlob } from "./scene";
 import { iou } from "./boxes";
-import { typicalUse } from "./usage";
+import { scoreObservation } from "./energy";
 import type { CategorizedObservation } from "./parse";
-import type { AuditSettings, Box, DeviceState } from "./types";
-import { neededAllNight } from "./essentials";
+import type { AuditSettings, Box, DeviceState, Offender } from "./types";
 
 /** A detection in fractional coordinates. */
 export interface FracDetection {
@@ -35,12 +34,32 @@ export interface LiveItem {
   /** Why the state was judged so, e.g. "screen lit". */
   why?: string;
   watts: number;
-  /** If left on through every empty hour. */
+  /** Its idle cost: what it draws through the empty hours, in the state it is assumed to be in. */
   costPerYear: number;
   /** At typical use where it is. */
   typicalCostPerYear: number;
-  /** Why it is meant to run all night (a fridge, a router), when it is: then none of it is waste. */
+  /** Why it is meant to run all night (a fridge, a router), when it is: then none of it is idle. */
   needed?: string;
+  /**
+   * The scan report's own scoring of this one unit, when there is one. The split
+   * into used and idle, the range and the caption all come from it, so a live tag
+   * and a scanned photo of the same device show the same numbers.
+   */
+  priced?: Offender;
+}
+
+/**
+ * Price one unit the way the scan report does, by running it through the same
+ * scorer: same empty-hours rate, same time-of-use shaping, same heating and
+ * cooling factor, same assumption about what it does overnight.
+ */
+export function priceUnit(
+  obs: { categoryId: string | null; state: DeviceState | null; device: string; userWatts?: number; afterHours?: DeviceState; hoursPerYear?: number },
+  settings: AuditSettings,
+): Pick<LiveItem, "costPerYear" | "typicalCostPerYear" | "needed" | "priced"> {
+  const priced = obs.categoryId && obs.state ? scoreObservation({ device: obs.device, count: 1, state: obs.state, categoryId: obs.categoryId, userWatts: obs.userWatts, afterHours: obs.afterHours, hoursPerYear: obs.hoursPerYear }, settings, "live", 0) : null;
+  // Explicit keys, so re-pricing an item clears what the last pricing set.
+  return { costPerYear: priced?.costPerYear ?? 0, typicalCostPerYear: priced?.typicalCostPerYear ?? 0, needed: priced?.needed, priced: priced ?? undefined };
 }
 
 /** Screens are what brightness can judge; everything else is assumed on. */
@@ -96,14 +115,6 @@ export function readItems(
   luma?: FramePixels,
 ): LiveItem[] {
   const items: LiveItem[] = [];
-  const hours = settings.unoccupiedHoursPerYear;
-  const cost = (w: number) => (w / 1000) * hours * settings.ratePerKwh;
-  const ctx = settings.usageContext ?? "school";
-  const occupied = settings.occupiedHoursPerYear ?? Math.max(0, 8760 - hours);
-  const typical = (categoryId: string | null) => {
-    const cat = categoryId ? CATALOG_BY_ID[categoryId] : undefined;
-    return cat ? typicalUse(cat, estimateUnitWatts(cat, "on").mid, ctx, occupied).kwhPerYear * settings.ratePerKwh : 0;
-  };
 
   for (const [i, d] of dets.entries()) {
     const coco = COCO_MAP[d.cls];
@@ -128,8 +139,6 @@ export function readItems(
       const cat = c.categoryId ? CATALOG_BY_ID[c.categoryId] : undefined;
       if (cat) watts = estimateUnitWatts(cat, state).mid;
     }
-    // A fridge seen live is meant to run all night: none of its draw is waste.
-    const needed = c.categoryId ? neededAllNight(c.categoryId, c.label) : null;
     items.push({
       key: d.id !== undefined ? `t${d.id}` : `d${i}`,
       kind: c.kind,
@@ -140,9 +149,7 @@ export function readItems(
       state,
       why,
       watts,
-      costPerYear: needed ? 0 : cost(watts),
-      typicalCostPerYear: typical(c.categoryId),
-      ...(needed ? { needed } : {}),
+      ...priceUnit({ categoryId: c.categoryId, state, device: c.label }, settings),
     });
   }
 
@@ -165,8 +172,7 @@ export function readItems(
       state: "on",
       why: "fixture lit",
       watts,
-      costPerYear: cost(watts),
-      typicalCostPerYear: typical(categoryId),
+      ...priceUnit({ categoryId, state: "on", device: label }, settings),
     });
   }
   return items;
@@ -183,15 +189,10 @@ export function observationsToItems(
   prefix = "ai",
 ): LiveItem[] {
   const items: LiveItem[] = [];
-  const hours = settings.unoccupiedHoursPerYear;
-  const ctx = settings.usageContext ?? "school";
-  const occupied = settings.occupiedHoursPerYear ?? Math.max(0, 8760 - hours);
   observations.forEach((o, i) => {
     const cat = CATALOG_BY_ID[o.categoryId];
     if (!cat || !o.boxes?.length) return;
     const watts = o.userWatts ?? estimateUnitWatts(cat, o.state).mid;
-    const typical = typicalUse(cat, estimateUnitWatts(cat, "on").mid, ctx, occupied).kwhPerYear * settings.ratePerKwh;
-    const needed = neededAllNight(o.categoryId, o.device);
     o.boxes.forEach((box, j) => {
       items.push({
         key: `${prefix}${i}-${j}`,
@@ -203,9 +204,7 @@ export function observationsToItems(
         state: o.state,
         why: o.evidence,
         watts,
-        costPerYear: needed ? 0 : (watts / 1000) * hours * settings.ratePerKwh,
-        typicalCostPerYear: o.state === "off" ? 0 : typical,
-        ...(needed ? { needed } : {}),
+        ...priceUnit({ categoryId: o.categoryId, state: o.state, device: o.device, userWatts: o.userWatts }, settings),
       });
     });
   });

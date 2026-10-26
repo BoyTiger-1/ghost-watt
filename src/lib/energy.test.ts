@@ -15,9 +15,17 @@ import {
   concentration,
   effectiveWatts,
   effectiveWattsRange,
+  idleCaption,
+  idleRange,
   loadMix,
   rankObservations,
   scoreObservation,
+  idleRangeLine,
+  roundSplit,
+  splitCost,
+  splitDollars,
+  splitLine,
+  splitWatts,
 } from "./energy";
 import { CATALOG_BY_ID } from "./devices";
 import type { AuditSettings, DeviceCategory } from "./types";
@@ -433,5 +441,109 @@ describe("after hours vs typical use", () => {
     const light = scoreObservation({ device: "lamp", count: 2, state: "on", categoryId: "downlight" }, { ...base, roomType: "kitchen" }, "r", 0)!;
     expect(light.typicalHoursPerDay).toBe(2.3);
     expect(light.usageSource).toBe("pnnl-22182");
+  });
+});
+
+describe("one total, two parts", () => {
+  // A 30 W laptop charger, 3,456 empty hours at $0.119, in a living room, photographed at night.
+  //   idle  = 0.030 kW x 3,456 h x $0.119                       = $12.34
+  //   total = typical use ($5.13: in use, then standby) + idle above standby ($12.34 - $0.82) = $16.64
+  //   used  = total - idle                                      = $4.30
+  const home: AuditSettings = { ratePerKwh: 0.119, co2PerKwh: 0.4, unoccupiedHoursPerYear: 3456, usageContext: "home", roomType: "living_room", capturedAfterHours: true };
+  const laptop = () => scoreObservation({ device: "laptop", count: 1, state: "on", categoryId: "laptop" }, home, "Living room", 0)!;
+
+  it("splits a laptop into $4.30 used and $12.34 idle of $16.64", () => {
+    const s = splitCost(laptop());
+    expect(s.idle).toBeCloseTo(12.34, 2);
+    expect(s.total).toBeCloseTo(16.64, 2);
+    expect(s.used).toBeCloseTo(4.3, 2);
+  });
+
+  it("never changes what the engine produced", () => {
+    const o = laptop();
+    expect(splitCost(o).idle).toBe(o.costPerYear);
+    expect(splitCost(o).total).toBe(o.annualCostPerYear);
+  });
+
+  it("adds up to the cent for every device, and in whole dollars on screen", () => {
+    for (const cat of ["laptop", "monitor", "projector", "fridge", "ceiling_light", "copier"]) {
+      const o = scoreObservation({ device: cat, count: 3, state: "on", categoryId: cat }, { ...home, capturedAfterHours: false }, "Room", 0)!;
+      const s = splitCost(o);
+      expect(s.used + s.idle).toBeCloseTo(s.total, 9);
+      const d = splitDollars(o);
+      expect(Math.round((d.used + d.idle) * 100)).toBe(Math.round(d.total * 100));
+      expect(d.used).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("prints figures that add up, in cents under $100 and whole dollars above", () => {
+    expect(roundSplit(16.64, 12.34)).toEqual({ total: 16.64, used: 4.3, idle: 12.34, cents: true });
+    // $166.40 and $123.40 print as $166 and $123; used is what is left, $43, not 166.4 - 123.4 rounded.
+    expect(roundSplit(166.4, 123.6)).toEqual({ total: 166, used: 42, idle: 124, cents: false });
+    expect(splitLine(laptop())).toBe("$16.64 a year = $4.30 used + $12.34 idle");
+  });
+
+  it("calls a fridge all used and none idle", () => {
+    const o = scoreObservation({ device: "fridge", count: 1, state: "on", categoryId: "fridge" }, home, "Kitchen", 0)!;
+    const s = splitCost(o);
+    expect(s.idle).toBe(0);
+    expect(s.used).toBeCloseTo(s.total, 9);
+    expect(idleRange(o)).toEqual({ low: 0, high: 0 });
+  });
+});
+
+describe("idleRange", () => {
+  const school: AuditSettings = { ratePerKwh: 0.2, co2PerKwh: 0.4, unoccupiedHoursPerYear: 5000, capturedAfterHours: false };
+
+  it("runs from sleeping to fully on, with the engine's figure in between", () => {
+    // Monitor seen in the day, assumed asleep: idle = 2 W standby... the engine's figure is the low end.
+    const o = scoreObservation({ device: "monitor", count: 2, state: "on", categoryId: "monitor" }, school, "Lab", 0)!;
+    const r = idleRange(o);
+    // high = 30 W x 2 x 5,000 h x $0.20 = $60
+    expect(r.high).toBeCloseTo(60, 6);
+    expect(r.low).toBeCloseTo(o.standbyCostPerYear!, 9);
+    expect(r.low).toBeLessThanOrEqual(o.costPerYear);
+    expect(o.costPerYear).toBeLessThanOrEqual(r.high);
+  });
+
+  it("words the range, and stays quiet when there is none", () => {
+    const o = scoreObservation({ device: "monitor", count: 2, state: "on", categoryId: "monitor" }, school, "Lab", 0)!;
+    expect(idleRangeLine(o)).toMatch(/^idle could be \$\d+ to \$60 depending on what it does when nobody is there$/);
+    const fridge = scoreObservation({ device: "fridge", count: 1, state: "on", categoryId: "fridge" }, school, "Lab", 1)!;
+    expect(idleRangeLine(fridge)).toBeNull();
+  });
+
+  it("collapses to one number when the device was photographed on after hours", () => {
+    const o = scoreObservation({ device: "monitor", count: 2, state: "on", categoryId: "monitor" }, { ...school, capturedAfterHours: true }, "Lab", 0)!;
+    expect(idleRange(o).high).toBeCloseTo(o.costPerYear, 9);
+  });
+
+  it("clamps so a user's own wattage can never fall outside it", () => {
+    const o = scoreObservation({ device: "monitor", count: 1, state: "on", categoryId: "monitor", userWatts: 90 }, { ...school, capturedAfterHours: true }, "Lab", 0)!;
+    const r = idleRange(o);
+    expect(r.low).toBeLessThanOrEqual(o.costPerYear);
+    expect(r.high).toBeGreaterThanOrEqual(o.costPerYear);
+  });
+});
+
+describe("splitWatts and idleCaption", () => {
+  const s: AuditSettings = { ratePerKwh: 0.2, co2PerKwh: 0.4, unoccupiedHoursPerYear: 5000, capturedAfterHours: false };
+
+  it("reports the draw while in use, while idle and around the clock", () => {
+    const o = scoreObservation({ device: "monitor", count: 2, state: "on", categoryId: "monitor" }, s, "Lab", 0)!;
+    const w = splitWatts(o);
+    expect(w.used).toBe(60); // 30 W x 2
+    expect(w.idle).toBe(o.totalWatts);
+    expect(w.total).toBeGreaterThan(w.idle);
+    expect(w.total).toBeLessThan(w.used);
+  });
+
+  it("says what the idle figure assumes", () => {
+    const day = scoreObservation({ device: "monitor", count: 1, state: "on", categoryId: "monitor" }, s, "Lab", 0)!;
+    expect(idleCaption(day, "school")).toBe("assumes it sleeps overnight · school schedule, 5,000 empty hours/yr");
+    const night = scoreObservation({ device: "monitor", count: 1, state: "on", categoryId: "monitor" }, { ...s, capturedAfterHours: true }, "Lab", 0)!;
+    expect(idleCaption(night)).toBe("as photographed · typical schedule, 5,000 empty hours/yr");
+    const set = scoreObservation({ device: "monitor", count: 1, state: "on", categoryId: "monitor", afterHours: "on", hoursPerYear: 2000 }, s, "Lab", 0)!;
+    expect(idleCaption(set)).toBe("set by you · your hours");
   });
 });

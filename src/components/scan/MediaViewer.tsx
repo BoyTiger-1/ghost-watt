@@ -205,7 +205,7 @@ export function MediaViewer({
                 key={x.id}
                 onClick={() => onSelect(x.id)}
                 aria-pressed={active}
-                aria-label={`${x.name}${busy ? ", still reading" : x.status === "error" ? ", couldn't be read" : `, ${fmtMoney(cost)} a year wasted`}`}
+                aria-label={`${x.name}${busy ? ", still reading" : x.status === "error" ? ", couldn't be read" : `, ${fmtMoney(cost)} a year idle`}`}
                 className={`relative h-16 w-20 shrink-0 overflow-hidden rounded-xl bg-surface2 ring-2 transition ${active ? "ring-fog" : "ring-transparent hover:ring-line2"}`}
               >
                 {thumb ? (

@@ -1,14 +1,14 @@
 "use client";
 
-// The short version: what it all costs, how much of that is waste, what you
-// could save and how, in sentences a person can read out loud. Every number
-// that needs a unit explains it on tap.
+// The short version: what it all costs as one total in two parts (used + idle),
+// the watts behind each, what you could save and how, in sentences a person can
+// read out loud. Every number that needs a unit explains it on tap.
 
 import { motion } from "framer-motion";
 import { CountUp } from "../CountUp";
 import { DeviceGlyph } from "../DeviceGlyph";
-import { fmtMoney, fmtMoneyFull } from "@/lib/energy";
-import { bestEquivalences, fmtEquiv, spendEquivalences } from "@/lib/equivalence";
+import { fmtAmt, fmtMoney, fmtMoneyFull, fmtWatts, roundSplit, type WattSplit } from "@/lib/energy";
+import { fmtEquiv, spendEquivalences } from "@/lib/equivalence";
 import type { ActionItem } from "@/lib/actions";
 import type { CostRange, RateQuality } from "@/lib/estimate";
 import type { UsageContext } from "@/lib/usage";
@@ -26,11 +26,13 @@ export function Summary({
   annual,
   range,
   wasted,
-  needed,
+  idleLow,
+  idleHigh,
+  watts,
+  caption,
   recoverable,
   actions,
   top,
-  co2Kg,
   place,
   photos,
   working,
@@ -43,15 +45,18 @@ export function Summary({
   /** What everything seen costs to run for a year. */
   annual: number;
   range: CostRange;
-  /** The part of that spent while the place is empty. */
+  /** The idle part: spent while the place is empty. */
   wasted: number;
-  /** The part spent while it is in use. */
-  needed: number;
+  /** What the idle part could be if everything slept, and if everything stayed on. */
+  idleLow: number;
+  idleHigh: number;
+  /** The draw behind each part. */
+  watts: WattSplit;
+  /** What the idle figure assumes, in a few words. */
+  caption: string;
   recoverable: number;
   actions: ActionItem[];
   top: Offender | null;
-  /** Carbon from the wasted part, kg a year. */
-  co2Kg: number;
   place: UsageContext;
   photos: number;
   working: boolean;
@@ -61,13 +66,15 @@ export function Summary({
   onFixes: () => void;
   onAccuracy: () => void;
 }) {
-  const wasteShare = annual > 0 ? Math.min(1, wasted / annual) : 0;
+  const d = roundSplit(annual, wasted);
+  const money = (n: number) => fmtAmt(n, d.cents);
+  const idleShare = d.total > 0 ? Math.min(1, d.idle / d.total) : 0;
   const free = actions.filter((a) => a.cost === 0);
   const freeSavings = free.reduce((s, a) => s + a.annualSavings, 0);
-  const miles = bestEquivalences(co2Kg, 6).find((e) => e.id === "miles");
   const spend = place === "home" ? homeSpend(wasted) : spendEquivalences(wasted)[0];
   const sure = range.spread < 0.2 ? "Quite sure" : range.spread < 0.4 ? "Fairly sure" : "A rough guess";
   const empty = place === "home" ? "while you're out or asleep" : "while the room is empty";
+  const lowHigh = [Math.round(idleLow), Math.round(idleHigh)];
 
   if (annual <= 0) {
     return (
@@ -90,11 +97,11 @@ export function Summary({
       />
       <Eyebrow photos={photos} working={working} />
 
-      {/* the year */}
+      {/* the year, split: one total, two parts, the watts behind each */}
       <p className="mt-3 text-[0.95rem] text-mist">Running everything we spotted costs about</p>
       <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2">
         <span className="font-mono text-[2.4rem] font-bold leading-none tracking-tight text-fog sm:text-[2.8rem]">
-          <CountUp value={annual} format={fmtMoneyFull} />
+          <CountUp value={annual} format={(n) => fmtAmt(roundSplit(n, 0).total, d.cents)} />
         </span>
         <span className="text-[1rem] text-mist">a year</span>
       </div>
@@ -105,49 +112,50 @@ export function Summary({
         </span>
       </p>
 
-      {/* needed vs wasted */}
-      <div className="mt-5">
-        <div className="flex h-3.5 overflow-hidden rounded-full bg-surface2" role="img" aria-label={`${Math.round(wasteShare * 100)}% of it is wasted ${empty}`}>
-          <motion.div className="h-full bg-cyan/70" initial={{ width: 0 }} animate={{ width: `${(1 - wasteShare) * 100}%` }} transition={{ duration: 0.7, ease: "easeOut" }} />
-          <motion.div className="h-full bg-ember" initial={{ width: 0 }} animate={{ width: `${wasteShare * 100}%` }} transition={{ duration: 0.7, ease: "easeOut", delay: 0.1 }} />
+      <div className="mt-4">
+        <div className="flex h-3.5 overflow-hidden rounded-full bg-surface2" role="img" aria-label={`${Math.round(idleShare * 100)}% of it is idle ${empty}`}>
+          <motion.div className="h-full bg-cyan/70" initial={{ width: 0 }} animate={{ width: `${(1 - idleShare) * 100}%` }} transition={{ duration: 0.7, ease: "easeOut" }} />
+          <motion.div className="h-full bg-ember" initial={{ width: 0 }} animate={{ width: `${idleShare * 100}%` }} transition={{ duration: 0.7, ease: "easeOut", delay: 0.1 }} />
         </div>
         <div className="mt-2 grid grid-cols-2 gap-3 text-[0.82rem]">
           <div>
             <div className="flex items-center gap-1.5 text-mist">
               <span className="h-2 w-2 rounded-full bg-cyan/70" aria-hidden />
-              <Term k="needed">Needed</Term>
+              <Term k="used">Used</Term>
             </div>
-            <div className="mt-0.5 font-mono text-[1.05rem] font-semibold text-fog">{fmtMoneyFull(needed)}</div>
-            <div className="text-[0.74rem] text-dim">while people use it</div>
+            <div className="mt-0.5 font-mono text-[1.05rem] font-semibold text-fog">{money(d.used)}</div>
+            <div className="font-mono text-[0.72rem] text-dim">{fmtWatts(watts.used)} in use</div>
           </div>
           <div>
             <div className="flex items-center gap-1.5 text-mist">
               <span className="h-2 w-2 rounded-full bg-ember" aria-hidden />
-              <Term k="wasted">Wasted</Term>
+              <Term k="idle">Idle</Term>
             </div>
-            <div className="mt-0.5 font-mono text-[1.05rem] font-semibold text-ember">{fmtMoneyFull(wasted)}</div>
-            <div className="text-[0.74rem] text-dim">{empty}</div>
+            <div className="mt-0.5 font-mono text-[1.05rem] font-semibold text-ember">{money(d.idle)}</div>
+            <div className="font-mono text-[0.72rem] text-dim">{fmtWatts(watts.idle)} when empty</div>
           </div>
         </div>
+        <p className="mt-2 text-[0.76rem] leading-snug text-dim">
+          {lowHigh[0] !== lowHigh[1] && <span className="text-mist">Idle could be {fmtMoneyFull(lowHigh[0])} to {fmtMoneyFull(lowHigh[1])} depending on what it does when nobody is there. </span>}
+          {caption}. Whole year averages {fmtWatts(watts.total)}.
+        </p>
       </div>
 
       {/* what you can do about it */}
-      <div className="mt-5 grid grid-cols-2 gap-2.5">
-        <button onClick={onFixes} className="rounded-2xl bg-lime/[0.09] px-3.5 py-3 text-left transition-colors hover:bg-lime/[0.14]">
-          <div className="text-[0.74rem] font-medium text-lime">You could save</div>
-          <div className="mt-0.5 font-mono text-[1.3rem] font-bold text-fog">{fmtMoneyFull(recoverable)}</div>
-          <div className="text-[0.74rem] text-mist">a year · see how →</div>
-        </button>
-        <button onClick={onFixes} className="rounded-2xl bg-surface2 px-3.5 py-3 text-left transition-colors hover:bg-surface2/70">
-          <div className="text-[0.74rem] font-medium text-mist">Free to fix</div>
-          <div className="mt-0.5 font-mono text-[1.3rem] font-bold text-fog">
-            {free.length} <span className="text-[0.85rem] font-normal text-mist">of {actions.length}</span>
-          </div>
-          <div className="text-[0.74rem] text-mist">{free.length === 0 ? "each fix costs something" : freeSavings > 0 ? `worth ${fmtMoney(freeSavings)}/yr` : "no purchase needed"}</div>
-        </button>
-      </div>
+      <button onClick={onFixes} className="mt-4 flex items-center justify-between gap-3 rounded-2xl bg-lime/[0.09] px-3.5 py-3 text-left transition-colors hover:bg-lime/[0.14]">
+        <span>
+          <span className="block text-[0.74rem] font-medium text-lime">You could save</span>
+          <span className="block font-mono text-[1.3rem] font-bold text-fog">
+            {fmtMoneyFull(recoverable)} <span className="text-[0.8rem] font-normal text-mist">a year</span>
+          </span>
+        </span>
+        <span className="text-right text-[0.76rem] text-mist">
+          {free.length} of {actions.length} fixes free{freeSavings > 0 ? ` · ${fmtMoney(freeSavings)}/yr` : ""}
+          <span className="block text-lime">see how →</span>
+        </span>
+      </button>
 
-      {/* the biggest one, and what the waste is like */}
+      {/* the biggest one */}
       <ul className="mb-4 mt-4 space-y-2.5 border-t border-line pt-4 text-[0.86rem] leading-snug text-mist">
         {top && top.costPerYear > 0 && (
           <li className="flex items-start gap-2.5">
@@ -159,7 +167,7 @@ export function Summary({
                 {top.label}
                 {top.count > 1 ? ` (${top.count})` : ""}
               </button>{" "}
-              wastes the most: {fmtMoneyFull(top.costPerYear)} a year.
+              idles the most: {fmtMoneyFull(top.costPerYear)} a year.
             </span>
           </li>
         )}
@@ -167,19 +175,7 @@ export function Summary({
           <li className="flex items-start gap-2.5">
             <Dot>$</Dot>
             <span>
-              The waste alone could pay for <strong className="font-semibold text-fog">{fmtEquiv(spend.value)} {spend.label}</strong> every year.
-            </span>
-          </li>
-        )}
-        {miles && (
-          <li className="flex items-start gap-2.5">
-            <Dot>
-              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor" aria-hidden>
-                <path d="M3 13l1.6-4.2A2 2 0 016.5 7.5h11a2 2 0 011.9 1.3L21 13v5h-2.5v-1.5h-13V18H3v-5z" />
-              </svg>
-            </Dot>
-            <span>
-              Its <Term k="carbon">pollution</Term> matches driving a car <strong className="font-semibold text-fog">{fmtEquiv(miles.value)} miles</strong>.
+              The idle cost alone could pay for <strong className="font-semibold text-fog">{fmtEquiv(spend.value)} {spend.label}</strong> every year.
             </span>
           </li>
         )}
@@ -215,7 +211,7 @@ function Dot({ children }: { children: React.ReactNode }) {
   return <span className="mt-px grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-surface2 text-[0.8rem] font-semibold text-mist">{children}</span>;
 }
 
-/** Household things a year of waste would buy. */
+/** Household things a year of idle cost would buy. */
 function homeSpend(dollars: number) {
   return [
     { value: dollars / 16, label: "months of a streaming subscription" },

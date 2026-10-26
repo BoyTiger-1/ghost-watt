@@ -72,7 +72,7 @@ export const PlaceEditor = forwardRef<HTMLInputElement, { building: Building }>(
         />
       </Section>
 
-      <Section title="When people are here" hint="Anything left on outside these hours counts as wasted.">
+      <Section title="When people are here" hint="Anything left on outside these hours counts as idle.">
         <ScheduleEditor schedule={building.schedule} onChange={(schedule) => set({ schedule })} />
       </Section>
 

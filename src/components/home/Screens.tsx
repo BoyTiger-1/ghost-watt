@@ -100,7 +100,7 @@ export function ReportScreen() {
                   <path d="M0 62 L200 62" stroke="#2e5b45" strokeWidth="1.2" strokeDasharray="3 3" />
                 </svg>
                 <div className="mt-[0.4em] flex justify-between text-[0.66em] text-[#8b867c]">
-                  <span>wasted</span>
+                  <span>idle</span>
                   <span className="text-[#2e5b45]">after fixes</span>
                 </div>
               </div>

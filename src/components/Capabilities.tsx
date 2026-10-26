@@ -55,7 +55,7 @@ const CAPS = [
   {
     href: "/places",
     title: "Prove it worked",
-    body: "Tick off fixes as you do them, scan the room again, and see whether the waste really went away.",
+    body: "Tick off fixes as you do them, scan the room again, and see whether the idle cost really went away.",
     stat: "expected vs verified",
   },
   {

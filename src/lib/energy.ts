@@ -468,6 +468,165 @@ export function concentration(offenders: Offender[], topN = 3): number {
 // quarter of an hour. They do not, and a demand charge computed that way can
 // overstate itself threefold.
 
+// ---- one total, two parts ------------------------------------------------
+
+/** A device's year as one total that is exactly the sum of two parts. */
+export interface CostSplit {
+  /** Everything it costs to run for a year. */
+  total: number;
+  /** The part spent while people use it. */
+  used: number;
+  /** The part spent while the place is empty: the part a fix removes. */
+  idle: number;
+}
+
+/**
+ * The year's cost split into what is used and what sits idle, so that
+ * used + idle === total. Nothing is recomputed: idle is the engine's costPerYear
+ * and total is its annualCostPerYear, so every surface that shows the split agrees
+ * with the ranking and the payback.
+ */
+export function splitCost(o: Offender): CostSplit {
+  const idle = o.costPerYear;
+  // A device that idles more than its own total is a rounding corner; the total
+  // follows so the two parts still add up.
+  const total = Math.max(o.annualCostPerYear ?? (o.typicalCostPerYear ?? 0) + o.costPerYear, idle);
+  return { total, used: Math.max(0, total - idle), idle };
+}
+
+/**
+ * A total and its idle part, rounded for a screen so the printed figures add up:
+ * each of total and idle is rounded once, and "used" is what is left. Cents while
+ * the total is under $100, where a dollar of rounding is visible; whole dollars above.
+ */
+export function roundSplit(total: number, idle: number): CostSplit & { cents: boolean } {
+  const cents = total < 100;
+  const k = cents ? 100 : 1;
+  const t = Math.round(Math.max(total, idle) * k);
+  const i = Math.min(t, Math.round(idle * k));
+  return { total: t / k, used: (t - i) / k, idle: i / k, cents };
+}
+
+/** One device's split, rounded for a screen. */
+export function splitDollars(o: Offender): CostSplit & { cents: boolean } {
+  const s = splitCost(o);
+  return roundSplit(s.total, s.idle);
+}
+
+/** A dollar amount as printed beside the others in a split. */
+export function fmtAmt(n: number, cents: boolean): string {
+  return cents ? `$${n.toFixed(2)}` : fmtMoneyFull(n);
+}
+
+/** "$17 a year = $4 used + $12 idle": the one line every surface uses. */
+export function splitLine(o: Offender): string {
+  const d = splitDollars(o);
+  return `${fmtAmt(d.total, d.cents)} a year = ${fmtAmt(d.used, d.cents)} used + ${fmtAmt(d.idle, d.cents)} idle`;
+}
+
+/** The same line for an aggregate, where only the total and idle are known. */
+export function splitLineOf(total: number, idle: number): string {
+  const d = roundSplit(total, idle);
+  return `${fmtAmt(d.total, d.cents)} a year = ${fmtAmt(d.used, d.cents)} used + ${fmtAmt(d.idle, d.cents)} idle`;
+}
+
+/**
+ * What the idle figure could be, in words; null when there is nothing to say
+ * (it idles at nothing, or the range is too narrow to show).
+ */
+export function idleRangeLine(o: Offender): string | null {
+  const { low, high } = idleRange(o);
+  return idleRangeText(low, high);
+}
+
+/** The same sentence for any low and high, such as a sum over a whole view. */
+export function idleRangeText(low: number, high: number): string | null {
+  // An estimate between two guesses: whole dollars, unless it is all small change.
+  const cents = high < 10;
+  const [l, h] = [fmtAmt(cents ? low : Math.round(low), cents), fmtAmt(cents ? high : Math.round(high), cents)];
+  return l === h ? null : `idle could be ${l} to ${h} depending on what it does when nobody is there`;
+}
+
+/**
+ * How much the idle figure could move, depending on what the device does when
+ * nobody is there. Low: it sleeps. High: it stays fully on. The engine's own idle
+ * figure always sits inside the range.
+ */
+export function idleRange(o: Offender): { low: number; high: number } {
+  const idle = o.costPerYear;
+  if (o.needed) return { low: 0, high: 0 };
+  const low = o.standbyCostPerYear ?? 0;
+  const high =
+    (((o.activeWattsPerUnit ?? 0) * o.count) / 1000) * (o.hoursPerYear ?? 0) * (o.wasteRatePerKwh ?? 0) * (o.hvacFactor ?? 1);
+  return { low: Math.min(low, idle), high: Math.max(high, idle) };
+}
+
+/** The draw behind each part, in watts. */
+export interface WattSplit {
+  /** Around the clock, averaged over all 8,760 hours. */
+  total: number;
+  /** While it is in use. */
+  used: number;
+  /** While nobody is there, in the state it is assumed to be in. */
+  idle: number;
+}
+
+export function splitWatts(o: Offender): WattSplit {
+  const idle = o.totalWatts;
+  const used = (o.activeWattsPerUnit ?? o.perUnitWatts) * o.count;
+  const rate = (o.wasteRatePerKwh ?? 0) * (o.hvacFactor ?? 1);
+  // Idle energy above the standby it would draw anyway, which typical use already counts.
+  const standbyKwh = rate > 0 ? (o.standbyCostPerYear ?? 0) / rate : 0;
+  const extra = Math.max(0, o.kwhPerYear - standbyKwh);
+  const typical = o.typicalKwhPerYear ?? 0;
+  const cat = CATALOG_BY_ID[o.categoryId];
+  // Something that cycles all year is already counted in full; the larger of the two stands.
+  const kwh = cat?.thermostatic ? Math.max(typical, o.kwhPerYear) : typical + extra;
+  return { total: (kwh * 1000) / 8760, used, idle };
+}
+
+/**
+ * Why the idle figure is what it is, in a few words, from fields the engine already
+ * sets. The schedule is named by the kind of place (home, school, office) when the
+ * caller knows it.
+ */
+export function idleCaption(o: Offender, place?: "home" | "school" | "office"): string {
+  const how =
+    o.afterHoursBasis === "assumed-standby" ? "assumes it sleeps overnight" : o.afterHoursBasis === "user" ? "set by you" : "as photographed";
+  const empty = Math.round(o.hoursPerYear ?? 0).toLocaleString("en-US");
+  const when = o.hoursKnown ? "your hours" : `${place ?? "typical"} schedule, ${empty} empty hours/yr`;
+  return `${how} · ${when}`;
+}
+
+/** The split, the range and the draw for a set of devices: what a summary shows. */
+export function splitAll(offenders: readonly Offender[]): { cost: CostSplit; range: { low: number; high: number }; watts: WattSplit } {
+  const acc = { cost: { total: 0, used: 0, idle: 0 }, range: { low: 0, high: 0 }, watts: { total: 0, used: 0, idle: 0 } };
+  for (const o of offenders) {
+    const c = splitCost(o);
+    const r = idleRange(o);
+    const w = splitWatts(o);
+    acc.cost.total += c.total;
+    acc.cost.used += c.used;
+    acc.cost.idle += c.idle;
+    acc.range.low += r.low;
+    acc.range.high += r.high;
+    acc.watts.total += w.total;
+    acc.watts.used += w.used;
+    acc.watts.idle += w.idle;
+  }
+  return acc;
+}
+
+/** What a set of idle figures assumes, in a few words. */
+export function idleCaptionAll(offenders: readonly Offender[], place?: "home" | "school" | "office"): string {
+  const idling = offenders.filter((o) => !o.needed);
+  const assumed = idling.some((o) => o.afterHoursBasis === "assumed-standby");
+  const how = assumed ? "assumes daytime devices sleep overnight" : idling.length && idling.every((o) => o.afterHoursBasis === "user") ? "set by you" : "as photographed";
+  const open = idling.find((o) => !o.hoursKnown);
+  const when = open ? `${place ?? "typical"} schedule, ${Math.round(open.hoursPerYear ?? 0).toLocaleString("en-US")} empty hours/yr` : "your hours";
+  return `${how} · ${when}`;
+}
+
 // ---- formatting helpers -------------------------------------------------
 
 export function fmtMoney(n: number): string {

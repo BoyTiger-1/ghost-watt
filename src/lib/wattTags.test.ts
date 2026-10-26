@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyFixes, easeAll, hitTest, meterReading, placeTag, relabel, steadyStates, unstack, wattBand, wattsInView } from "./wattTags";
 import { CATALOG_BY_ID } from "./devices";
+import { scoreObservation, splitCost } from "./energy";
 import type { LiveItem } from "./ondevice";
 import type { AuditSettings } from "./types";
 
@@ -144,5 +145,42 @@ describe("needed devices on the live camera", () => {
     const m = relabel(item(), { categoryId: "monitor", state: "on" }, settings);
     expect(m.needed).toBeUndefined();
     expect(m.costPerYear).toBeGreaterThan(0);
+  });
+});
+
+describe("a live tag and the scan report", () => {
+  // A time-of-use building in a hot climate: every input the old live pricing ignored.
+  const shaped: AuditSettings = {
+    ratePerKwh: 0.15,
+    co2PerKwh: 0.4,
+    unoccupiedHoursPerYear: 6800,
+    unoccupiedRatePerKwh: 0.09,
+    occupiedRatePerKwh: 0.22,
+    usageContext: "school",
+    capturedAfterHours: false,
+  };
+
+  it("show the same idle and total for the same device", () => {
+    for (const categoryId of ["monitor", "projector", "laptop", "ceiling_light", "fridge"]) {
+      const tag = relabel(item(), { categoryId, state: "on" }, shaped);
+      const scan = scoreObservation({ device: CATALOG_BY_ID[categoryId].label, count: 1, state: "on", categoryId }, shaped, "Room", 0)!;
+      expect(tag.costPerYear).toBe(scan.costPerYear);
+      expect(tag.typicalCostPerYear).toBe(scan.typicalCostPerYear);
+      expect(splitCost(tag.priced!)).toEqual(splitCost(scan));
+    }
+  });
+
+  it("price at the empty-hours rate, not the flat one", () => {
+    const tag = relabel(item(), { categoryId: "monitor", state: "on" }, { ...shaped, capturedAfterHours: true });
+    expect(tag.costPerYear).toBeCloseTo((tag.watts / 1000) * 6800 * 0.09, 6);
+  });
+
+  it("drop a stale 'needed' when a fridge is corrected to something else", () => {
+    const fridge = relabel(item(), { categoryId: "fridge", state: "on" }, shaped);
+    expect(fridge.needed).toBeTruthy();
+    expect(fridge.costPerYear).toBe(0);
+    const monitor = relabel(fridge, { categoryId: "monitor", state: "on" }, shaped);
+    expect(monitor.needed).toBeUndefined();
+    expect(monitor.costPerYear).toBeGreaterThan(0);
   });
 });

@@ -217,13 +217,13 @@ function Corners({ color, thick }: { color: string; thick: boolean }) {
 function tag(m: Mark) {
   if (m.unverified) return "not sure";
   if (m.usage !== undefined) return `${fmtMoney(m.usage)}/yr usage`;
-  return m.cost === null ? "off" : m.cost > 0 ? `${fmtMoney(m.cost)}/yr wasted` : "no waste";
+  return m.cost === null ? "off" : m.cost > 0 ? `${fmtMoney(m.cost)}/yr idle` : "no idle cost";
 }
 
 function costWords(m: Mark) {
   if (m.unverified) return `${m.count} the AI wasn't sure about, not counted`;
-  if (m.usage !== undefined) return `${fmtMoney(m.usage)} a year to run, meant to stay on, so usage, not waste`;
-  return m.cost === null ? `${m.count} seen switched off, costing nothing` : `${fmtMoney(m.cost)} a year wasted for all ${m.count}`;
+  if (m.usage !== undefined) return `${fmtMoney(m.usage)} a year to run, meant to stay on, so usage, not idle`;
+  return m.cost === null ? `${m.count} seen switched off, costing nothing` : `${fmtMoney(m.cost)} a year idle for all ${m.count}`;
 }
 
 function area(b: Box) {
@@ -273,7 +273,7 @@ export async function annotatedDataUrl(photo: DetectionPhoto, labels = true): Pr
 
   // Footer stamp: what this is and where the numbers came from.
   const total = photo.offenders.reduce((s, o) => s + (o.unverified ? 0 : o.costPerYear), 0);
-  const stamp = `Ghost Watt · ${photo.name} · ${fmtMoney(total)} a year wasted while empty`;
+  const stamp = `Ghost Watt · ${photo.name} · ${fmtMoney(total)} a year idle while empty`;
   const sh = font + 12;
   ctx.fillStyle = "rgba(0,0,0,0.72)";
   ctx.fillRect(0, H - sh, W, sh);

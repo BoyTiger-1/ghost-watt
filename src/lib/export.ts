@@ -7,7 +7,15 @@
 
 import type { Offender, AuditSettings } from "./types";
 import type { Store } from "./storage";
-import { fmtPayback } from "./energy";
+import { fmtPayback, idleCaption, idleRange, splitCost, splitWatts } from "./energy";
+
+/** Cents, so total = used + idle holds in the spreadsheet too. */
+function cents(o: Offender) {
+  const c = splitCost(o);
+  const t = Math.round(c.total * 100);
+  const i = Math.min(t, Math.round(c.idle * 100));
+  return { total: t / 100, used: (t - i) / 100, idle: i / 100 };
+}
 
 function escapeCell(value: string | number): string {
   const s = String(value);
@@ -38,9 +46,15 @@ export function offendersToCsv(
       "Count",
       "State",
       "Watts each",
-      "Watts total",
-      "kWh/yr",
-      "Cost/yr ($)",
+      "Watts in use (all units)",
+      "Watts idle (all units)",
+      "kWh idle/yr",
+      "Total/yr ($)",
+      "Used/yr ($)",
+      "Idle/yr ($)",
+      "Idle if it sleeps ($)",
+      "Idle if it stays on ($)",
+      "Idle assumes",
       "CO2/yr (kg)",
       "Confidence",
       "Recommended fix",
@@ -57,9 +71,15 @@ export function offendersToCsv(
     o.count,
     o.state,
     Math.round(o.perUnitWatts * 10) / 10,
+    Math.round(splitWatts(o).used),
     Math.round(o.totalWatts),
     Math.round(o.kwhPerYear),
-    Math.round(o.costPerYear),
+    cents(o).total,
+    cents(o).used,
+    cents(o).idle,
+    Math.round(idleRange(o).low * 100) / 100,
+    Math.round(idleRange(o).high * 100) / 100,
+    idleCaption(o, settings.usageContext),
     Math.round(o.co2KgPerYear),
     o.confidence,
     o.action.label,
@@ -71,12 +91,16 @@ export function offendersToCsv(
   const totals = offenders.reduce(
     (a, o) => ({
       kwh: a.kwh + o.kwhPerYear,
-      cost: a.cost + o.costPerYear,
+      total: a.total + cents(o).total,
+      used: a.used + cents(o).used,
+      idle: a.idle + cents(o).idle,
+      low: a.low + idleRange(o).low,
+      high: a.high + idleRange(o).high,
       co2: a.co2 + o.co2KgPerYear,
       fix: a.fix + o.fixCost,
       save: a.save + o.annualSavings,
     }),
-    { kwh: 0, cost: 0, co2: 0, fix: 0, save: 0 },
+    { kwh: 0, total: 0, used: 0, idle: 0, low: 0, high: 0, co2: 0, fix: 0, save: 0 },
   );
 
   const footer: (string | number)[][] = [
@@ -89,8 +113,14 @@ export function offendersToCsv(
       "",
       "",
       "",
+      "",
       Math.round(totals.kwh),
-      Math.round(totals.cost),
+      Math.round(totals.total * 100) / 100,
+      Math.round(totals.used * 100) / 100,
+      Math.round(totals.idle * 100) / 100,
+      Math.round(totals.low * 100) / 100,
+      Math.round(totals.high * 100) / 100,
+      "",
       Math.round(totals.co2),
       "",
       "",

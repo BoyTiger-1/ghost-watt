@@ -180,7 +180,7 @@ function Scene() {
 
       <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-black/70 to-transparent px-4 pb-3 pt-10 text-[0.76rem] text-white/80">
         <span>After hours · 3 devices found</span>
-        <span className="font-mono text-white">$71/yr wasted</span>
+        <span className="font-mono text-white">$71/yr idle</span>
       </div>
     </div>
   );

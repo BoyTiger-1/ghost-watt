@@ -6,12 +6,13 @@
 // see the room should get the last word.
 
 import { useState } from "react";
-import { fmtMoney, fmtWatts } from "@/lib/energy";
+import { fmtWatts } from "@/lib/energy";
 import { itemColor } from "@/lib/media";
 import { wattBand, type TagFix } from "@/lib/wattTags";
 import type { LiveItem } from "@/lib/ondevice";
 import type { AuditSettings, DeviceState } from "@/lib/types";
 import { searchCatalog } from "./ManualEntry";
+import { CostBreakdown } from "./CostBreakdown";
 import { Icon } from "./icons";
 
 const STATES: { id: DeviceState; label: string }[] = [
@@ -20,10 +21,18 @@ const STATES: { id: DeviceState; label: string }[] = [
   { id: "off", label: "Off" },
 ];
 
+/** What it does when nobody is there: the scan report's afterHours, in the card's words. */
+const AT_NIGHT: { id: DeviceState; label: string }[] = [
+  { id: "off", label: "Off" },
+  { id: "standby", label: "Sleeps" },
+  { id: "on", label: "Stays on" },
+];
+
 export function TagCard({
   item,
   inView,
   fixed,
+  fix,
   settings,
   onFix,
   onClose,
@@ -31,6 +40,8 @@ export function TagCard({
   item: LiveItem;
   inView: boolean;
   fixed: boolean;
+  /** What the person has set on this tag, when they have. */
+  fix?: TagFix;
   settings: AuditSettings;
   onFix: (fix: TagFix | null) => void;
   onClose: () => void;
@@ -57,7 +68,7 @@ export function TagCard({
       </div>
 
       {person ? (
-        <p className="mt-2 text-[0.84rem] leading-relaxed text-white/75">Someone is here, so the room is in use and what is on right now is not waste yet.</p>
+        <p className="mt-2 text-[0.84rem] leading-relaxed text-white/75">Someone is here, so the room is in use and what is on right now is not idle yet.</p>
       ) : (
         <>
           <div className="mt-2 flex items-baseline gap-2">
@@ -69,24 +80,10 @@ export function TagCard({
               This kind of device: {fmtWatts(band.low)}–{fmtWatts(band.high)}
             </p>
           )}
-          {!off && item.needed && (
-            <div className="mt-3 rounded-xl bg-white/[0.07] px-2.5 py-2">
-              <div className="text-[0.64rem] leading-tight text-white/55">Usage, not waste</div>
-              <div className="mt-0.5 font-mono text-[0.98rem] font-semibold text-[#5aa9ff]">about {fmtMoney(item.typicalCostPerYear)}/yr to run</div>
-              <p className="mt-1 text-[0.74rem] leading-relaxed text-white/65">It&apos;s meant to stay on ({item.needed}), so it&apos;s costed but not counted as waste.</p>
+          {!off && item.priced && (
+            <div className="mt-3 rounded-xl bg-white/[0.07] px-2.5 py-2.5">
+              <CostBreakdown offender={item.priced} place={settings.usageContext} dark />
             </div>
-          )}
-          {!off && !item.needed && (
-            <dl className="mt-3 grid grid-cols-2 gap-2">
-              <div className="rounded-xl bg-white/[0.07] px-2.5 py-2">
-                <dt className="text-[0.64rem] leading-tight text-white/55">Left on every empty hour</dt>
-                <dd className="mt-0.5 font-mono text-[0.98rem] font-semibold text-[#ff8a7e]">{fmtMoney(item.costPerYear)}/yr</dd>
-              </div>
-              <div className="rounded-xl bg-white/[0.07] px-2.5 py-2">
-                <dt className="text-[0.64rem] leading-tight text-white/55">At typical use</dt>
-                <dd className="mt-0.5 font-mono text-[0.98rem] font-semibold">{fmtMoney(item.typicalCostPerYear)}/yr</dd>
-              </div>
-            </dl>
           )}
 
           {item.categoryId && (
@@ -97,13 +94,56 @@ export function TagCard({
                   type="button"
                   role="radio"
                   aria-checked={item.state === s.id}
-                  onClick={() => onFix({ categoryId: item.categoryId!, state: s.id, label: item.label })}
+                  onClick={() => onFix({ ...fix, categoryId: item.categoryId!, state: s.id, label: item.label })}
                   className={`flex-1 rounded-full py-1.5 text-[0.76rem] font-medium transition-colors ${item.state === s.id ? "bg-white text-black" : "text-white/75 hover:text-white"}`}
                 >
                   {s.label}
                 </button>
               ))}
             </div>
+          )}
+
+          {item.categoryId && !off && !item.needed && (
+            <div className="mt-2.5 flex items-center gap-2">
+              <span className="shrink-0 text-[0.72rem] text-white/60">At night it…</span>
+              <div className="flex flex-1 rounded-full bg-white/[0.08] p-0.5" role="radiogroup" aria-label="At night it">
+                {AT_NIGHT.map((a) => {
+                  const current = item.priced?.afterHoursState;
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={current === a.id}
+                      onClick={() => onFix({ ...fix, categoryId: item.categoryId!, state: item.state ?? "on", label: item.label, afterHours: a.id })}
+                      className={`flex-1 rounded-full py-1.5 text-[0.74rem] font-medium transition-colors ${current === a.id ? "bg-white text-black" : "text-white/75 hover:text-white"}`}
+                    >
+                      {a.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {item.categoryId && !off && !item.needed && (
+            <label className="mt-2 flex items-center gap-2 text-[0.72rem] text-white/60">
+              <span className="shrink-0">Hours unused a day</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                min={0}
+                max={24}
+                step="any"
+                value={fix?.idleHoursPerDay ?? ""}
+                placeholder={item.priced?.hoursPerYear ? (item.priced.hoursPerYear / 365).toFixed(1) : "-"}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value);
+                  onFix({ ...fix, categoryId: item.categoryId!, state: item.state ?? "on", label: item.label, idleHoursPerDay: Number.isFinite(v) && v >= 0 ? Math.min(24, v) : undefined });
+                }}
+                className="w-16 rounded-lg border border-white/20 bg-white/[0.06] px-2 py-1 text-right font-mono text-base text-white outline-none placeholder:text-white/40 focus:border-[#ffd84d] sm:text-[0.8rem]"
+              />
+            </label>
           )}
         </>
       )}
@@ -157,7 +197,7 @@ export function TagCard({
 
       <p className="mt-2.5 text-[0.66rem] leading-relaxed text-white/45">
         {!inView ? "Out of view now. Your change applies when the camera finds it again. " : ""}
-        Typical watts for this kind of device, not a meter reading. Costs use ${settings.ratePerKwh.toFixed(2)}/kWh and {Math.round(settings.unoccupiedHoursPerYear).toLocaleString("en-US")} empty hours a year.
+        Typical watts for this kind of device, not a meter reading. Priced like your report, at ${settings.ratePerKwh.toFixed(2)}/kWh.
       </p>
     </div>
   );

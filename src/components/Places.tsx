@@ -224,7 +224,7 @@ function Place({ buildingId, initialTab, renameNow }: { buildingId: string; init
         {rollup.rooms.length > 0 ? (
           <>
             <p className="mt-5 max-w-[46ch] text-[1.15rem] leading-snug text-fog sm:text-[1.3rem]">
-              Things left on here waste about <strong className="font-semibold text-ember">{fmtMoneyFull(rollup.afterHoursCost)} a year</strong>{" "}
+              Things left on here sit idle for about <strong className="font-semibold text-ember">{fmtMoneyFull(rollup.afterHoursCost)} a year</strong>{" "}
               while nobody&apos;s around.
             </p>
             <div className="mt-5">
@@ -351,7 +351,7 @@ function PlaceCharts({ building, audits }: { building: Building; audits: SavedAu
   return (
     <div className="space-y-5">
       <div className="grid gap-5 md:grid-cols-2">
-        <Card title="Each room's yearly cost" sub="Needed while people use it, and wasted while it's empty">
+        <Card title="Each room's yearly cost" sub="Used while people are there, idle while it's empty">
           <ul className="space-y-3">
             {rollup.rooms.map((r) => (
               <li key={r.room}>
@@ -369,7 +369,7 @@ function PlaceCharts({ building, audits }: { building: Building; audits: SavedAu
             ))}
           </ul>
         </Card>
-        <Card title="Waste over time" sub="The whole place's yearly waste after each day you scanned">
+        <Card title="Idle cost over time" sub="The whole place's yearly idle cost after each day you scanned">
           {timeline.length < 2 ? (
             <p className="text-[0.86rem] leading-relaxed text-mist">
               Scan a room again after fixing something and this shows whether the total is going down.
@@ -412,7 +412,7 @@ function Rooms({ rooms }: { rooms: RoomRollup[] }) {
     <section className="panel overflow-hidden" aria-label="Rooms">
       <header className="border-b border-line px-5 py-4">
         <h3 className="text-[1.05rem] font-semibold text-fog">Rooms, worst first</h3>
-        <p className="mt-0.5 text-[0.8rem] text-dim">What each room wastes a year, from its latest scan.</p>
+        <p className="mt-0.5 text-[0.8rem] text-dim">What each room idles a year, from its latest scan.</p>
       </header>
       <ul className="divide-y divide-line">
         {rooms.map((r) => (
@@ -483,7 +483,7 @@ function RoomRow({ room: r, max, open, onToggle }: { room: RoomRollup; max: numb
                   ))}
                 </ul>
               ) : (
-                <p className="text-[0.84rem] text-mist">Nothing in this room is wasting power. Nice.</p>
+                <p className="text-[0.84rem] text-mist">Nothing in this room is sitting idle. Nice.</p>
               )}
               {r.history.length > 0 && <History room={r} />}
               <div className="flex flex-wrap items-center gap-2">
@@ -642,7 +642,7 @@ function Worked({ todo, audits }: { todo: Todo; audits: SavedAudit[] }) {
   }
   const drop = costOf(before) - costOf(after);
   return drop > 1 ? (
-    <p className="mt-1.5 text-[0.76rem] font-medium text-lime">Checked: the new scan shows {fmtMoney(drop)} a year less waste here.</p>
+    <p className="mt-1.5 text-[0.76rem] font-medium text-lime">Checked: the new scan shows {fmtMoney(drop)} a year less idle cost here.</p>
   ) : (
     <p className="mt-1.5 text-[0.76rem] text-amber">The new scan doesn&apos;t show a drop yet. Worth a second look.</p>
   );
@@ -769,7 +769,7 @@ function Empty() {
       <div className="max-w-md">
         <h2 className="text-xl font-semibold text-fog">Nothing saved yet</h2>
         <p className="mt-2 text-[0.92rem] leading-relaxed text-mist">
-          Every room you scan is saved here, grouped by place: your home, an office, a school. You&apos;ll see which room wastes the most, get one to-do list
+          Every room you scan is saved here, grouped by place: your home, an office, a school. You&apos;ll see which room idles the most, get one to-do list
           for all of them, and check your fixes worked.
         </p>
         <Link href="/scan" className="mt-5 inline-block rounded-full bg-fog px-5 py-2.5 text-[0.9rem] font-medium text-ink hover:bg-fog/85">
