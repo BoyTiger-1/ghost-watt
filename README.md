@@ -22,6 +22,7 @@ It works for homes, offices and schools. It's free, and it's open source under t
 - [Why we built it](#why-we-built-it)
 - [What it does](#what-it-does)
 - [How it works](#how-it-works)
+- [Checked against a real meter](#checked-against-a-real-meter)
 - [Quick start](#quick-start)
 - [Running a vision model locally](#running-a-vision-model-locally)
 - [Where a photo goes](#where-a-photo-goes)
@@ -31,20 +32,32 @@ It works for homes, offices and schools. It's free, and it's open source under t
 - [Accessibility](#accessibility)
 - [Project layout](#project-layout)
 - [Hosting and deployment](#hosting-and-deployment)
+- [What's next](#whats-next)
 - [AI assistance](#ai-assistance)
 - [License](#license)
 
 ## Why we built it
 
-You can't fix waste you can't see, and after-hours waste is about as invisible as it gets.
-A projector left on overnight burns roughly 250 W for nothing. Add a hallway of lights, a
-row of idle monitors and a vending machine, and a single building can lose thousands of
-dollars a year without anyone noticing. A real energy audit means meters, spreadsheets or a
-consultant. We wanted something a student or a facilities manager could do with a phone in
-ten minutes.
+It started in our own school. All four of us take classes in its two computer labs, and we
+kept noticing the same thing: rows of desktops left on all day, even when no class was using
+the room. Eventually we wanted to know what that was costing, both in energy and in money the
+school could be spending on something else.
 
-What you get at the end is a to-do list: fix this first, here's what it costs, here's when
-it pays for itself.
+We couldn't find a good answer. There were rough estimates online and professional energy
+audits, but an audit costs money and takes weeks to book, and nothing worked at the level of
+one room or one device. That gap mattered to us because of where we live: our district,
+Northshore, has been dealing with debt and cutting programs since the pandemic, so a paid
+audit was never going to make the list. And it isn't just our school. EPA's ENERGY STAR
+program estimates that about 30% of the energy used in commercial buildings is wasted.
+
+So we built the tool we wanted: something a student or a facilities manager can run with a
+phone in about ten minutes, in words and numbers anyone can follow. Point it at an empty
+computer lab with thirty monitors still on and it estimates roughly $800 a year of waste,
+then tells you that about $60 of smart power strips fixes most of it. What you end up with is
+a to-do list: fix this first, here's what it costs, here's when it pays for itself.
+
+We've tested it in classrooms across our school, and we plan to take the biggest waste
+patterns we found to our school and district.
 
 ## What it does
 
@@ -233,6 +246,32 @@ Fiber and only redraws when something changes.
 You can change the assumptions (electricity rate, grid carbon, how many hours a year the
 building is empty) and every number on the page recalculates. The full formulas and the
 wattage table are on the Methodology page in the app.
+
+## Checked against a real meter
+
+We didn't want to just trust our own numbers, so we checked them with a plug-in watt meter,
+a small device that sits between the outlet and an appliance and reads the power it actually
+draws. We put five everyday devices on it and compared each reading with Ghost Watt's
+estimate for the same device:
+
+| Device | Meter | Ghost Watt | Real cost / yr | App cost / yr | Off by |
+| --- | --- | --- | --- | --- | --- |
+| Laptop | 32.3 W | 31 W | $25.75 | $24.71 | −4.0% |
+| Lamp | 3.2 W | 3.5 W | $2.21 | $2.42 | +9.4% |
+| Phone | 16.6 W | 15.5 W | $17.16 | $16.02 | −6.6% |
+| Electronic photo frame | 3.9 W | 4.2 W | $3.32 | $3.58 | +7.7% |
+| TV | 87.6 W | 81 W | $78.91 | $72.95 | −7.6% |
+
+Every estimate landed within 10% of the meter: 7.1% off on average, and 9.4% at worst (the
+lamp). The misses go both ways, three low and two high, so the app isn't quietly inflating
+anything. All five together, it came in 5.8% under the meter. Both cost columns use the same
+hours and electricity price, so each device's cost is off by the same amount as its watts.
+
+Five devices is a sanity check, not a study. It tests the wattage once a device has been
+recognised correctly, and it can't catch a device the camera missed entirely. That's why the
+app still shows a range, and why any meter reading you type in replaces our estimate for that
+device. The same table, plus every reading people enter, is on the Method page under
+"Checked against a meter".
 
 ## Quick start
 
@@ -450,9 +489,9 @@ switched-off monitor "on" or inventing one that isn't there, and producing savin
 don't exist. That's why seeing and math are kept apart. The cloud model has to answer in a
 strict format and gets checked against the on-device detector. Anything it can't back up is
 marked unverified and left out. Every figure is a range with its assumptions shown, and you
-can correct any tag on the spot. The app never claims an accuracy number it hasn't earned;
-the only one it shows is how its estimates compared to meter readings people actually
-entered.
+can correct any tag on the spot. The app never claims an accuracy number it hasn't earned:
+the only ones it shows are our own plug-in meter check and how its estimates compared to
+meter readings people actually entered.
 
 There are no accounts and no tracking. Scans, rooms and buildings live in your browser.
 API keys stay on the server and are never sent to the browser.
@@ -482,6 +521,36 @@ replaced it.
 We also took out every preset and sample result. That meant building real empty states and
 real error states everywhere, and saving each scan automatically so the rooms, buildings
 and brief pages always show real data.
+
+The model would sometimes state a wattage with total confidence and be badly wrong. We
+stopped letting its watt guess count for much on its own: the catalogue's published range
+comes first, and checking our figures against real-world usage data (and later a plug-in
+meter) is how we found where the model was off.
+
+Free AI tiers run out fast. Early on we hit rate limits within a few scans, so we cut what
+each request sends, let several keys take turns, chained six providers so a busy one hands
+off to the next, and made the app fall back to the on-device reader instead of erroring.
+
+The live camera's numbers jumped around. Labels blinked in and out and the total swung from
+0 W to over 100 W while panning, which looked broken. Holding labels on screen once they
+appear, waiting a moment before believing a screen changed state, and smoothing the meter
+over the last second fixed it.
+
+The AI's advice wasn't always sensible. Early on it suggested unplugging a fridge. Now
+fridges, routers, alarms and exit signs are treated as things that have to keep running:
+their cost shows as usage rather than waste, and advice to switch them off is blocked
+(unless a fridge is empty or spare).
+
+Running detection on a phone without it lagging took work. The live detector is a small,
+fast model (we benchmarked bigger ones and they were three times slower for no gain), the
+heavier full read waits until the camera holds still, and the 3D view only redraws when
+something changes.
+
+Working as a team had its own problems. Changes didn't always come through cleanly when we
+merged, so we got into the habit of pulling before every push. Deploys were stranger: on
+Vercel, only pushes from one of our accounts went through, and a teammate's push would fail.
+It turned out to be how Vercel's free plan handles commits from people outside the project,
+so we routed deploys through the account that owns it.
 
 ## Accessibility
 
@@ -582,12 +651,56 @@ Upstash the counters are per server instance, so they're a soft limit. Set a spe
 with any paid provider as well: rate limits reduce the exposure, but a cap at the provider is
 what actually bounds it.
 
+## What's next
+
+Version 1.0 shows that you can find and price waste with a phone. For 2.0 we want the
+detection to be more accurate, proven in real buildings, and in more people's hands.
+
+A smarter on-device detector comes first. The one in the browser misses small screens and
+some appliances, and it only knows 80 everyday object types. We'd train our own model on real
+photos of classrooms, labs and offices, building on the training script that's already in
+the repo ([`scripts/train-detector.py`](scripts/train-detector.py)) but doesn't have data yet.
+That would make offline readings more accurate and teach it devices it can't see today.
+
+Next, proof. We'd run a pilot at our own school with the facilities team: scan the
+buildings, make the fixes the app ranks highest, and compare against the actual electricity
+bill over a semester. Then we'd use what we learn to tune the estimates, and repeat it at
+other schools in our district, with team scans covering whole buildings.
+
+Then reach. Our team already knows Xcode and Apple's tools, so an iOS app would come next,
+with the same features arranged for a phone, followed by Android. And while the app already
+speaks nine languages, we'd keep adding more.
+
 ## AI assistance
 
-The design, architecture, energy model, and the product itself were built by us. We used
-Claude Code along the way mainly as a debugging aid, for tracking down bugs and tidying up
-rough edges, and for the styling of the home page, rather than for designing or generating
-the project. The thinking and the decisions are ours.
+We used AI tools in the later part of development, mostly for debugging, polishing our
+models, understanding complicated APIs and libraries, and styling the frontend.
+
+For debugging and tracking down errors, especially in our Python model, we used Claude Code
+in VS Code. When we integrated third-party AI model APIs into the app, some of that code was
+written and edited with Claude Code's help, and since all these libraries came with syntax we
+hadn't used before, we used AI to learn it. We also used Claude Code to style almost all of
+the website's CSS to our chosen colour scheme and layout, and after our first implementation,
+parts of the HTML were reviewed and cleaned up with it to cut down on repetitive code. We
+planned every screen on a digital whiteboard first, so the AI was working to a design we had
+already decided on. To understand complex libraries like three.js, we used Gemini and Claude
+to research the documentation.
+
+Near the end, we used Manus for testing. Manus is different from a chat assistant: it's an AI
+agent that runs on its own Linux virtual computer with a real browser, so it can open Ghost
+Watt and use it the way a person would, clicking through the scanner, uploading photos,
+filling in forms and switching modes. That made it useful for bug testing, and it mostly found layout
+problems we had stopped noticing. Some screens got too crowded, and on the scanner the
+analytics panel could overlap the camera view and cover what you were trying to scan. We
+fixed those, along with a handful of smaller UI issues it flagged.
+
+The base of the classification and prediction models, the core features, the UI design,
+extensive testing, the video and the key decisions were our team's work. So were the early
+stages: brainstorming, layout design, choosing features with our audience in mind, and
+picking the models for the backend. Testing and finishing the app were mostly done by us too,
+because we didn't think AI should be the one to judge a product meant for real communities.
+We tested it in our school and in our homes, and made the changes ourselves to keep the focus
+on the people using it. Making the video and sharing the project was all us.
 
 ## License
 

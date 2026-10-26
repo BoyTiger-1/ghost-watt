@@ -17,6 +17,15 @@ export const metadata: Metadata = {
     "Exactly how Ghost Watt turns a photo into a dollar and CO₂ figure: a vision model for perception, a deterministic wattage table for the energy math.",
 };
 
+/** Five devices on a plug-in watt meter, against Ghost Watt's estimate for each. */
+const METER_CHECK = [
+  { device: "Laptop", meter: 32.3, app: 31, real: 25.75, est: 24.71, off: "−4.0%" },
+  { device: "Lamp", meter: 3.2, app: 3.5, real: 2.21, est: 2.42, off: "+9.4%" },
+  { device: "Phone", meter: 16.6, app: 15.5, real: 17.16, est: 16.02, off: "−6.6%" },
+  { device: "Electronic photo frame", meter: 3.9, app: 4.2, real: 3.32, est: 3.58, off: "+7.7%" },
+  { device: "TV", meter: 87.6, app: 81, real: 78.91, est: 72.95, off: "−7.6%" },
+];
+
 const TOC = [
   { id: "split", label: "Two jobs, kept apart" },
   { id: "formula", label: "The formula" },
@@ -27,6 +36,7 @@ const TOC = [
   { id: "defaults", label: "The defaults" },
   { id: "table", label: "The wattage table" },
   { id: "rooms", label: "Hours by room type" },
+  { id: "validation", label: "Checked against a meter" },
   { id: "measured", label: "Estimated vs measured" },
   { id: "engines", label: "Which engine read the photo" },
   { id: "carbon", label: "Where the carbon comes from" },
@@ -276,11 +286,55 @@ export default function MethodologyPage() {
           </Section>
 
           {/* measured */}
+          <Section id="validation" title="Checked against a plug-in meter">
+            <p className="mt-3 text-[1rem] leading-relaxed text-mist">
+              Before trusting our own numbers, we checked them. A plug-in watt meter sits between the outlet and the
+              device and reads the power it actually draws. We put five everyday devices on one and compared the meter
+              with what Ghost Watt estimated for the same device.
+            </p>
+            <div className="mt-6 overflow-x-auto rounded-2xl border border-line">
+              <table className="w-full min-w-[34rem] text-left text-[0.9rem]">
+                <thead className="text-[0.76rem] text-dim">
+                  <tr className="border-b border-line">
+                    {["Device", "Meter", "Ghost Watt", "Real cost / yr", "App cost / yr", "Off by"].map((h, i) => (
+                      <th key={h} className={`px-4 py-3 font-medium ${i ? "text-right" : ""}`}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="font-mono text-fog">
+                  {METER_CHECK.map((r) => (
+                    <tr key={r.device} className="border-b border-line last:border-0">
+                      <td className="px-4 py-3 font-sans">{r.device}</td>
+                      <td className="px-4 py-3 text-right">{r.meter} W</td>
+                      <td className="px-4 py-3 text-right">{r.app} W</td>
+                      <td className="px-4 py-3 text-right">${r.real.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right">${r.est.toFixed(2)}</td>
+                      <td className={`px-4 py-3 text-right ${r.app > r.meter ? "text-amber" : "text-cyan"}`}>
+                        {r.off}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-5 text-[1rem] leading-relaxed text-mist">
+              Every estimate landed within 10% of the meter: 7.1% off on average, 9.4% at worst (the lamp). The errors
+              go both ways, three low and two high, so the app isn&apos;t quietly inflating anything. All five together,
+              it came in 5.8% under the meter. Both cost columns use the same hours and price, so a device&apos;s cost is
+              off by the same amount as its watts, give or take rounding.
+            </p>
+            <p className="mt-3 text-[0.9rem] leading-relaxed text-dim">
+              Five devices is a small check, not a study, and it tests the wattage once a device is correctly
+              recognised; it can&apos;t catch a device the camera missed. That&apos;s why the app still shows a range, and why
+              any meter reading you enter replaces our estimate and joins the table below.
+            </p>
+          </Section>
+
           <Section id="measured" title="Estimated vs measured">
             <p className="mt-3 text-[1rem] leading-relaxed text-mist">
-              The app never states an accuracy percentage it has not earned. The only one it will show
-              is this: on devices where somebody entered a plug-in meter reading, how far off was the
-              estimate it replaced?
+              The app never states an accuracy percentage it has not earned. Past our own check above,
+              the only figure it shows is this one: on devices where somebody entered a plug-in meter
+              reading, how far off was the estimate it replaced?
             </p>
             <CalibrationTable />
           </Section>
